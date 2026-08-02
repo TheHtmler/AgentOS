@@ -2,15 +2,16 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import cast
+from typing import Annotated, cast
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_ai import ModelMessagesTypeAdapter
 from pydantic_ai.messages import ModelMessage
 
+from agent_api.api.auth import get_current_user
 from agent_api.config import get_settings
 from agent_api.db.chat_store import (
     ThreadBusyError,
@@ -22,6 +23,7 @@ from agent_api.db.chat_store import (
     list_completed_run_message_histories,
     start_run,
 )
+from agent_api.db.models import User
 from agent_api.db.session import session_factory
 from agent_api.runtime import AgentRuntime, get_runtime
 
@@ -70,7 +72,30 @@ def parse_model_messages_json(raw_messages: bytes) -> list[dict[str, object]]:
     return messages
 
 
-async def load_thread_model_history(thread_id: UUID) -> list[ModelMessage]:
+def strip_thinking_parts(
+    model_messages: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Keep private reasoning out of durable model history and future prompts."""
+
+    sanitized_messages: list[dict[str, object]] = []
+
+    for message in model_messages:
+        sanitized_message = message.copy()
+        parts = message.get("parts")
+
+        if isinstance(parts, list):
+            sanitized_message["parts"] = [
+                part
+                for part in parts
+                if not (isinstance(part, dict) and part.get("part_kind") == "thinking")
+            ]
+
+        sanitized_messages.append(sanitized_message)
+
+    return sanitized_messages
+
+
+async def load_thread_model_history(thread_id: UUID, *, user_id: UUID) -> list[ModelMessage]:
     """Load only server-authored, completed model-message blocks for one Thread."""
 
     async with session_factory() as session:
@@ -78,6 +103,7 @@ async def load_thread_model_history(thread_id: UUID) -> list[ModelMessage]:
             session,
             thread_id=thread_id,
             limit=get_settings().history_max_runs,
+            user_id=user_id,
         )
 
     history: list[ModelMessage] = []
@@ -164,7 +190,9 @@ async def event_stream(
                         await persist_text_delta(run_id, delta)
                         assistant_parts.append(delta)
                         yield encode_sse_event("text_delta", {"delta": delta})
-                model_messages = parse_model_messages_json(result.new_messages_json())
+                model_messages = strip_thinking_parts(
+                    parse_model_messages_json(result.new_messages_json()),
+                )
                 usage = result.usage
                 input_tokens = usage.input_tokens or None
                 output_tokens = usage.output_tokens or None
@@ -221,6 +249,7 @@ async def event_stream(
 async def stream_chat(
     payload: ChatStreamRequest,
     request: Request,
+    user: Annotated[User, Depends(get_current_user)],
 ) -> StreamingResponse:
     """Create durable Run facts before opening the SSE response."""
 
@@ -231,6 +260,7 @@ async def stream_chat(
                 thread_id=payload.thread_id,
                 user_content=payload.message,
                 model_name=get_settings().ollama_model,
+                user_id=user.id,
             )
     except ThreadNotFoundError as error:
         raise HTTPException(status_code=404, detail="Thread not found") from error
@@ -238,7 +268,7 @@ async def stream_chat(
         raise HTTPException(status_code=409, detail="Thread is already running") from error
 
     try:
-        message_history = await load_thread_model_history(started.thread_id)
+        message_history = await load_thread_model_history(started.thread_id, user_id=user.id)
     except (ThreadNotFoundError, ValidationError) as error:
         logger.exception("Unable to load model history for thread %s", started.thread_id)
         raise HTTPException(

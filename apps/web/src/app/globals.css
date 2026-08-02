@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #172033;
+  --background: #edf4f6;
+  --foreground: #112b37;
 }
 
 @theme inline {
@@ -18,10 +18,715 @@
 
 html,
 body {
+  height: 100%;
   min-height: 100%;
+  overscroll-behavior: none;
 }
 
 body {
+  overflow: hidden;
   background: var(--background);
   color: var(--foreground);
+}
+
+.agentos-app {
+  height: 100dvh;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(89, 194, 210, 0.1), transparent 15rem), #edf4f6;
+  color: #112b37;
+}
+
+.agentos-app .bg-white {
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+.agentos-app .bg-zinc-50 {
+  background-color: #f4f8f9;
+}
+
+.agentos-app .bg-zinc-100 {
+  background-color: #e7eff1;
+}
+
+.agentos-app .bg-zinc-900 {
+  background-color: #156f82;
+}
+
+.agentos-app .border-zinc-100,
+.agentos-app .border-zinc-200 {
+  border-color: #d7e4e7;
+}
+
+.agentos-app .border-zinc-300 {
+  border-color: #bdd0d6;
+}
+
+.agentos-app .border-zinc-900 {
+  border-color: #156f82;
+}
+
+.agentos-app .text-zinc-950 {
+  color: #112b37;
+}
+
+.agentos-app .text-zinc-900,
+.agentos-app .text-zinc-800 {
+  color: #24414b;
+}
+
+.agentos-app .text-zinc-700,
+.agentos-app .text-zinc-600 {
+  color: #526c74;
+}
+
+.agentos-app .text-zinc-500 {
+  color: #6f858c;
+}
+
+.agentos-app .text-zinc-400 {
+  color: #8ba0a6;
+}
+
+.agentos-app .text-zinc-300 {
+  color: #d8eaed;
+}
+
+.agentos-app .hover\:bg-zinc-50:hover {
+  background-color: #eaf4f5;
+}
+
+.agentos-app .hover\:bg-zinc-700:hover {
+  background-color: #0d8799;
+}
+
+.agentos-app .hover\:border-zinc-400:hover,
+.agentos-app .hover\:border-zinc-500:hover,
+.agentos-app .focus\:border-zinc-500:focus,
+.agentos-app .focus\:border-zinc-700:focus {
+  border-color: #16a5bd;
+}
+
+.agentos-topbar {
+  height: 4rem;
+  border-bottom: 1px solid #d6e4e7;
+  background: rgba(250, 253, 253, 0.88);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.agentos-topbar-inner {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  max-width: 96rem;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.agentos-logo-mark {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid #75cbd7;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #197d94, #27ae9b);
+  color: #f5ffff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  box-shadow: 0 7px 16px rgba(28, 145, 164, 0.22);
+}
+
+.agentos-runtime-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #46717a;
+  font-size: 0.75rem;
+}
+
+.agentos-runtime-tag::before {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: #20b879;
+  box-shadow: 0 0 0 3px rgba(32, 184, 121, 0.13);
+  content: "";
+}
+
+.agentos-header-action {
+  border: 1px solid #c7d8dc;
+  border-radius: 6px;
+  background: #fff;
+  padding: 0.48rem 0.75rem;
+  color: #37555e;
+  font-size: 0.875rem;
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    background 150ms ease;
+}
+
+.agentos-header-action:hover {
+  border-color: #48b9c9;
+  background: #f3fbfc;
+  color: #0a7287;
+}
+
+.agentos-workspace {
+  display: grid;
+  height: calc(100dvh - 4rem);
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0.875rem;
+  width: 100%;
+  max-width: 96rem;
+  margin: 0 auto;
+  padding: 0.875rem;
+}
+
+.agentos-main-column,
+.agentos-chat-panel {
+  min-height: 0;
+}
+
+.agentos-main-column > section {
+  height: 100%;
+}
+
+.agentos-conversation-rail,
+.agentos-runtime-rail,
+.agentos-chat-panel {
+  border: 1px solid #d2e1e4;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 14px 35px rgba(38, 76, 88, 0.09);
+}
+
+.agentos-conversation-rail,
+.agentos-runtime-rail {
+  overflow: hidden;
+}
+
+.agentos-runtime-rail {
+  overflow-y: auto;
+  padding: 0.75rem;
+  scrollbar-width: thin;
+  scrollbar-color: #9ac5cd transparent;
+}
+
+.agentos-runtime-rail > * + * {
+  margin-top: 0.75rem;
+}
+
+.agentos-runtime-rail::-webkit-scrollbar,
+.agentos-message-viewport::-webkit-scrollbar,
+.agentos-conversation-list-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.agentos-runtime-rail::-webkit-scrollbar-thumb,
+.agentos-message-viewport::-webkit-scrollbar-thumb,
+.agentos-conversation-list-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #9ac5cd;
+}
+
+.agentos-context-card {
+  border: 1px solid #d3e3e5;
+  border-radius: 7px;
+  background: #f5fafb;
+  padding: 1rem;
+}
+
+.agentos-context-card dd {
+  color: #31515b;
+}
+
+.agentos-conversation-list {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.agentos-conversation-list-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #9ac5cd transparent;
+}
+
+.agentos-chat-panel {
+  overflow: hidden;
+  background: #f7fbfc;
+}
+
+.agentos-chat-header,
+.agentos-composer {
+  flex: none;
+  border-color: #d7e5e7;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.agentos-chat-header {
+  background:
+    linear-gradient(100deg, rgba(61, 191, 195, 0.12), transparent 44%), rgba(255, 255, 255, 0.92);
+}
+
+.agentos-chat-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #50808a;
+}
+
+.agentos-chat-status span {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: #1eb879;
+  box-shadow: 0 0 0 3px rgba(30, 184, 121, 0.12);
+}
+
+.agentos-new-chat-button,
+.agentos-copy-button {
+  color: #278397;
+}
+
+.agentos-new-chat-button:hover,
+.agentos-copy-button:hover {
+  color: #0c6579;
+}
+
+.agentos-message-viewport {
+  min-height: 0;
+  overscroll-behavior: contain;
+  background:
+    linear-gradient(rgba(70, 151, 165, 0.065) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(70, 151, 165, 0.065) 1px, transparent 1px), #f4fafb;
+  background-size: 32px 32px;
+  scrollbar-width: thin;
+  scrollbar-color: #9ac5cd transparent;
+}
+
+.agentos-empty-state {
+  color: #1e414b;
+}
+
+.agentos-starter-prompt {
+  border: 1px solid #c7dce0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.84);
+  padding: 0.65rem 0.8rem;
+  color: #42636b;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.agentos-starter-prompt:hover {
+  border-color: #6ac3ce;
+  box-shadow: 0 8px 18px rgba(33, 134, 153, 0.1);
+  transform: translateY(-1px);
+}
+
+.agentos-message {
+  padding: 0.85rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.agentos-message-user {
+  position: relative;
+  border: 1px solid #91d5df;
+  border-radius: 15px 5px 15px 15px;
+  background: linear-gradient(135deg, rgba(80, 207, 218, 0.28), rgba(86, 210, 169, 0.16)), #effcff;
+  color: #174c5a;
+  box-shadow: 0 8px 20px rgba(29, 141, 161, 0.1);
+}
+
+.agentos-message-user::after {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-top: 1px solid #91d5df;
+  border-right: 1px solid #91d5df;
+  border-radius: 0 5px 0 0;
+  background: #f4fdff;
+  content: "";
+}
+
+.agentos-message-assistant {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #d6e4e7;
+  border-radius: 5px 14px 14px 14px;
+  background:
+    linear-gradient(110deg, rgba(89, 195, 210, 0.075), transparent 34%), rgba(255, 255, 255, 0.92);
+  color: #27444e;
+  box-shadow: 0 7px 18px rgba(39, 86, 96, 0.055);
+}
+
+.agentos-message-assistant::before {
+  position: absolute;
+  top: 0.75rem;
+  bottom: 0.75rem;
+  left: 0;
+  width: 2px;
+  border-radius: 999px;
+  background: #56b7c5;
+  content: "";
+}
+
+.agentos-message-streaming::before {
+  background: #20b879;
+  box-shadow: 0 0 12px #20b879;
+  animation: agentos-stream-pulse 1.4s ease-in-out infinite;
+}
+
+.agentos-message-author {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #71929a;
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
+
+.agentos-message-user .agentos-message-author {
+  color: #187385;
+}
+
+.agentos-message-user .agentos-message-author::before {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: #1eb879;
+  content: "";
+}
+
+.agentos-message-assistant .agentos-message-author::before {
+  width: 0.38rem;
+  height: 0.38rem;
+  border: 1px solid #52b7c6;
+  border-radius: 2px;
+  background: #e7fbfe;
+  content: "";
+}
+
+.agentos-message p:last-child {
+  position: relative;
+  z-index: 1;
+}
+
+.agentos-reasoning {
+  overflow: hidden;
+  border: 1px solid #9ad6ce;
+  border-radius: 8px;
+  background: linear-gradient(105deg, #e4f8f2, #f8fffd 72%);
+  box-shadow: 0 8px 20px rgba(48, 150, 121, 0.07);
+}
+
+.agentos-reasoning-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.9rem;
+  color: #266b5b;
+  text-align: left;
+}
+
+.agentos-reasoning-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.agentos-reasoning-indicator {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: #1eb879;
+  box-shadow: 0 0 0 3px rgba(30, 184, 121, 0.12);
+}
+
+.agentos-reasoning-state {
+  color: #669587;
+  font-size: 0.75rem;
+}
+
+.agentos-reasoning-content {
+  max-height: 18rem;
+  overflow: auto;
+  margin: 0;
+  border-top: 1px solid #c5e5dd;
+  padding: 0.8rem 0.9rem;
+  color: #426b60;
+  font-size: 0.75rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.agentos-reasoning-running {
+  border-color: #65cba9;
+  box-shadow:
+    0 0 0 1px rgba(60, 189, 140, 0.12),
+    0 10px 26px rgba(37, 167, 112, 0.12);
+}
+
+.agentos-reasoning-running .agentos-reasoning-indicator {
+  animation: agentos-thinking-pulse 1.2s ease-in-out infinite;
+}
+
+.agentos-scroll-latest {
+  border: 1px solid #91c8d0;
+  border-radius: 6px;
+  background: #fff;
+  color: #24788b;
+  box-shadow: 0 9px 22px rgba(30, 91, 104, 0.18);
+}
+
+.agentos-chat-error {
+  border-color: #eeb4b4;
+  background: #fff2f2;
+  color: #b04444;
+}
+
+.agentos-composer-input {
+  overflow-y: hidden;
+  border: 1px solid #bdd6da;
+  border-radius: 8px;
+  background: #fff;
+  color: #173b45;
+  scrollbar-width: thin;
+  scrollbar-color: #8ac6cf transparent;
+}
+
+.agentos-composer-input::placeholder {
+  color: #89a0a6;
+}
+
+.agentos-composer-input:focus {
+  border-color: #24a9bd;
+  box-shadow: 0 0 0 3px rgba(36, 169, 189, 0.13);
+}
+
+.agentos-composer-input:disabled {
+  background: #edf3f4;
+  color: #809399;
+}
+
+.agentos-send-button {
+  min-width: 6.4rem;
+  border: 1px solid #138da2;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #168ba0, #24ad91);
+  color: #f5ffff;
+  box-shadow: 0 8px 17px rgba(30, 151, 160, 0.22);
+  transition:
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.agentos-send-button:hover {
+  box-shadow: 0 11px 23px rgba(30, 151, 160, 0.3);
+  transform: translateY(-1px);
+}
+
+.agentos-stop-button {
+  border-color: #d2974d;
+  background: #a96c2e;
+  color: #fff8eb;
+}
+
+.agentos-is-streaming .agentos-chat-header {
+  position: relative;
+  overflow: hidden;
+}
+
+.agentos-is-streaming .agentos-chat-header::after {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 28%;
+  height: 2px;
+  background: #21b68a;
+  box-shadow: 0 0 14px #21b68a;
+  content: "";
+  animation: agentos-run-scan 2.2s ease-in-out infinite;
+}
+
+.agentos-mobile-menu {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  overscroll-behavior: none;
+}
+
+.agentos-mobile-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(20, 44, 53, 0.38);
+  touch-action: none;
+}
+
+.agentos-mobile-drawer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(21rem, calc(100vw - 2.25rem));
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid #c4dde1;
+  background: #f8fcfc;
+  box-shadow: 18px 0 42px rgba(22, 67, 78, 0.2);
+}
+
+.agentos-mobile-drawer-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #d6e5e8;
+  padding: 1rem;
+}
+
+.agentos-mobile-menu-toggle,
+.agentos-mobile-close {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid #bad3d8;
+  border-radius: 7px;
+  background: #fff;
+  color: #27606e;
+}
+
+.agentos-mobile-menu-toggle {
+  gap: 4px;
+  padding: 0.65rem;
+}
+
+.agentos-mobile-menu-toggle span {
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: #286979;
+}
+
+.agentos-mobile-close {
+  font-size: 0.75rem;
+}
+
+.agentos-mobile-drawer .agentos-conversation-list {
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+.agentos-mobile-account {
+  flex: none;
+  border-top: 1px solid #d6e5e8;
+  padding: 1rem;
+}
+
+.agentos-mobile-account .shrink-0,
+.agentos-mobile-logout {
+  width: 100%;
+  min-height: 2.5rem;
+  border: 1px solid #bfd5d9;
+  border-radius: 6px;
+  background: #fff;
+  color: #3c626b;
+  font-size: 0.875rem;
+}
+
+.agentos-mobile-logout {
+  border-color: #efc5c5;
+  color: #b25353;
+}
+
+@keyframes agentos-run-scan {
+  0%,
+  100% {
+    transform: translateX(-120%);
+  }
+
+  50% {
+    transform: translateX(400%);
+  }
+}
+
+@keyframes agentos-stream-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes agentos-thinking-pulse {
+  0%,
+  100% {
+    transform: scale(0.8);
+  }
+
+  50% {
+    transform: scale(1.25);
+  }
+}
+
+@media (min-width: 1024px) {
+  .agentos-workspace {
+    grid-template-columns: 18rem minmax(0, 1fr) 20rem;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+  }
+}
+
+@media (max-width: 639px) {
+  .agentos-topbar-inner {
+    padding: 0 0.75rem;
+  }
+
+  .agentos-workspace {
+    padding: 0;
+  }
+
+  .agentos-chat-panel {
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agentos-is-streaming .agentos-chat-header::after,
+  .agentos-message-streaming::before,
+  .agentos-reasoning-running .agentos-reasoning-indicator {
+    animation: none;
+  }
+
+  .agentos-starter-prompt,
+  .agentos-send-button {
+    transition: none;
+  }
 }

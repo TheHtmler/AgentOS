@@ -14,6 +14,7 @@
 | [08-postgres-development.md](08-postgres-development.md)   | PostgreSQL 开发服务与持久化边界               | 数据库运行方式或连接配置变化时    |
 | [09-chat-persistence.md](09-chat-persistence.md)           | 聊天流写入 Thread、Run 与事件的事务边界       | 聊天持久化或恢复机制变化时        |
 | [10-thread-history.md](10-thread-history.md)               | Thread 历史读取、页面恢复与模型上下文边界     | 历史 API 或恢复行为变化时         |
+| [11-authentication.md](11-authentication.md)               | 邀请认证、Cookie、Thread 所有权与运行边界     | 身份、权限或会话边界变化时        |
 | [implementation-progress.md](implementation-progress.md)   | 已实现行为、验证结果、未完成项与下一步        | 每次完成一组开发任务后            |
 | [adr/README.md](adr/README.md)                             | 架构决策记录                                  | 发生不可逆或高影响取舍时          |
 

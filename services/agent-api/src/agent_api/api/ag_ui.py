@@ -1,10 +1,11 @@
 import asyncio
 import logging
 from collections.abc import AsyncIterator
+from typing import Annotated
 from uuid import UUID
 
 from ag_ui.core import RunAgentInput, UserMessage
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import ValidationError
 from pydantic_ai import ModelMessagesTypeAdapter
 from pydantic_ai.messages import PartDeltaEvent, PartStartEvent, TextPart, TextPartDelta
@@ -12,6 +13,7 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.ui import NativeEvent
 from pydantic_ai.ui.ag_ui import AGUIAdapter
 
+from agent_api.api.auth import get_current_user
 from agent_api.api.chat import (
     load_thread_model_history,
     parse_model_messages_json,
@@ -19,9 +21,11 @@ from agent_api.api.chat import (
     persist_completed_run,
     persist_failed_run,
     persist_text_delta,
+    strip_thinking_parts,
 )
 from agent_api.config import get_settings
 from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_run
+from agent_api.db.models import User
 from agent_api.db.session import session_factory
 from agent_api.runtime import get_runtime
 
@@ -70,7 +74,10 @@ def text_from_native_event(event: NativeEvent) -> str | None:
 
 
 @router.post("/runs")
-async def stream_ag_ui_run(request: Request):
+async def stream_ag_ui_run(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+):
     """Run AG-UI while keeping message history and durable Run ownership on the server."""
 
     try:
@@ -87,6 +94,7 @@ async def stream_ag_ui_run(request: Request):
                 thread_id=requested_thread_id(client_input.thread_id),
                 user_content=prompt,
                 model_name=get_settings().ollama_model,
+                user_id=user.id,
             )
     except ThreadNotFoundError as error:
         raise HTTPException(status_code=404, detail="Thread not found") from error
@@ -94,7 +102,7 @@ async def stream_ag_ui_run(request: Request):
         raise HTTPException(status_code=409, detail="Thread is already running") from error
 
     try:
-        history = await load_thread_model_history(started.thread_id)
+        history = await load_thread_model_history(started.thread_id, user_id=user.id)
     except (ThreadNotFoundError, ValidationError) as error:
         logger.exception("Unable to load model history for thread %s", started.thread_id)
         raise HTTPException(
@@ -149,9 +157,11 @@ async def stream_ag_ui_run(request: Request):
             await persist_completed_run(
                 run_id=started.run_id,
                 assistant_content=result.output,
-                model_messages=parse_model_messages_json(
-                    ModelMessagesTypeAdapter.dump_json(
-                        [*adapter.messages, *result.new_messages()],
+                model_messages=strip_thinking_parts(
+                    parse_model_messages_json(
+                        ModelMessagesTypeAdapter.dump_json(
+                            [*adapter.messages, *result.new_messages()],
+                        ),
                     ),
                 ),
                 input_tokens=usage.input_tokens or None,

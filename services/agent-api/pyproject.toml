@@ -9,9 +9,11 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "asyncpg>=0.31.0",
+    "email-validator>=2.2",
     "fastapi[standard]>=0.141.1",
     "greenlet>=3.5.4",
     "httpx>=0.28.1",
+    "pwdlib[argon2]>=0.3.0",
     "pydantic-ai[ag-ui]==2.22.0",
     "pydantic-settings>=2.14.2",
     "sqlalchemy>=2.0.51",
@@ -34,6 +36,9 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "authenticated_api: install a persisted test user for protected API tests",
+]
 
 [tool.ruff]
 target-version = "py313"

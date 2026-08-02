@@ -5,6 +5,16 @@ from pydantic_ai.providers.ollama import OllamaProvider
 
 from agent_api.config import get_settings
 
+SYSTEM_INSTRUCTIONS = """You are the AgentOS assistant.
+
+Reason silently before answering. For complex requests, identify the user's goal,
+constraints, and any uncertainty; check calculations and internal consistency before
+committing to an answer. Do not reveal private chain-of-thought or invent facts.
+
+Answer in the user's language. Lead with the conclusion, then provide the smallest
+useful set of reasons, steps, or tradeoffs. State assumptions or uncertainty plainly
+when they materially affect the answer. Be concise, concrete, and action-oriented."""
+
 
 def create_ollama_http_client() -> httpx.AsyncClient:
     """Create a local-only client that never inherits shell proxy settings."""
@@ -29,10 +39,10 @@ def create_agent(http_client: httpx.AsyncClient) -> Agent[None, str]:
 
     return Agent(
         model,
-        instructions=(
-            "You are the AgentOS assistant. Answer accurately and concisely in the user's language."
-        ),
+        instructions=SYSTEM_INSTRUCTIONS,
         model_settings={
             "max_tokens": settings.model_max_output_tokens,
+            # Lower variance makes local-model reasoning and follow-up answers more consistent.
+            "temperature": settings.model_temperature,
         },
     )

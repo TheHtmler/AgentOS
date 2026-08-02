@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { agentApiBaseUrl, agentApiSessionHeaders } from "@/lib/agent-api";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -40,14 +42,13 @@ export async function POST(request: Request) {
     return invalidRequestResponse();
   }
 
-  const baseUrl = (process.env.AGENT_API_BASE_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
-
   try {
-    const upstream = await fetch(`${baseUrl}/v1/ag-ui/runs`, {
+    const upstream = await fetch(`${agentApiBaseUrl()}/v1/ag-ui/runs`, {
       method: "POST",
       headers: {
         Accept: "text/event-stream",
         "Content-Type": "application/json",
+        ...(await agentApiSessionHeaders()),
       },
       body,
       cache: "no-store",

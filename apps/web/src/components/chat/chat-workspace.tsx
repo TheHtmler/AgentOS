@@ -1,11 +1,19 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { InvitationManager } from "@/components/auth/invitation-manager";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { RunInspector } from "@/components/run/run-inspector";
 import { HealthStatus } from "@/components/system/health-status";
+
+type ChatWorkspaceProps = {
+  userEmail: string;
+  canManageInvitations: boolean;
+  isLoggingOut: boolean;
+  onLogout: () => void;
+};
 
 const runtimeItems = [
   { label: "执行入口", value: "FastAPI Agent API" },
@@ -13,10 +21,86 @@ const runtimeItems = [
   { label: "会话存储", value: "PostgreSQL Thread" },
 ];
 
-export function ChatWorkspace() {
+function setThreadInUrl(threadId: string) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("thread", threadId);
+  window.history.replaceState(window.history.state, "", url);
+}
+
+function clearThreadFromUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("thread");
+  window.history.replaceState(window.history.state, "", url);
+}
+
+export function ChatWorkspace({
+  userEmail,
+  canManageInvitations,
+  isLoggingOut,
+  onLogout,
+}: ChatWorkspaceProps) {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadListVersion, setThreadListVersion] = useState(0);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null | undefined>(undefined);
+  const [chatViewKey, setChatViewKey] = useState(0);
+  const [isChatStreaming, setIsChatStreaming] = useState(false);
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) {
+      return;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isMobileMenuOpen]);
+
+  const handleSelectThread = useCallback(
+    (threadId: string) => {
+      if (isChatStreaming) {
+        return;
+      }
+
+      setThreadInUrl(threadId);
+      setActiveThreadId(threadId);
+      setActiveRunId(null);
+      setSelectedThreadId(threadId);
+      setIsMobileMenuOpen(false);
+      setChatViewKey((current) => current + 1);
+    },
+    [isChatStreaming],
+  );
+
+  const handleNewConversation = useCallback(() => {
+    if (isChatStreaming) {
+      return;
+    }
+
+    clearThreadFromUrl();
+    setActiveThreadId(null);
+    setActiveRunId(null);
+    setSelectedThreadId(null);
+    setIsMobileMenuOpen(false);
+    setChatViewKey((current) => current + 1);
+  }, [isChatStreaming]);
 
   const handleThreadChanged = useCallback((threadId: string | null) => {
     setActiveThreadId(threadId);
@@ -33,35 +117,151 @@ export function ChatWorkspace() {
   }, []);
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-5 px-5 py-8 lg:grid-cols-[15rem_minmax(0,1fr)_20rem]">
-      <aside className="order-2 lg:order-1">
-        <ConversationList activeThreadId={activeThreadId} refreshKey={threadListVersion} />
-      </aside>
+    <>
+      <header className="agentos-topbar">
+        <div className="agentos-topbar-inner">
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="agentos-mobile-menu-toggle lg:hidden"
+            aria-label="打开主菜单"
+            aria-expanded={isMobileMenuOpen}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
 
-      <section className="order-1 min-w-0 lg:order-2">
-        <ChatPanel
-          onRunStarted={setActiveRunId}
-          onThreadChanged={handleThreadChanged}
-          onRunFinalized={handleRunFinalized}
-        />
-      </section>
+          <div className="flex min-w-0 items-center gap-3">
+            <span aria-hidden="true" className="agentos-logo-mark">
+              AO
+            </span>
+            <div>
+              <p className="text-base font-semibold text-zinc-950">AgentOS</p>
+              <p className="hidden text-xs text-zinc-500 sm:block">Runtime control plane</p>
+            </div>
+          </div>
 
-      <aside className="order-3 space-y-5">
-        <HealthStatus />
-        <RunInspector runId={activeRunId} />
+          <div className="ml-auto hidden items-center gap-3 lg:flex">
+            <span className="agentos-runtime-tag">Local runtime · Ready</span>
+            <p className="max-w-48 truncate text-sm text-zinc-600" title={userEmail}>
+              {userEmail}
+            </p>
+            {canManageInvitations ? <InvitationManager /> : null}
+            <button
+              type="button"
+              onClick={onLogout}
+              disabled={isLoggingOut}
+              className="agentos-header-action disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              退出
+            </button>
+          </div>
 
-        <section className="border border-zinc-200 bg-white p-5">
-          <p className="text-sm font-medium text-zinc-500">当前配置</p>
-          <dl className="mt-4 divide-y divide-zinc-100">
-            {runtimeItems.map((item) => (
-              <div key={item.label} className="py-3 first:pt-0 last:pb-0">
-                <dt className="text-xs text-zinc-500">{item.label}</dt>
-                <dd className="mt-1 text-sm font-medium text-zinc-800">{item.value}</dd>
-              </div>
-            ))}
-          </dl>
+          <span className="agentos-runtime-tag ml-auto lg:hidden">Ready</span>
+        </div>
+      </header>
+
+      <div className="agentos-workspace">
+        <aside className="agentos-conversation-rail hidden min-h-0 lg:flex lg:flex-col">
+          <ConversationList
+            activeThreadId={activeThreadId}
+            refreshKey={threadListVersion}
+            isChatStreaming={isChatStreaming}
+            onNewConversation={handleNewConversation}
+            onSelectThread={handleSelectThread}
+          />
+        </aside>
+
+        <section className="agentos-main-column min-h-0">
+          <ChatPanel
+            key={chatViewKey}
+            selectedThreadId={selectedThreadId}
+            onNewConversation={handleNewConversation}
+            onRunStarted={setActiveRunId}
+            onStreamingChanged={setIsChatStreaming}
+            onThreadChanged={handleThreadChanged}
+            onRunFinalized={handleRunFinalized}
+          />
         </section>
-      </aside>
-    </div>
+
+        <aside className="agentos-runtime-rail hidden min-h-0 lg:flex lg:flex-col">
+          <HealthStatus />
+          <RunInspector runId={activeRunId} />
+
+          <section className="agentos-context-card">
+            <p className="text-xs font-medium tracking-wide text-zinc-500">运行上下文</p>
+            <dl className="mt-4 divide-y divide-zinc-100">
+              {runtimeItems.map((item) => (
+                <div key={item.label} className="py-3 first:pt-0 last:pb-0">
+                  <dt className="text-xs text-zinc-500">{item.label}</dt>
+                  <dd className="mt-1 text-sm font-medium">{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        </aside>
+      </div>
+
+      {isMobileMenuOpen ? (
+        <div className="agentos-mobile-menu lg:hidden">
+          <button
+            type="button"
+            className="agentos-mobile-menu-backdrop"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="关闭主菜单"
+          />
+
+          <aside
+            className="agentos-mobile-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobile-menu-title"
+          >
+            <header className="agentos-mobile-drawer-header">
+              <p id="mobile-menu-title" className="text-sm font-semibold text-zinc-950">
+                会话与工作区
+              </p>
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="agentos-mobile-close"
+                aria-label="关闭主菜单"
+              >
+                关闭
+              </button>
+            </header>
+
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <ConversationList
+                activeThreadId={activeThreadId}
+                refreshKey={threadListVersion}
+                isChatStreaming={isChatStreaming}
+                onNewConversation={handleNewConversation}
+                onSelectThread={handleSelectThread}
+              />
+            </div>
+
+            <footer className="agentos-mobile-account">
+              <p className="truncate text-sm font-medium text-zinc-950" title={userEmail}>
+                {userEmail}
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">当前已登录</p>
+              <div className="mt-4 space-y-2">
+                {canManageInvitations ? <InvitationManager /> : null}
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  disabled={isLoggingOut}
+                  className="agentos-mobile-logout disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  退出登录
+                </button>
+              </div>
+            </footer>
+          </aside>
+        </div>
+      ) : null}
+    </>
   );
 }

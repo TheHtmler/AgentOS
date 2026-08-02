@@ -20,12 +20,102 @@ from sqlalchemy.orm import Mapped, mapped_column
 from agent_api.db.base import Base
 
 
+class User(Base):
+    """An invited or active AgentOS user; authentication is bound to this record."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('invited', 'active', 'disabled')",
+            name="ck_users_status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    # Only an Argon2id password hash is stored; plaintext passwords are never persisted.
+    password_hash: Mapped[str | None] = mapped_column(String(255))
+    password_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(
+        String(16),
+        server_default=text("'invited'"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AuthToken(Base):
+    """A single-use, hashed invitation or magic-link token."""
+
+    __tablename__ = "auth_tokens"
+    __table_args__ = (
+        CheckConstraint(
+            "purpose IN ('invite', 'magic_link')",
+            name="ck_auth_tokens_purpose",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    purpose: Mapped[str] = mapped_column(String(16), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+class UserSession(Base):
+    """A revocable browser session represented by a hashed opaque token."""
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
 class Thread(Base):
-    """A durable conversation container; tenant ownership is added with authentication."""
+    """A durable conversation container owned by one authenticated user."""
 
     __tablename__ = "threads"
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    # Nullable only for pre-authentication development records; application code never creates
+    # an ownerless Thread and never returns legacy ownerless records to a signed-in user.
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    )
     title: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

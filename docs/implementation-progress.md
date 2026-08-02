@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-前后端工程骨架、健康检查链路、统一格式化配置、最小流式聊天、PostgreSQL 会话持久化与刷新后历史恢复已完成；当前 Thread 续接保证数据库归属连续，但尚未作为模型上下文复用。
+前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复，以及 invite-only 认证和 Thread 所有权隔离已完成。
 
 已完成：
 
@@ -41,6 +41,15 @@
 - 新增只读 `GET /v1/threads/{thread_id}/messages`，按 `Message.seq` 返回最终消息；不存在的 Thread 返回 `404`。
 - 新增 Web 同域历史代理，浏览器不直接读取 Agent API 地址。
 - 聊天页将服务端 Thread ID 写入 `?thread=<UUID>`，刷新后恢复历史；历史读取失败时必须显式“新建对话”，不会隐式创建新 Thread。
+- 定义 `users`、单次 `auth_tokens` 和可撤销 `user_sessions`，数据库仅保存高熵 token 的 SHA-256。
+- 实现 invite token 消费、session 创建、当前用户查询与登出撤销。
+- 为 Thread 增加 `user_id`，所有聊天、Thread、Run 与 AG-UI 请求按当前认证用户过滤；跨用户资源返回 `404`。
+- 旧本地开发 Thread 保持无 owner，不会显示给任何认证用户。
+- 新增 Next.js 认证 BFF：验证邀请后以 `HttpOnly` Cookie 保存 session，并在所有 Agent API 代理请求中转发该 Cookie。
+- 增加邀请落地页、登录门禁、账户退出和管理员邀请链接生成面板。
+- 提供受控 CLI，用于在首个管理员尚未登录时生成邀请链接。
+- 优化对话页面：输入框随内容伸缩、支持输入法组合态、长对话阅读不会被强制滚动打断，并提供起始提示、回复复制和回到最新消息操作。
+- 优化本地模型回答策略：静默分析目标、约束与不确定性后以结论优先的方式作答；温度可通过 `MODEL_TEMPERATURE` 配置，默认 `0.3` 以提高一致性。
 
 ## 验证
 
@@ -48,7 +57,10 @@
 - `uv run --directory services/agent-api ruff check .` 通过。
 - `uv run --directory services/agent-api pyright` 通过，`0 errors, 0 warnings`。
 - `uv run --directory services/agent-api pytest` 通过。
+- `uv run --directory services/agent-api alembic upgrade head` 已应用 `4edcb11d60ef` Thread owner 迁移。
 - `pnpm lint:web` 通过。
+- `pnpm --filter web exec tsc --noEmit` 通过。
+- `uv run --directory services/agent-api pytest tests/test_agent.py` 通过。
 - `pnpm build:web` 通过；构建不再依赖 Google Fonts 网络访问。
 - `pnpm format:check` 通过。
 - `curl --noproxy '*' http://127.0.0.1:3000/api/health` 返回 `{ "status": "ok" }`。
@@ -56,8 +68,9 @@
 
 ## 未完成
 
-- 模型消息历史恢复、HITL、MCP 和 Sandbox。
+- 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
+- HITL、MCP 和 Sandbox。
 
 ## 下一步
 
-将持久化历史裁剪为有 token 窗口的 Pydantic AI 模型消息上下文，并定义系统提示、工具调用和中断 Run 的恢复规则；随后继续 HITL、MCP 和 Sandbox。
+为邀请增加邮件送达与重试队列，并设计用户禁用和 session 审计；随后继续 HITL、MCP 和 Sandbox。

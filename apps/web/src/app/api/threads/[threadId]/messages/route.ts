@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { agentApiBaseUrl, agentApiSessionHeaders, upstreamResponseHeaders } from "@/lib/agent-api";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -8,7 +10,17 @@ type RouteContext = {
 };
 
 function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  const parts = value.split("-");
+
+  return (
+    parts.length === 5 &&
+    parts[0].length === 8 &&
+    parts[1].length === 4 &&
+    parts[2].length === 4 &&
+    parts[3].length === 4 &&
+    parts[4].length === 12 &&
+    parts.every((part) => /^[0-9a-f]+$/i.test(part))
+  );
 }
 
 function invalidRequestResponse() {
@@ -27,27 +39,21 @@ function unavailableResponse() {
 
 export async function GET(request: Request, context: RouteContext) {
   const { threadId } = await context.params;
+
   if (!isUuid(threadId)) {
     return invalidRequestResponse();
   }
 
-  const baseUrl = (process.env.AGENT_API_BASE_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
-
   try {
-    const upstream = await fetch(`${baseUrl}/v1/threads/${threadId}/messages`, {
+    const upstream = await fetch(`${agentApiBaseUrl()}/v1/threads/${threadId}/messages`, {
+      headers: await agentApiSessionHeaders(),
       cache: "no-store",
       signal: request.signal,
     });
-    const responseHeaders = new Headers({ "Cache-Control": "no-store" });
-    const contentType = upstream.headers.get("content-type");
-
-    if (contentType !== null) {
-      responseHeaders.set("Content-Type", contentType);
-    }
 
     return new Response(upstream.body, {
       status: upstream.status,
-      headers: responseHeaders,
+      headers: upstreamResponseHeaders(upstream),
     });
   } catch {
     return unavailableResponse();

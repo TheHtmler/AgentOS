@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { agentApiBaseUrl, agentApiSessionHeaders, upstreamResponseHeaders } from "@/lib/agent-api";
+
 type ChatRequest = {
   message: string;
   threadId?: string;
@@ -79,14 +81,13 @@ export async function POST(request: Request) {
     ...(chatRequest.threadId === undefined ? {} : { thread_id: chatRequest.threadId }),
   };
 
-  const baseUrl = (process.env.AGENT_API_BASE_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
-
   try {
-    const upstream = await fetch(`${baseUrl}/v1/chat/stream`, {
+    const upstream = await fetch(`${agentApiBaseUrl()}/v1/chat/stream`, {
       method: "POST",
       headers: {
         Accept: "text/event-stream",
         "Content-Type": "application/json",
+        ...(await agentApiSessionHeaders()),
       },
       body: JSON.stringify(agentApiRequest),
       cache: "no-store",
@@ -95,6 +96,12 @@ export async function POST(request: Request) {
     });
 
     if (!upstream.ok || upstream.body === null) {
+      if (!upstream.ok) {
+        return new Response(upstream.body, {
+          status: upstream.status,
+          headers: upstreamResponseHeaders(upstream),
+        });
+      }
       return unavailableResponse();
     }
 

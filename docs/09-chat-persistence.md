@@ -44,7 +44,10 @@
 - 模型错误和浏览器取消会分别写入 `failed` 或 `cancelled` 终态，避免 Run 永远停留在 `running`。
 - 响应通过 `X-AgentOS-Thread-ID` 返回当前 Thread ID；路由测试使用真实 PostgreSQL，并在结束时删除测试数据。
 
-## 暂不实现
+## 认证后的边界
 
-- 多租户与认证字段。
-- Pydantic AI 的完整结构化消息历史；本轮的 Thread 续接只复用数据库归属，模型仍未读取此前消息。
+- 每个新 Thread 在创建短事务中写入当前 `user_id`；既有 Thread 在锁定前先按 `user_id` 过滤。
+- Thread 历史、Run 详情和 AG-UI 也按相同 owner 过滤，不属于当前用户时返回 `404`。
+- 流式生成期间仍不持有数据库事务；所有权只影响初始 Thread 查询与创建，不改变后续 delta 和终态的短事务结构。
+
+完整认证行为见 [11-authentication.md](11-authentication.md)。

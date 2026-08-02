@@ -7,7 +7,7 @@ AgentOS 是一个正在开发中的可控、可持久化 AI Agent Runtime 平台
 项目从一个小而可验证的核心开始公开构建，逐步扩展到工具执行、人工审批、隔离 Sandbox 和多租户运行。
 
 > [!WARNING]
-> AgentOS 仍在积极开发中，尚未达到生产可用状态。认证、租户隔离、MCP 工具、Human-in-the-Loop (HITL) 和 Sandbox 执行目前尚未实现。
+> AgentOS 仍在积极开发中，尚未达到生产可用状态。invite-only 认证与用户级 Thread 隔离已实现；组织级租户、MCP 工具、Human-in-the-Loop (HITL) 和 Sandbox 执行仍未实现。
 
 ## 当前能力
 
@@ -19,6 +19,8 @@ AgentOS 是一个正在开发中的可控、可持久化 AI Agent Runtime 平台
 - 从最近完成的 Run 中恢复有界模型上下文。
 - 每个 Thread 同时只允许一个活动 Run，并持久化 completed、failed 和 cancelled 终态。
 - 记录已完成 Run 的模型 token 用量和请求次数。
+- invite-only 身份认证、可撤销 HttpOnly session，以及用户级 Thread、Run 与历史隔离。
+- 管理员在页面生成邀请链接；首次管理员可通过受控 CLI 生成链接。
 - 后端使用 pytest、Ruff 和 Pyright，前端使用 ESLint 和 Prettier 进行质量检查。
 
 ## 架构
@@ -103,6 +105,16 @@ pnpm dev:web
 
 访问 `http://127.0.0.1:3000`。
 
+### 6. 创建首个管理员
+
+在 `services/agent-api/.env` 中设置 `AUTH_ADMIN_EMAILS` 为首个管理员邮箱，并将 `WEB_APP_ORIGIN` 设为 Web 的实际访问地址。随后在受控开发终端运行：
+
+```bash
+uv run --directory services/agent-api python scripts/create_invitation.py admin@example.com
+```
+
+打开输出的链接完成首次登录。完整认证边界见 [认证文档](docs/11-authentication.md)。
+
 ## 验证
 
 提交 Pull Request 前运行仓库检查：
@@ -138,7 +150,7 @@ AgentOS/
 - 只读 MCP 集成和受控本地工具。
 - 可持久化的 HITL 中断、批准、拒绝和幂等恢复。
 - 具有资源限制、超时和网络隔离的用户级 Docker Sandbox。
-- 身份认证和租户隔离。
+- 邀请邮件送达、再登录和组织级租户隔离。
 - 多模型 Provider、持久化工作流和可观测性。
 
 阶段边界和验收标准见 [MVP 路线图](docs/02-mvp-roadmap.md)。

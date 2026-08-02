@@ -31,7 +31,7 @@ async def dispose_database_pool() -> AsyncIterator[None]:
 
 
 @pytest.mark.anyio
-async def test_ag_ui_stream_creates_a_server_owned_run() -> None:
+async def test_ag_ui_stream_creates_a_server_owned_run(authenticated_api_user: UUID) -> None:
     """AG-UI accepts only the current user turn; history remains server-owned."""
 
     app.state.runtime = AgentRuntime(
@@ -99,7 +99,7 @@ async def test_ag_ui_stream_creates_a_server_owned_run() -> None:
 
 
 @pytest.mark.anyio
-async def test_ag_ui_ignores_client_supplied_history() -> None:
+async def test_ag_ui_ignores_client_supplied_history(authenticated_api_user: UUID) -> None:
     """Only server-restored history may reach the model on a continued AG-UI Thread."""
 
     seen_requests: list[list[ModelMessage]] = []

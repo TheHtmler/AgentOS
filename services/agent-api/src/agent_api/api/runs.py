@@ -1,10 +1,13 @@
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from agent_api.api.auth import get_current_user
 from agent_api.db.chat_store import RunNotFoundError, get_run
+from agent_api.db.models import User
 from agent_api.db.session import session_factory
 
 router = APIRouter(prefix="/v1/runs", tags=["runs"])
@@ -26,12 +29,15 @@ class RunResponse(BaseModel):
 
 
 @router.get("/{run_id}", response_model=RunResponse)
-async def get_run_detail(run_id: UUID) -> RunResponse:
+async def get_run_detail(
+    run_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+) -> RunResponse:
     """Read execution state without exposing raw model-message snapshots."""
 
     try:
         async with session_factory() as session:
-            run = await get_run(session, run_id=run_id)
+            run = await get_run(session, run_id=run_id, user_id=user.id)
     except RunNotFoundError as error:
         raise HTTPException(status_code=404, detail="Run not found") from error
 

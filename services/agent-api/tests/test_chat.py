@@ -16,6 +16,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 from sqlalchemy import select
 
+from agent_api.api.chat import strip_thinking_parts
 from agent_api.db.chat_store import cancel_run, start_run
 from agent_api.db.models import Message, Run, RunEvent, RunMessageHistory, Thread
 from agent_api.db.session import close_database, session_factory
@@ -34,7 +35,7 @@ async def dispose_database_pool() -> AsyncIterator[None]:
 
 
 @pytest.mark.anyio
-async def test_chat_stream_persists_messages_and_events() -> None:
+async def test_chat_stream_persists_messages_and_events(authenticated_api_user: UUID) -> None:
     """Verify the HTTP stream and database facts describe the same completed Run."""
 
     app.state.runtime = AgentRuntime(
@@ -139,7 +140,7 @@ async def test_chat_stream_persists_messages_and_events() -> None:
 
 
 @pytest.mark.anyio
-async def test_chat_stream_rejects_blank_message() -> None:
+async def test_chat_stream_rejects_blank_message(authenticated_api_user: UUID) -> None:
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -149,7 +150,7 @@ async def test_chat_stream_rejects_blank_message() -> None:
 
 
 @pytest.mark.anyio
-async def test_chat_stream_reuses_server_model_history() -> None:
+async def test_chat_stream_reuses_server_model_history(authenticated_api_user: UUID) -> None:
     """The second HTTP request must receive the first completed Run as model history."""
 
     seen_requests: list[list[ModelMessage]] = []
@@ -215,7 +216,7 @@ async def test_chat_stream_reuses_server_model_history() -> None:
 
 
 @pytest.mark.anyio
-async def test_chat_stream_rejects_second_running_run() -> None:
+async def test_chat_stream_rejects_second_running_run(authenticated_api_user: UUID) -> None:
     """A Thread may not start a second Run until the active Run reaches a terminal state."""
 
     app.state.runtime = AgentRuntime(
@@ -233,6 +234,7 @@ async def test_chat_stream_rejects_second_running_run() -> None:
                 thread_id=None,
                 user_content="正在生成的第一条消息",
                 model_name="test",
+                user_id=authenticated_api_user,
             )
             thread_id = started.thread_id
             active_run_id = started.run_id
@@ -270,3 +272,23 @@ async def test_chat_stream_rejects_second_running_run() -> None:
                 thread = await session.get(Thread, thread_id)
                 if thread is not None:
                     await session.delete(thread)
+
+
+@pytest.mark.anyio
+async def test_strip_thinking_parts_preserves_final_answer() -> None:
+    messages = [
+        {
+            "kind": "response",
+            "parts": [
+                {"part_kind": "thinking", "content": "private reasoning"},
+                {"part_kind": "text", "content": "最终回答"},
+            ],
+        },
+    ]
+
+    assert strip_thinking_parts(messages) == [
+        {
+            "kind": "response",
+            "parts": [{"part_kind": "text", "content": "最终回答"}],
+        },
+    ]

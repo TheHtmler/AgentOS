@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { agentApiBaseUrl, agentApiSessionHeaders, upstreamResponseHeaders } from "@/lib/agent-api";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -32,23 +34,16 @@ export async function GET(request: Request, context: RouteContext) {
     return invalidRequestResponse();
   }
 
-  const baseUrl = (process.env.AGENT_API_BASE_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
-
   try {
-    const upstream = await fetch(`${baseUrl}/v1/runs/${runId}`, {
+    const upstream = await fetch(`${agentApiBaseUrl()}/v1/runs/${runId}`, {
+      headers: await agentApiSessionHeaders(),
       cache: "no-store",
       signal: request.signal,
     });
-    const responseHeaders = new Headers({ "Cache-Control": "no-store" });
-    const contentType = upstream.headers.get("content-type");
-
-    if (contentType !== null) {
-      responseHeaders.set("Content-Type", contentType);
-    }
 
     return new Response(upstream.body, {
       status: upstream.status,
-      headers: responseHeaders,
+      headers: upstreamResponseHeaders(upstream),
     });
   } catch {
     return unavailableResponse();

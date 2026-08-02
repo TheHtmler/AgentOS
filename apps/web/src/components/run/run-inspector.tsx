@@ -137,7 +137,7 @@ function RunDetailPanel({ runId }: { runId: string }) {
   }, [runId]);
 
   return (
-    <section className="border border-zinc-200 bg-white p-5">
+    <section className="min-w-0 overflow-hidden border border-zinc-200 bg-white p-4 sm:p-5">
       <p className="text-sm font-medium text-zinc-500">当前 Run</p>
 
       {error ? (
@@ -190,7 +190,7 @@ function RunDetailPanel({ runId }: { runId: string }) {
 export function RunInspector({ runId }: RunInspectorProps) {
   if (runId === null) {
     return (
-      <section className="border border-zinc-200 bg-white p-5">
+      <section className="min-w-0 overflow-hidden border border-zinc-200 bg-white p-4 sm:p-5">
         <p className="text-sm font-medium text-zinc-500">当前 Run</p>
         <p className="mt-4 text-sm text-zinc-500">发送消息后显示本次执行信息。</p>
       </section>

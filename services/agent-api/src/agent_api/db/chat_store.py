@@ -42,17 +42,22 @@ class ThreadListItem:
     updated_at: datetime
 
 
-async def _create_thread(session: AsyncSession) -> Thread:
-    thread = Thread()
+async def _create_thread(session: AsyncSession, *, user_id: UUID) -> Thread:
+    thread = Thread(user_id=user_id)
     session.add(thread)
     await session.flush()
     return thread
 
 
-async def _lock_thread(session: AsyncSession, thread_id: UUID) -> Thread:
+async def _lock_thread(session: AsyncSession, *, thread_id: UUID, user_id: UUID) -> Thread:
     # Locking the parent row serializes allocation of messages.seq within one thread.
     thread = await session.scalar(
-        select(Thread).where(Thread.id == thread_id).with_for_update(),
+        select(Thread)
+        .where(
+            Thread.id == thread_id,
+            Thread.user_id == user_id,
+        )
+        .with_for_update(),
     )
     if thread is None:
         raise ThreadNotFoundError(f"Thread {thread_id} does not exist")
@@ -104,10 +109,18 @@ async def get_run(
     session: AsyncSession,
     *,
     run_id: UUID,
+    user_id: UUID,
 ) -> Run:
     """Return one Run for server-side observability."""
 
-    run = await session.get(Run, run_id)
+    run = await session.scalar(
+        select(Run)
+        .join(Thread, Thread.id == Run.thread_id)
+        .where(
+            Run.id == run_id,
+            Thread.user_id == user_id,
+        )
+    )
     if run is None:
         raise RunNotFoundError(f"Run {run_id} does not exist")
 
@@ -118,10 +131,19 @@ async def list_thread_messages(
     session: AsyncSession,
     *,
     thread_id: UUID,
+    user_id: UUID | None = None,
 ) -> list[Message]:
     """Return final messages in their durable conversation order."""
 
-    thread = await session.get(Thread, thread_id)
+    if user_id is None:
+        thread = await session.get(Thread, thread_id)
+    else:
+        thread = await session.scalar(
+            select(Thread).where(
+                Thread.id == thread_id,
+                Thread.user_id == user_id,
+            )
+        )
     if thread is None:
         raise ThreadNotFoundError(f"Thread {thread_id} does not exist")
 
@@ -135,6 +157,7 @@ async def list_threads(
     session: AsyncSession,
     *,
     limit: int,
+    user_id: UUID,
 ) -> list[ThreadListItem]:
     """Return recent Threads with a render-safe latest-message preview."""
 
@@ -148,6 +171,7 @@ async def list_threads(
 
     result = await session.execute(
         select(Thread, latest_message_content)
+        .where(Thread.user_id == user_id)
         .order_by(Thread.updated_at.desc(), Thread.id.desc())
         .limit(limit),
     )
@@ -168,10 +192,20 @@ async def list_completed_run_message_histories(
     *,
     thread_id: UUID,
     limit: int,
+    user_id: UUID | None = None,
 ) -> list[RunMessageHistory]:
     """Return recent complete model-message blocks in chronological order."""
 
-    thread = await session.get(Thread, thread_id)
+    if user_id is None:
+        thread = await session.get(Thread, thread_id)
+    else:
+        thread = await session.scalar(
+            select(Thread).where(
+                Thread.id == thread_id,
+                Thread.user_id == user_id,
+            )
+        )
+
     if thread is None:
         raise ThreadNotFoundError(f"Thread {thread_id} does not exist")
 
@@ -202,13 +236,30 @@ async def start_run(
     thread_id: UUID | None,
     user_content: str,
     model_name: str,
+    user_id: UUID | None = None,
 ) -> StartedRun:
-    """Record a user message and a running execution in the caller's transaction."""
+    """Record a user message and a running execution in the caller's transaction.
+
+    HTTP handlers always supply ``user_id``. The optional value keeps isolated legacy repository
+    tests usable while ownerless development records remain inaccessible through every API.
+    """
 
     if thread_id is None:
-        thread = await _create_thread(session)
+        if user_id is None:
+            thread = Thread()
+            session.add(thread)
+            await session.flush()
+        else:
+            thread = await _create_thread(session, user_id=user_id)
     else:
-        thread = await _lock_thread(session, thread_id)
+        if user_id is None:
+            thread = await session.scalar(
+                select(Thread).where(Thread.id == thread_id).with_for_update(),
+            )
+            if thread is None:
+                raise ThreadNotFoundError(f"Thread {thread_id} does not exist")
+        else:
+            thread = await _lock_thread(session, thread_id=thread_id, user_id=user_id)
         await _ensure_thread_has_no_running_run(session, thread.id)
     message = Message(
         thread_id=thread.id,
@@ -287,7 +338,11 @@ async def complete_run(
     if run.status != "running":
         raise InvalidRunStateError(f"Run {run_id} is {run.status}, not running")
 
-    thread = await _lock_thread(session, run.thread_id)
+    thread = await session.scalar(
+        select(Thread).where(Thread.id == run.thread_id).with_for_update()
+    )
+    if thread is None:
+        raise ThreadNotFoundError(f"Thread {run.thread_id} does not exist")
     assistant_message = Message(
         thread_id=thread.id,
         seq=await _next_message_seq(session, thread.id),
