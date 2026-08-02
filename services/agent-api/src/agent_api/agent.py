@@ -32,4 +32,7 @@ def create_agent(http_client: httpx.AsyncClient) -> Agent[None, str]:
         instructions=(
             "You are the AgentOS assistant. Answer accurately and concisely in the user's language."
         ),
+        model_settings={
+            "max_tokens": settings.model_max_output_tokens,
+        },
     )

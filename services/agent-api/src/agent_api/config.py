@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     )
 
     ollama_base_url: str = "http://127.0.0.1:11434/v1"
-    ollama_model: str = "gemma4:e4b"
+    ollama_model: str = "agentos-gemma4:8k"
+    model_max_output_tokens: int = 2_048
     history_max_runs: int = 4  # max runs in next context
     database_url: str
 
@@ -37,6 +38,14 @@ class Settings(BaseSettings):
     def history_max_runs_must_be_positive(cls, value: int) -> int:
         if value < 1:
             raise ValueError("history_max_runs must be at least 1")
+
+        return value
+    
+    @field_validator("model_max_output_tokens")
+    @classmethod
+    def model_max_output_tokens_must_be_positive(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("model_max_output_tokens must be at least 1")
 
         return value
 
