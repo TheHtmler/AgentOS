@@ -1,0 +1,10 @@
+node_modules/
+.next/
+.venv/
+.ruff_cache/
+.pytest_cache/
+.pyright/
+coverage/
+apps/web/public/
+pnpm-lock.yaml
+services/agent-api/uv.lock
