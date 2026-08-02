@@ -104,10 +104,15 @@ export async function POST(request: Request) {
       "X-Accel-Buffering": "no",
     });
     const threadId = upstream.headers.get("x-agentos-thread-id");
+    const runId = upstream.headers.get("x-agentos-run-id");
 
     // The browser needs this durable identity before it can continue the same Thread.
     if (threadId !== null) {
       responseHeaders.set("X-AgentOS-Thread-ID", threadId);
+    }
+
+    if (runId !== null) {
+      responseHeaders.set("X-AgentOS-Run-ID", runId);
     }
 
     return new Response(upstream.body, { headers: responseHeaders });

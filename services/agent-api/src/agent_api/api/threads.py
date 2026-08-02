@@ -1,13 +1,33 @@
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from agent_api.db.chat_store import ThreadNotFoundError, list_thread_messages
+from agent_api.db.chat_store import (
+    ThreadNotFoundError,
+    list_thread_messages,
+    list_threads,
+)
 from agent_api.db.session import session_factory
 
 router = APIRouter(prefix="/v1/threads", tags=["threads"])
+
+
+class ThreadSummaryResponse(BaseModel):
+    """A lightweight recent-conversation item for navigation."""
+
+    id: UUID
+    title: str | None
+    latest_message_content: str | None
+    updated_at: datetime
+
+
+class ThreadListResponse(BaseModel):
+    """Recent Threads ordered by their latest durable activity."""
+
+    threads: list[ThreadSummaryResponse]
 
 
 class ThreadMessageResponse(BaseModel):
@@ -24,6 +44,28 @@ class ThreadMessagesResponse(BaseModel):
 
     thread_id: UUID
     messages: list[ThreadMessageResponse]
+
+
+@router.get("", response_model=ThreadListResponse)
+async def get_threads(
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> ThreadListResponse:
+    """List recent durable conversations without exposing model history."""
+
+    async with session_factory() as session:
+        threads = await list_threads(session, limit=limit)
+
+    return ThreadListResponse(
+        threads=[
+            ThreadSummaryResponse(
+                id=thread.id,
+                title=thread.title,
+                latest_message_content=thread.latest_message_content,
+                updated_at=thread.updated_at,
+            )
+            for thread in threads
+        ],
+    )
 
 
 @router.get("/{thread_id}/messages", response_model=ThreadMessagesResponse)

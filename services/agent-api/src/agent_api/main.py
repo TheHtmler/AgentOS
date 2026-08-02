@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from agent_api.api.ag_ui import router as ag_ui_router
 from agent_api.api.chat import router as chat_router
 from agent_api.api.runs import router as runs_router
 from agent_api.api.threads import router as threads_router
@@ -13,6 +14,7 @@ app = FastAPI(
 )
 
 app.include_router(chat_router)
+app.include_router(ag_ui_router)
 app.include_router(threads_router)
 app.include_router(runs_router)
 

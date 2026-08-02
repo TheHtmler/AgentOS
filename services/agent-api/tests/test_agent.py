@@ -12,7 +12,7 @@ def test_default_settings() -> None:
     )
 
     assert settings.ollama_base_url == "http://127.0.0.1:11434/v1"
-    assert settings.ollama_model == "gemma4:e4b"
+    assert settings.ollama_model == "agentos-gemma4:8k"
 
 
 @pytest.mark.anyio

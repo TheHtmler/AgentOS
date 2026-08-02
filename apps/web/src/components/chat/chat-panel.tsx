@@ -1,5 +1,6 @@
 "use client";
 
+import { HttpAgent, type Message } from "@ag-ui/client";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 
 type ChatMessage = {
@@ -13,48 +14,18 @@ type ThreadHistory = {
   messages: ChatMessage[];
 };
 
-type SseFrame = {
-  event: string;
-  data: string;
+type ChatPanelProps = {
+  onRunStarted: (runId: string) => void;
+  onThreadChanged: (threadId: string | null) => void;
+  onRunFinalized: () => void;
 };
 
-function parseSseFrame(frame: string): SseFrame | null {
-  let event = "message";
-  const dataLines: string[] = [];
-
-  for (const line of frame.split(/\r?\n/)) {
-    if (line.startsWith("event:")) {
-      event = line.slice("event:".length).trim();
-    }
-
-    if (line.startsWith("data:")) {
-      dataLines.push(line.slice("data:".length).replace(/^ /, ""));
-    }
-  }
-
-  return dataLines.length > 0 ? { event, data: dataLines.join("\n") } : null;
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function parsePayload(data: string): Record<string, unknown> | null {
-  try {
-    const value: unknown = JSON.parse(data);
-    return isRecord(value) ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function payloadText(payload: Record<string, unknown>, key: string): string | null {
-  const value = payload[key];
-  return typeof value === "string" ? value : null;
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
 function parseThreadHistory(value: unknown): ThreadHistory | null {
@@ -68,6 +39,7 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
   }
 
   const messages: ChatMessage[] = [];
+
   for (const message of value.messages) {
     if (
       !isRecord(message) ||
@@ -89,7 +61,58 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
   return { thread_id: value.thread_id, messages };
 }
 
-export function ChatPanel() {
+function toAgentMessages(messages: ChatMessage[]): Message[] {
+  return messages.map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+  }));
+}
+
+function toDisplayMessages(messages: readonly Message[]): ChatMessage[] {
+  const displayMessages: ChatMessage[] = [];
+
+  for (const message of messages) {
+    if (
+      (message.role !== "user" && message.role !== "assistant") ||
+      typeof message.content !== "string"
+    ) {
+      continue;
+    }
+
+    displayMessages.push({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+    });
+  }
+
+  return displayMessages;
+}
+
+function createAgent(threadId: string, messages: ChatMessage[]): HttpAgent {
+  return new HttpAgent({
+    url: "/api/ag-ui/runs",
+    threadId,
+    initialMessages: toAgentMessages(messages),
+  });
+}
+
+function updateThreadInUrl(threadId: string) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("thread", threadId);
+  window.history.replaceState(window.history.state, "", url);
+}
+
+function agentErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.includes("409")) {
+    return "当前会话仍在生成，请等待完成或停止当前请求。";
+  }
+
+  return "Agent 生成失败，请稍后重试。";
+}
+
+export function ChatPanel({ onRunStarted, onThreadChanged, onRunFinalized }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -97,9 +120,13 @@ export function ChatPanel() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [historyLoadFailed, setHistoryLoadFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const messageCountRef = useRef(0);
+  const agentRef = useRef<HttpAgent | null>(null);
+  const cancellationRequestedRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  if (agentRef.current === null) {
+    agentRef.current = createAgent("new", []);
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
@@ -107,8 +134,8 @@ export function ChatPanel() {
 
   useEffect(() => {
     return () => {
-      // Leaving the page must cancel the browser request and the upstream model stream.
-      abortControllerRef.current?.abort();
+      // Cancel the browser request when the chat panel unmounts.
+      agentRef.current?.abortRun();
     };
   }, []);
 
@@ -117,10 +144,8 @@ export function ChatPanel() {
     let isCurrent = true;
 
     void (async () => {
-      // Yield once so restoring external URL state does not synchronously cascade from mount.
-      await Promise.resolve();
-
       const requestedThreadId = new URL(window.location.href).searchParams.get("thread");
+
       if (requestedThreadId === null) {
         if (isCurrent) {
           setIsLoadingHistory(false);
@@ -152,13 +177,16 @@ export function ChatPanel() {
         }
 
         const history = parseThreadHistory((await response.json()) as unknown);
+
         if (history === null || history.thread_id !== requestedThreadId) {
           throw new Error("会话历史格式无效。");
         }
 
         if (isCurrent) {
+          agentRef.current = createAgent(history.thread_id, history.messages);
           setMessages(history.messages);
           setThreadId(history.thread_id);
+          onThreadChanged(history.thread_id);
           setError(null);
         }
       } catch (caughtError: unknown) {
@@ -179,146 +207,68 @@ export function ChatPanel() {
       isCurrent = false;
       controller.abort();
     };
-  }, []);
-
-  function createMessageId(role: ChatMessage["role"]): string {
-    messageCountRef.current += 1;
-    return `${role}-${messageCountRef.current}`;
-  }
+  }, [onThreadChanged]);
 
   function stopStreaming() {
-    abortControllerRef.current?.abort();
+    cancellationRequestedRef.current = true;
+    agentRef.current?.abortRun();
   }
 
   async function sendMessage() {
-    const message = draft.trim();
+    const content = draft.trim();
 
-    if (!message || isStreaming || isLoadingHistory || historyLoadFailed) {
+    if (!content || isStreaming || isLoadingHistory || historyLoadFailed) {
       return;
     }
 
-    const controller = new AbortController();
-    const userMessage: ChatMessage = {
-      id: createMessageId("user"),
-      role: "user",
-      content: message,
-    };
-    const assistantMessageId = createMessageId("assistant");
+    const agent = agentRef.current;
+    if (agent === null) {
+      setError("聊天客户端尚未初始化。");
+      return;
+    }
 
-    abortControllerRef.current = controller;
-    setMessages((current) => [
-      ...current,
-      userMessage,
-      { id: assistantMessageId, role: "assistant", content: "" },
-    ]);
+    agent.addMessage({
+      id: crypto.randomUUID(),
+      role: "user",
+      content,
+    });
+
+    setMessages(toDisplayMessages(agent.messages));
     setDraft("");
     setError(null);
     setIsStreaming(true);
+    cancellationRequestedRef.current = false;
 
     try {
-      const response = await fetch("/api/chat/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message,
-          ...(threadId === null ? {} : { threadId }),
-        }),
-        signal: controller.signal,
+      await agent.runAgent(undefined, {
+        onMessagesChanged: ({ messages: nextMessages }) => {
+          setMessages(toDisplayMessages(nextMessages));
+        },
+        onRunStartedEvent: ({ event, agent: runningAgent }) => {
+          if (isUuid(event.runId)) {
+            onRunStarted(event.runId);
+          }
+
+          // The backend owns durable IDs; switch subsequent browser requests to its Thread.
+          if (isUuid(event.threadId)) {
+            runningAgent.threadId = event.threadId;
+            setThreadId(event.threadId);
+            onThreadChanged(event.threadId);
+            updateThreadInUrl(event.threadId);
+          }
+        },
+        onRunErrorEvent: ({ event }) => {
+          setError(event.message || "Agent 生成失败，请稍后重试。");
+        },
       });
-
-      if (!response.ok || response.body === null) {
-        throw new Error("无法连接 Agent 服务。");
-      }
-
-      const responseThreadId = response.headers.get("x-agentos-thread-id");
-      if (responseThreadId === null || !isUuid(responseThreadId)) {
-        throw new Error("Agent 未返回会话标识。");
-      }
-
-      // Keep the server-issued identity in the URL so a refresh restores this exact Thread.
-      setThreadId(responseThreadId);
-      const url = new URL(window.location.href);
-      url.searchParams.set("thread", responseThreadId);
-      window.history.replaceState(window.history.state, "", url);
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let receivedDone = false;
-
-      const processBuffer = () => {
-        const frames = buffer.split("\n\n");
-        buffer = frames.pop() ?? "";
-
-        for (const rawFrame of frames) {
-          const frame = parseSseFrame(rawFrame);
-          if (frame === null) {
-            continue;
-          }
-
-          const payload = parsePayload(frame.data);
-          if (payload === null) {
-            throw new Error("Agent 返回了无法识别的流式数据。");
-          }
-
-          if (frame.event === "text_delta") {
-            const delta = payloadText(payload, "delta");
-            if (delta === null) {
-              throw new Error("Agent 返回了无效的文本事件。");
-            }
-
-            setMessages((current) =>
-              current.map((item) =>
-                item.id === assistantMessageId
-                  ? { ...item, content: `${item.content}${delta}` }
-                  : item,
-              ),
-            );
-          }
-
-          if (frame.event === "error") {
-            throw new Error(payloadText(payload, "message") ?? "Agent 生成失败。");
-          }
-
-          if (frame.event === "done") {
-            receivedDone = true;
-          }
-        }
-      };
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          processBuffer();
-        }
-
-        buffer += decoder.decode();
-        processBuffer();
-      } finally {
-        reader.releaseLock();
-      }
-
-      if (!receivedDone && !controller.signal.aborted) {
-        throw new Error("Agent 流在完成前中断。");
-      }
     } catch (caughtError: unknown) {
-      if (!controller.signal.aborted) {
-        setMessages((current) =>
-          current.filter((item) => item.id !== assistantMessageId || item.content.length > 0),
-        );
-        setError(caughtError instanceof Error ? caughtError.message : "Agent 生成失败。");
+      if (!cancellationRequestedRef.current) {
+        setError(agentErrorMessage(caughtError));
       }
     } finally {
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-        setIsStreaming(false);
-      }
+      cancellationRequestedRef.current = false;
+      setIsStreaming(false);
+      onRunFinalized();
     }
   }
 
@@ -345,9 +295,13 @@ export function ChatPanel() {
       return;
     }
 
+    onThreadChanged(null);
+    agentRef.current = createAgent("new", []);
+
     const url = new URL(window.location.href);
     url.searchParams.delete("thread");
     window.history.replaceState(window.history.state, "", url);
+
     setMessages([]);
     setThreadId(null);
     setError(null);
@@ -392,9 +346,7 @@ export function ChatPanel() {
               <p className="mb-1 text-xs opacity-70">
                 {message.role === "user" ? "你" : "AgentOS"}
               </p>
-              <p className="break-words whitespace-pre-wrap">
-                {message.content || (isStreaming ? "..." : "")}
-              </p>
+              <p className="break-words whitespace-pre-wrap">{message.content}</p>
             </article>
           ))
         )}

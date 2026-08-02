@@ -40,7 +40,7 @@ class Settings(BaseSettings):
             raise ValueError("history_max_runs must be at least 1")
 
         return value
-    
+
     @field_validator("model_max_output_tokens")
     @classmethod
     def model_max_output_tokens_must_be_positive(cls, value: int) -> int:

@@ -32,6 +32,16 @@ class StartedRun:
     run_id: UUID
 
 
+@dataclass(frozen=True)
+class ThreadListItem:
+    """One recent conversation summary for the chat navigation."""
+
+    id: UUID
+    title: str | None
+    latest_message_content: str | None
+    updated_at: datetime
+
+
 async def _create_thread(session: AsyncSession) -> Thread:
     thread = Thread()
     session.add(thread)
@@ -119,6 +129,38 @@ async def list_thread_messages(
         select(Message).where(Message.thread_id == thread.id).order_by(Message.seq),
     )
     return list(messages)
+
+
+async def list_threads(
+    session: AsyncSession,
+    *,
+    limit: int,
+) -> list[ThreadListItem]:
+    """Return recent Threads with a render-safe latest-message preview."""
+
+    latest_message_content = (
+        select(Message.content)
+        .where(Message.thread_id == Thread.id)
+        .order_by(Message.seq.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+
+    result = await session.execute(
+        select(Thread, latest_message_content)
+        .order_by(Thread.updated_at.desc(), Thread.id.desc())
+        .limit(limit),
+    )
+
+    return [
+        ThreadListItem(
+            id=thread.id,
+            title=thread.title,
+            latest_message_content=message_content,
+            updated_at=thread.updated_at,
+        )
+        for thread, message_content in result.tuples()
+    ]
 
 
 async def list_completed_run_message_histories(
