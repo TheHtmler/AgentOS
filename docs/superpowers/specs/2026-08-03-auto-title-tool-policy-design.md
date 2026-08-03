@@ -1,7 +1,7 @@
 # 自动会话标题与 Tool Registry / Policy 骨架
 
 日期：2026-08-03  
-状态：draft（待实现）  
+状态：accepted（已实现骨架）  
 前置：会话 rename/软删除（`2026-08-03-chat-experience-redesign`）、`web_search` / `fetch_url` 已落地
 
 ## 背景

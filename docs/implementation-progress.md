@@ -65,6 +65,8 @@
 - 模型上下文在 `run_message_histories` 缺失时回退到 `messages` 表成对历史。
 - 主题切换：`light` / `dark`（`html[data-theme]` + CSS 变量）；偏好写入 `localStorage`（`agentos-theme`），首屏脚本防闪烁；顶栏与登录/注册页可切换。
 - `fetch_url` 工具：Firecrawl → local（trafilatura）降级；SSRF 公网校验；正文截断+大纲；`run_events` 工具摘要；`FETCH_URL_*` / `FIRECRAWL_API_KEY` 配置。
+- Tool Registry + Policy 骨架：按能力域登记工具；裁决顺序 deny → ask → allow；`TOOL_POLICY_DENY` / `TOOL_POLICY_ASK`；现有 `web_search` / `fetch_url` 默认 allow；ask 返回 `approval_required` 占位（无 HITL UI）。
+- 自动会话标题：首轮 Run 成功后后台用模型生成短标题；仅 `title IS NULL` 时写入；`AUTO_THREAD_TITLE_*` 配置；侧栏靠既有 run finalize 刷新拉取。
 
 ## 验证
 
@@ -86,8 +88,9 @@
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
 - Artifact 落库 / `read_artifact`、完整 `messages.role=tool` 模型历史对齐。
-- HITL、MCP 和 Sandbox；侧栏 Run 活动时间线与按工具类型的富展示。
+- HITL 审批卡片 / `interrupts` / `resume`；MCP 和 Sandbox；侧栏 Run 活动时间线与按工具类型的富展示。
+- 参数级 Tool Policy（如按 URL/命令细规则）、审计表落库。
 
 ## 下一步
 
-在 Mac mini 配置 `FIRECRAWL_API_KEY` 并重启 API，对公开 URL 做 `fetch_url` smoke；随后 Artifact 按需再读，再进入高风险工具的 HITL。
+Mac mini 同步新环境变量后重启 API；验证首轮对话后侧栏自动出标题，以及 `TOOL_POLICY_ASK=fetch_url` 时工具返回需审批占位。随后接 HITL UI 或 Artifact。

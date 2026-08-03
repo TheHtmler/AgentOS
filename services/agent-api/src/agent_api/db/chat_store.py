@@ -335,6 +335,39 @@ async def rename_thread(
     return thread
 
 
+async def try_set_thread_title_if_empty(
+    session: AsyncSession,
+    *,
+    thread_id: UUID,
+    title: str,
+) -> bool:
+    """Set title only when still NULL so a concurrent manual rename wins.
+
+    Returns True when the row was updated.
+    """
+
+    thread = await session.scalar(
+        select(Thread)
+        .where(
+            Thread.id == thread_id,
+            Thread.deleted_at.is_(None),
+        )
+        .with_for_update(),
+    )
+    # Skip missing/deleted threads and any title the user (or a prior job) already set.
+    if thread is None or thread.title is not None:
+        return False
+
+    normalized = title.strip()
+    if not normalized:
+        return False
+
+    thread.title = normalized[:255]
+    thread.updated_at = datetime.now(UTC)
+    await session.flush()
+    return True
+
+
 async def soft_delete_thread(
     session: AsyncSession,
     *,

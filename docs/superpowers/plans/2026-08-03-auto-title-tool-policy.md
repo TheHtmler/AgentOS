@@ -37,20 +37,20 @@
 
 ### Task 1: Registry + Policy + settings
 
-- [ ] Add settings + `.env.example`
-- [ ] Implement `registry.py` / `policy.py`
-- [ ] Tests for evaluate + deny/ask overrides
-- [ ] Gate `run_web_search` / `run_fetch_url`; wire `create_agent`
-- [ ] Commit
+- [x] Add settings + `.env.example`
+- [x] Implement `registry.py` / `policy.py`
+- [x] Tests for evaluate + deny/ask overrides
+- [x] Gate `run_web_search` / `run_fetch_url`; wire `create_agent`
+- [x] Commit
 
 ### Task 2: Auto thread title
 
-- [ ] `try_set_thread_title_if_empty` in chat_store
-- [ ] `thread_title.py` generator (mockable Ollama call)
-- [ ] Schedule after `persist_completed_run` (chat + ensure AG-UI path covered)
-- [ ] Tests (empty title writes; existing title skips; disabled skips)
-- [ ] Docs; commit
+- [x] `try_set_thread_title_if_empty` in chat_store
+- [x] `thread_title.py` generator (mockable Ollama call)
+- [x] Schedule after `persist_completed_run` (chat + ensure AG-UI path covered)
+- [x] Tests (empty title writes; existing title skips; disabled skips)
+- [x] Docs; commit
 
 ### Task 3: Finish
 
-- [ ] Full pytest/ruff; remind env vars; merge when user asks
+- [x] Full pytest/ruff; remind env vars; merge when user asks

@@ -20,6 +20,10 @@ def test_default_settings() -> None:
     assert settings.fetch_url_enabled is True
     assert settings.fetch_providers == ["firecrawl", "local"]
     assert settings.fetch_url_max_chars == 10_000
+    assert settings.tool_policy_deny == ""
+    assert settings.tool_policy_ask == ""
+    assert settings.auto_thread_title_enabled is True
+    assert settings.auto_thread_title_timeout_seconds == 30.0
 
 
 @pytest.mark.parametrize("temperature", [-0.1, 2.1])

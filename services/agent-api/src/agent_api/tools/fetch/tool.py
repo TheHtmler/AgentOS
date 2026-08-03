@@ -27,6 +27,13 @@ async def run_fetch_url(
 ) -> str:
     """Execute fetch for unit tests and the Pydantic AI tool wrapper."""
 
+    from agent_api.tools.policy import gate_or_none
+
+    # Policy runs before any provider I/O so deny/ask never hit the network.
+    blocked = gate_or_none("fetch_url")
+    if blocked is not None:
+        return blocked
+
     normalized = url.strip()
     if not normalized:
         return json.dumps({"error": "url must not be blank", "url": url}, ensure_ascii=False)

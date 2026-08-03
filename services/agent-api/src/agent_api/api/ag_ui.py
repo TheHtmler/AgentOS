@@ -28,6 +28,7 @@ from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_
 from agent_api.db.models import User
 from agent_api.db.session import session_factory
 from agent_api.runtime import get_runtime
+from agent_api.thread_title import schedule_auto_thread_title
 from agent_api.tools.search.tool import AgentDeps
 
 logger = logging.getLogger(__name__)
@@ -174,6 +175,16 @@ async def stream_ag_ui_run(
                 output_tokens=usage.output_tokens or None,
                 model_request_count=usage.requests,
             )
+            runtime = get_runtime(request)
+            # Same fire-and-forget path as classic SSE chat.
+            if runtime.ollama_http_client is not None:
+                schedule_auto_thread_title(
+                    thread_id=started.thread_id,
+                    user_message=prompt,
+                    assistant_content=result.output,
+                    model_semaphore=runtime.model_semaphore,
+                    http_client=runtime.ollama_http_client,
+                )
         except Exception as error:
             logger.exception("Unable to complete AG-UI run %s", started.run_id)
             await persist_failed_run(started.run_id)

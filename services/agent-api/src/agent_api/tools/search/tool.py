@@ -41,6 +41,13 @@ async def run_web_search(
 ) -> str:
     """Execute search for unit tests and the Pydantic AI tool wrapper."""
 
+    from agent_api.tools.policy import gate_or_none
+
+    # Policy runs before any provider I/O so deny/ask never hit the network.
+    blocked = gate_or_none("web_search")
+    if blocked is not None:
+        return blocked
+
     normalized = query.strip()
     if not normalized:
         return json.dumps({"error": "query must not be blank", "query": query}, ensure_ascii=False)

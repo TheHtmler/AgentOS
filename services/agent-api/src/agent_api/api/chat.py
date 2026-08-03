@@ -27,6 +27,7 @@ from agent_api.db.chat_store import (
 from agent_api.db.models import Message, User
 from agent_api.db.session import session_factory
 from agent_api.runtime import AgentRuntime, get_runtime
+from agent_api.thread_title import schedule_auto_thread_title
 from agent_api.tools.search.tool import AgentDeps
 
 logger = logging.getLogger(__name__)
@@ -303,10 +304,11 @@ async def event_stream(
         await persist_cancelled_run(run_id)
         return
 
+    assistant_content = "".join(assistant_parts)
     try:
         await persist_completed_run(
             run_id=run_id,
-            assistant_content="".join(assistant_parts),
+            assistant_content=assistant_content,
             model_messages=model_messages,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
@@ -321,6 +323,16 @@ async def event_stream(
                 {"message": "对话记录保存失败，请稍后重试。"},
             )
         return
+
+    # Title generation is async and must not delay the SSE done event.
+    if runtime.ollama_http_client is not None:
+        schedule_auto_thread_title(
+            thread_id=thread_id,
+            user_message=message,
+            assistant_content=assistant_content,
+            model_semaphore=runtime.model_semaphore,
+            http_client=runtime.ollama_http_client,
+        )
 
     yield encode_sse_event("done", {})
 

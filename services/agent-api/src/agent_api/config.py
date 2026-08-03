@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     firecrawl_api_key: str = ""
     fetch_url_timeout_seconds: float = 20.0
     fetch_url_max_chars: int = 10_000
+    # Comma-separated tool names forced to deny/ask (deny wins if listed in both).
+    tool_policy_deny: str = ""
+    tool_policy_ask: str = ""
+    auto_thread_title_enabled: bool = True
+    auto_thread_title_timeout_seconds: float = 30.0
 
     @field_validator("database_url")
     @classmethod
@@ -136,6 +141,14 @@ class Settings(BaseSettings):
     def fetch_url_max_chars_must_be_in_range(cls, value: int) -> int:
         if not 1_000 <= value <= 100_000:
             raise ValueError("fetch_url_max_chars must be between 1000 and 100000")
+
+        return value
+
+    @field_validator("auto_thread_title_timeout_seconds")
+    @classmethod
+    def auto_thread_title_timeout_seconds_must_be_positive(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("auto_thread_title_timeout_seconds must be greater than 0")
 
         return value
 

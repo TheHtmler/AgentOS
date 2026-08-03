@@ -23,11 +23,14 @@ class AgentRuntime:
         model_semaphore: asyncio.Semaphore,
         search_router: SearchRouter | None = None,
         fetch_router: FetchRouter | None = None,
+        ollama_http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self.agent = agent
         self.model_semaphore = model_semaphore
         self.search_router = search_router
         self.fetch_router = fetch_router
+        # Shared with background auto-title jobs (same process lifetime as the agent).
+        self.ollama_http_client = ollama_http_client
 
 
 @asynccontextmanager
@@ -69,6 +72,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         model_semaphore=asyncio.Semaphore(settings.model_max_concurrent_runs),
         search_router=search_router if settings.search_enabled else None,
         fetch_router=fetch_router if settings.fetch_url_enabled else None,
+        ollama_http_client=http_client,
     )
 
     try:

@@ -7,9 +7,9 @@ from pydantic_ai.providers.ollama import OllamaProvider
 
 from agent_api.config import get_settings
 from agent_api.tools.fetch.router import FetchRouter
-from agent_api.tools.fetch.tool import fetch_url
+from agent_api.tools.registry import mounted_tool_handlers, mounted_tool_names
 from agent_api.tools.search.router import SearchRouter
-from agent_api.tools.search.tool import AgentDeps, web_search
+from agent_api.tools.search.tool import AgentDeps
 
 SYSTEM_INSTRUCTIONS = """You are the AgentOS assistant.
 
@@ -54,22 +54,34 @@ def create_agent(
     """Build a stateless agent; the caller owns and closes the HTTP client."""
 
     settings = get_settings()
-    search_on = settings.search_enabled if search_enabled is None else search_enabled
-    fetch_on = settings.fetch_url_enabled if fetch_enabled is None else fetch_enabled
-    use_search = search_on and search_router is not None
-    use_fetch = fetch_on and fetch_router is not None
+    # Optional overrides keep unit tests able to force tools on/off without env mutation.
+    if search_enabled is not None or fetch_enabled is not None:
+        settings = settings.model_copy(
+            update={
+                **({"search_enabled": search_enabled} if search_enabled is not None else {}),
+                **({"fetch_url_enabled": fetch_enabled} if fetch_enabled is not None else {}),
+            },
+        )
+
+    search_present = search_router is not None
+    fetch_present = fetch_router is not None
+    mounted_names = mounted_tool_names(
+        search_router_present=search_present,
+        fetch_router_present=fetch_present,
+        settings=settings,
+    )
 
     instructions = SYSTEM_INSTRUCTIONS
-    if use_search:
+    if "web_search" in mounted_names:
         instructions = f"{instructions}\n{SEARCH_INSTRUCTIONS}"
-    if use_fetch:
+    if "fetch_url" in mounted_names:
         instructions = f"{instructions}\n{FETCH_INSTRUCTIONS}"
 
-    tools: list[Callable[..., object]] = []
-    if use_search:
-        tools.append(web_search)
-    if use_fetch:
-        tools.append(fetch_url)
+    tools: list[Callable[..., object]] = mounted_tool_handlers(
+        search_router_present=search_present,
+        fetch_router_present=fetch_present,
+        settings=settings,
+    )
 
     model = OllamaModel(
         settings.ollama_model,
