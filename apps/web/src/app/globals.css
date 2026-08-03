@@ -730,13 +730,64 @@ body {
   font-size: 0.86em;
 }
 
-.agentos-md pre {
-  overflow: auto;
-  max-height: 22rem;
+.agentos-code-block {
+  margin: 0.75em 0;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-code);
+}
+
+.agentos-code-block-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.35rem 0.65rem;
+  background: var(--panel-muted);
+}
+
+.agentos-code-block-lang {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+.agentos-code-block-copy {
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  padding: 0.15rem 0.55rem;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.agentos-code-block-copy:hover {
+  border-color: var(--accent-border);
+  color: var(--accent-dim);
+}
+
+.agentos-md pre {
+  overflow: auto;
+  max-height: 22rem;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   padding: 0.85rem 1rem;
+}
+
+.agentos-md .agentos-code-block pre {
+  margin: 0;
 }
 
 .agentos-md pre code {
