@@ -23,3 +23,18 @@ export function upstreamResponseHeaders(upstream: Response): Headers {
 
   return headers;
 }
+
+export function proxyUpstreamResponse(upstream: Response): Response {
+  // Node/undici rejects Response bodies for 204/205/304. Soft-delete returns 204.
+  if (upstream.status === 204 || upstream.status === 205 || upstream.status === 304) {
+    return new Response(null, {
+      status: upstream.status,
+      headers: upstreamResponseHeaders(upstream),
+    });
+  }
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: upstreamResponseHeaders(upstream),
+  });
+}

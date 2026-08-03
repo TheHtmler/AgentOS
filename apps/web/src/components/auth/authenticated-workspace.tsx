@@ -36,28 +36,47 @@ export function AuthenticatedWorkspace() {
     const controller = new AbortController();
 
     void (async () => {
-      try {
-        const response = await fetch("/api/auth/me", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
+      const maxAttempts = 3;
 
-        if (response.status === 401) {
-          window.location.replace("/login");
-          return;
-        }
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          const response = await fetch("/api/auth/me", {
+            cache: "no-store",
+            signal: controller.signal,
+          });
 
-        const payload: unknown = await response.json();
+          if (response.status === 401) {
+            window.location.replace("/login");
+            return;
+          }
 
-        if (!response.ok || !isCurrentUser(payload)) {
+          const payload: unknown = await response.json();
+
+          if (response.ok && isCurrentUser(payload)) {
+            setState({ kind: "authenticated", user: payload });
+            return;
+          }
+
+          // Transient Agent API blips should not strand the workspace after actions like delete.
+          if (attempt < maxAttempts && (response.status === 502 || response.status === 503)) {
+            await new Promise((resolve) => window.setTimeout(resolve, 300 * attempt));
+            continue;
+          }
+
           setState({ kind: "unavailable" });
           return;
-        }
+        } catch {
+          if (controller.signal.aborted) {
+            return;
+          }
 
-        setState({ kind: "authenticated", user: payload });
-      } catch {
-        if (!controller.signal.aborted) {
+          if (attempt < maxAttempts) {
+            await new Promise((resolve) => window.setTimeout(resolve, 300 * attempt));
+            continue;
+          }
+
           setState({ kind: "unavailable" });
+          return;
         }
       }
     })();

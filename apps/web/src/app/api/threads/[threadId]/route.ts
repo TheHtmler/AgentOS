@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { agentApiBaseUrl, agentApiSessionHeaders, upstreamResponseHeaders } from "@/lib/agent-api";
+import {
+  agentApiBaseUrl,
+  agentApiSessionHeaders,
+  proxyUpstreamResponse,
+} from "@/lib/agent-api";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -56,10 +60,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       signal: request.signal,
     });
 
-    return new Response(upstream.body, {
-      status: upstream.status,
-      headers: upstreamResponseHeaders(upstream),
-    });
+    return proxyUpstreamResponse(upstream);
   } catch {
     return unavailableResponse();
   }
@@ -80,10 +81,7 @@ export async function DELETE(request: Request, context: RouteContext) {
       signal: request.signal,
     });
 
-    return new Response(upstream.body, {
-      status: upstream.status,
-      headers: upstreamResponseHeaders(upstream),
-    });
+    return proxyUpstreamResponse(upstream);
   } catch {
     return unavailableResponse();
   }
