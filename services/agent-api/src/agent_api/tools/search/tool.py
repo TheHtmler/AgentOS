@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import json
 import logging
 from dataclasses import asdict, dataclass
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pydantic_ai import RunContext
@@ -8,6 +11,9 @@ from pydantic_ai import RunContext
 from agent_api.config import get_settings
 from agent_api.tools.search.router import SearchRouter
 from agent_api.tools.search.types import SearchProviderError, SearchResponse
+
+if TYPE_CHECKING:
+    from agent_api.tools.fetch.router import FetchRouter
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +23,7 @@ class AgentDeps:
     """Per-run dependencies shared with registered agent tools."""
 
     search_router: SearchRouter | None = None
+    fetch_router: FetchRouter | None = None
     run_id: UUID | None = None
     persist_tool_events: bool = True
 

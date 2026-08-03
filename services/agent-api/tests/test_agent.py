@@ -17,6 +17,9 @@ def test_default_settings() -> None:
     assert settings.model_max_concurrent_runs == 3
     assert settings.search_enabled is True
     assert settings.search_providers == ["tavily", "duckduckgo"]
+    assert settings.fetch_url_enabled is True
+    assert settings.fetch_providers == ["firecrawl", "local"]
+    assert settings.fetch_url_max_chars == 10_000
 
 
 @pytest.mark.parametrize("temperature", [-0.1, 2.1])

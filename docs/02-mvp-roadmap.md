@@ -13,8 +13,9 @@
 ## Phase 2：可控工具与 HITL
 
 - 先落地只读联网工具（`web_search`：Tavily + DuckDuckGo 降级），让本地模型具备时效信息能力。
+- 接入只读 `fetch_url`（Firecrawl + local 降级；正文截断 + 大纲；Artifact 按需再读见该 design 后续规划）。
 - 定义 Tool Registry 与 Tool Policy。
-- 接入 `fetch_url` / 只读 MCP，以及本地 Sandbox Tool。
+- 接入只读 MCP，以及本地 Sandbox Tool。
 - 实现 `interrupts`、`approvals`、`resume` 与幂等处理。
 - 前端实现 Tool Call、审批和拒绝卡片。
 

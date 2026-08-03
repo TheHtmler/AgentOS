@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     search_timeout_seconds: float = 20.0
     search_max_results: int = 5
+    fetch_url_enabled: bool = True
+    fetch_provider_order: str = "firecrawl,local"
+    firecrawl_api_key: str = ""
+    fetch_url_timeout_seconds: float = 20.0
+    fetch_url_max_chars: int = 10_000
 
     @field_validator("database_url")
     @classmethod
@@ -118,6 +123,22 @@ class Settings(BaseSettings):
 
         return value
 
+    @field_validator("fetch_url_timeout_seconds")
+    @classmethod
+    def fetch_url_timeout_seconds_must_be_positive(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("fetch_url_timeout_seconds must be greater than 0")
+
+        return value
+
+    @field_validator("fetch_url_max_chars")
+    @classmethod
+    def fetch_url_max_chars_must_be_in_range(cls, value: int) -> int:
+        if not 1_000 <= value <= 100_000:
+            raise ValueError("fetch_url_max_chars must be between 1000 and 100000")
+
+        return value
+
     @property
     def admin_emails(self) -> frozenset[str]:
         """Return the explicit invite-manager allowlist without accepting client roles."""
@@ -133,6 +154,16 @@ class Settings(BaseSettings):
         return [
             name.strip().lower()
             for name in self.search_provider_order.split(",")
+            if name.strip()
+        ]
+
+    @property
+    def fetch_providers(self) -> list[str]:
+        """Return the configured fetch provider order without blank entries."""
+
+        return [
+            name.strip().lower()
+            for name in self.fetch_provider_order.split(",")
             if name.strip()
         ]
 

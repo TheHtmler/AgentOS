@@ -251,6 +251,7 @@ async def event_stream(
                 run_id=str(run_id),
                 deps=AgentDeps(
                     search_router=runtime.search_router,
+                    fetch_router=runtime.fetch_router,
                     run_id=run_id,
                 ),
             )

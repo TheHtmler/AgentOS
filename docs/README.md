@@ -24,5 +24,7 @@
 | [superpowers/plans/2026-08-03-chat-experience-p0.md](superpowers/plans/2026-08-03-chat-experience-p0.md) | 聊天体验 P0 实现计划（时间线/MD/时间） | 执行或调整该 P0 计划时 |
 | [superpowers/plans/2026-08-03-chat-experience-p1.md](superpowers/plans/2026-08-03-chat-experience-p1.md) | 聊天体验 P1 实现计划（重命名/软删除） | 执行或调整该 P1 计划时 |
 | [superpowers/plans/2026-08-03-chat-experience-p2.md](superpowers/plans/2026-08-03-chat-experience-p2.md) | 聊天体验 P2 实现计划（科技风视觉/Logo） | 执行或调整该 P2 计划时 |
+| [superpowers/specs/2026-08-03-fetch-url-design.md](superpowers/specs/2026-08-03-fetch-url-design.md) | fetch_url 工具、Firecrawl/local 降级与 Artifact 后续规划 | 抓页工具或 Provider 策略变化时 |
+| [superpowers/plans/2026-08-03-fetch-url.md](superpowers/plans/2026-08-03-fetch-url.md) | fetch_url 实现计划（任务拆解） | 执行或调整该实现计划时 |
 
 后续建议增加：`api-contracts.md`、`data-model.md`、`security-model.md`、`runbook.md` 和 `incident-log.md`。
