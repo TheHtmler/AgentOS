@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
 
-from ag_ui.core import RunAgentInput, UserMessage
+from ag_ui.core import BaseEvent, RunAgentInput, UserMessage
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import ValidationError
 from pydantic_ai import ModelMessagesTypeAdapter
@@ -129,24 +129,25 @@ async def stream_ag_ui_run(
         run_input=server_input,
         accept=request.headers.get("accept"),
     )
+    runtime = get_runtime(request)
+    event_queue: asyncio.Queue[BaseEvent | BaseException | None] = asyncio.Queue()
+    client_disconnected = asyncio.Event()
 
     async def native_events() -> AsyncIterator[NativeEvent]:
         try:
-            async with get_runtime(request).model_semaphore:
+            # The model task is independent from the HTTP response. A mobile browser may
+            # suspend its page and close SSE while the server should still finish the Run.
+            async with runtime.model_semaphore:
                 async for event in adapter.run_stream_native(
                     message_history=history,
                     conversation_id=str(started.thread_id),
                     run_id=str(started.run_id),
                     deps=AgentDeps(
-                        search_router=get_runtime(request).search_router,
-                        fetch_router=get_runtime(request).fetch_router,
+                        search_router=runtime.search_router,
+                        fetch_router=runtime.fetch_router,
                         run_id=started.run_id,
                     ),
                 ):
-                    if await request.is_disconnected():
-                        await persist_cancelled_run(started.run_id)
-                        return
-
                     if text := text_from_native_event(event):
                         await persist_text_delta(started.run_id, text)
 
@@ -182,7 +183,6 @@ async def stream_ag_ui_run(
                 output_tokens=usage.output_tokens or None,
                 model_request_count=usage.requests,
             )
-            runtime = get_runtime(request)
             # Same fire-and-forget path as classic SSE chat.
             if runtime.ollama_http_client is not None:
                 schedule_auto_thread_title(
@@ -197,9 +197,50 @@ async def stream_ag_ui_run(
             await persist_failed_run(started.run_id)
             raise AGUIExecutionError("对话记录保存失败，请稍后重试。") from error
 
-    response = adapter.streaming_response(
-        adapter.transform_stream(native_events(), on_complete=persist_completed),
+    async def produce_events() -> None:
+        try:
+            async for event in adapter.transform_stream(
+                native_events(),
+                on_complete=persist_completed,
+            ):
+                if not client_disconnected.is_set():
+                    await event_queue.put(event)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            logger.exception("AG-UI background run failed for run %s", started.run_id)
+            if not client_disconnected.is_set():
+                await event_queue.put(error)
+        finally:
+            if not client_disconnected.is_set():
+                await event_queue.put(None)
+
+    async def stream_events() -> AsyncIterator[BaseEvent]:
+        try:
+            while True:
+                event = await event_queue.get()
+                if event is None:
+                    return
+
+                if await request.is_disconnected():
+                    client_disconnected.set()
+                    return
+
+                if isinstance(event, BaseException):
+                    raise event
+
+                yield event
+        except asyncio.CancelledError:
+            client_disconnected.set()
+            raise
+        finally:
+            client_disconnected.set()
+
+    runtime.start_background_run(
+        started.run_id,
+        produce_events(),
     )
+    response = adapter.streaming_response(stream_events())
     response.headers.update(
         {
             "Cache-Control": "no-cache, no-transform",

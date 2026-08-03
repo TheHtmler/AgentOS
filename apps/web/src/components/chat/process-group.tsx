@@ -26,9 +26,11 @@ export function ProcessGroup({
 
   const title = isActive
     ? "处理中…"
-    : durationLabel
-      ? `已处理 ${durationLabel}`
-      : "已处理";
+    : durationLabel === "已中断"
+      ? "已中断"
+      : durationLabel
+        ? `已处理 ${durationLabel}`
+        : "已处理";
 
   return (
     <section
@@ -47,9 +49,7 @@ export function ProcessGroup({
           <span aria-hidden="true" className="agentos-process-group-chevron">
             {expanded ? "▼" : "▶"}
           </span>
-          <span className="agentos-process-group-action-label">
-            {expanded ? "收起" : "展开"}
-          </span>
+          <span className="agentos-process-group-action-label">{expanded ? "收起" : "展开"}</span>
         </span>
       </button>
       {expanded ? <div className="agentos-process-group-body">{children}</div> : null}

@@ -14,10 +14,7 @@ import {
 
 import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
 import { ProcessGroup } from "@/components/chat/process-group";
-import {
-  ThinkingStepCard,
-  type ThinkingStepState,
-} from "@/components/chat/thinking-step-card";
+import { ThinkingStepCard, type ThinkingStepState } from "@/components/chat/thinking-step-card";
 import {
   summarizeToolResultContent,
   ToolCallCard,
@@ -191,9 +188,7 @@ function toDisplayMessages(
     }
 
     const hasToolCalls =
-      "toolCalls" in message &&
-      Array.isArray(message.toolCalls) &&
-      message.toolCalls.length > 0;
+      "toolCalls" in message && Array.isArray(message.toolCalls) && message.toolCalls.length > 0;
 
     if (message.role === "assistant" && !message.content && hasToolCalls) {
       continue;
@@ -330,8 +325,12 @@ export function ChatPanel({
   const [timelineSteps, setTimelineSteps] = useState<TimelineStep[]>([]);
   const [historyToolCalls, setHistoryToolCalls] = useState<ToolCallState[]>([]);
   const [liveUserMessageId, setLiveUserMessageId] = useState<string | null>(null);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const agentRef = useRef<HttpAgent | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
+  const lastRunIdRef = useRef<string | null>(null);
+  const lastRunThreadIdRef = useRef<string | null>(null);
   const cancellationRequestedRef = useRef(false);
   // Follow new tokens only while the user stays near the bottom.
   const autoScrollRef = useRef(true);
@@ -398,6 +397,70 @@ export function ChatPanel({
   }, []);
 
   useEffect(() => {
+    if (
+      threadId === null ||
+      lastRunIdRef.current === null ||
+      lastRunThreadIdRef.current !== threadId
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function refreshAfterBackgroundRun() {
+      const runId = lastRunIdRef.current;
+      if (runId === null || isStreaming) {
+        return;
+      }
+
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        if (cancelled) {
+          return;
+        }
+
+        try {
+          const response = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
+          if (!response.ok) {
+            return;
+          }
+
+          const payload: unknown = await response.json();
+          if (!isRecord(payload) || typeof payload.status !== "string") {
+            return;
+          }
+
+          if (payload.status !== "running" && payload.status !== "queued") {
+            if (!cancelled) {
+              setHistoryRefreshKey((current) => current + 1);
+            }
+            return;
+          }
+
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 1_000));
+        } catch {
+          return;
+        }
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshAfterBackgroundRun();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    if (document.visibilityState === "visible") {
+      void refreshAfterBackgroundRun();
+    }
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isStreaming, threadId]);
+
+  useEffect(() => {
     const controller = new AbortController();
     let isCurrent = true;
 
@@ -410,7 +473,7 @@ export function ChatPanel({
 
     const requestedThreadId = selectedThreadId === undefined ? initialThreadId : selectedThreadId;
 
-    if (requestedThreadId === null || requestedThreadId === threadId) {
+    if (requestedThreadId === null || (requestedThreadId === threadId && historyRefreshKey === 0)) {
       setIsLoadingHistory(false);
       return () => controller.abort();
     }
@@ -449,6 +512,7 @@ export function ChatPanel({
           setTimelineSteps([]);
           setHistoryToolCalls(history.toolCalls);
           setLiveUserMessageId(null);
+          setHistoryRefreshKey(0);
           setError(null);
           if (isActiveRef.current) {
             updateThreadInUrl(history.thread_id);
@@ -471,7 +535,7 @@ export function ChatPanel({
       isCurrent = false;
       controller.abort();
     };
-  }, [onThreadChanged, selectedThreadId, threadId]);
+  }, [historyRefreshKey, onThreadChanged, selectedThreadId, threadId]);
 
   function scrollMessagesToBottom(behavior: ScrollBehavior = "auto") {
     const viewport = messagesViewportRef.current;
@@ -493,6 +557,14 @@ export function ChatPanel({
 
   function stopStreaming() {
     cancellationRequestedRef.current = true;
+    const runId = activeRunIdRef.current;
+    if (runId !== null) {
+      void fetch(`/api/runs/${runId}/cancel`, {
+        method: "POST",
+        cache: "no-store",
+        keepalive: true,
+      }).catch(() => undefined);
+    }
     agentRef.current?.abortRun();
   }
 
@@ -645,6 +717,9 @@ export function ChatPanel({
         onRunStartedEvent: ({ event, agent: runningAgent }) => {
           if (isUuid(event.runId)) {
             activeRunId = event.runId;
+            activeRunIdRef.current = event.runId;
+            lastRunIdRef.current = event.runId;
+            lastRunThreadIdRef.current = isUuid(event.threadId) ? event.threadId : null;
             onRunStarted(event.runId);
           }
 
@@ -672,22 +747,6 @@ export function ChatPanel({
               afterMessageId: userMessageId,
             }),
           );
-        },
-        onReasoningMessageContentEvent: ({ event, reasoningMessageBuffer }) => {
-          setTimelineSteps((current) => {
-            const existing = current.find(
-              (step): step is ThinkingStepState =>
-                step.kind === "thinking" && step.id === event.messageId,
-            );
-            return upsertTimelineStep(current, {
-              kind: "thinking",
-              id: event.messageId,
-              content: reasoningMessageBuffer,
-              status: existing?.status ?? "running",
-              expanded: false,
-              afterMessageId: existing?.afterMessageId ?? userMessageId,
-            });
-          });
         },
         onReasoningEndEvent: ({ event }) => {
           setTimelineSteps((current) =>
@@ -841,6 +900,7 @@ export function ChatPanel({
         }
       }
     } finally {
+      activeRunIdRef.current = null;
       cancellationRequestedRef.current = false;
       setIsStreaming(false);
       onRunFinalized();
@@ -873,9 +933,7 @@ export function ChatPanel({
 
   function toggleTimelineStep(stepId: string) {
     setTimelineSteps((current) =>
-      current.map((step) =>
-        step.id === stepId ? { ...step, expanded: !step.expanded } : step,
-      ),
+      current.map((step) => (step.id === stepId ? { ...step, expanded: !step.expanded } : step)),
     );
   }
 
@@ -1000,13 +1058,7 @@ export function ChatPanel({
                   ? [
                       ...liveSteps.map((step) => {
                         if (step.kind === "thinking") {
-                          return (
-                            <ThinkingStepCard
-                              key={step.id}
-                              step={step}
-                              onToggle={() => toggleTimelineStep(step.id)}
-                            />
-                          );
+                          return <ThinkingStepCard key={step.id} step={step} />;
                         }
 
                         return (
@@ -1026,7 +1078,10 @@ export function ChatPanel({
                       )),
                       ...(foldAnalysisIntoProcess && followingAssistant
                         ? [
-                            <div key={`${message.id}-process-note`} className="agentos-process-note">
+                            <div
+                              key={`${message.id}-process-note`}
+                              className="agentos-process-note"
+                            >
                               <p className="agentos-process-note-label">分析</p>
                               <AssistantMarkdown content={followingAssistant.content} />
                             </div>,
@@ -1065,10 +1120,7 @@ export function ChatPanel({
                             </span>
                           ) : null}
                           {message.role === "assistant" && message.durationLabel ? (
-                            <span className="agentos-message-meta">
-                              {" "}
-                              · {message.durationLabel}
-                            </span>
+                            <span className="agentos-message-meta"> · {message.durationLabel}</span>
                           ) : null}
                         </p>
                         {message.role === "assistant" && message.content ? (

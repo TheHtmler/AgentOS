@@ -645,7 +645,7 @@ async def cancel_run(
     *,
     run_id: UUID,
 ) -> None:
-    """Persist browser cancellation so an unfinished Run is never left running."""
+    """Persist cancellation so an unfinished Run is never left running."""
 
     run = await _lock_run(session, run_id)
     if run.status != "running":

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     ollama_base_url: str = "http://127.0.0.1:11434/v1"
     ollama_model: str = "agentos-gemma4:8k"
-    # Coding answers often need more than 2k; 8k-context models still need headroom for prompt/tools.
+    # Keep enough room for code and tool-grounded answers; prompt controls concision.
     model_max_output_tokens: int = 4_096
     model_temperature: float = 0.3
     # How many model streams may execute at once across threads in one API process.

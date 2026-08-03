@@ -1,6 +1,8 @@
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Coroutine
 from contextlib import asynccontextmanager
+from typing import Any
+from uuid import UUID
 
 import httpx
 from fastapi import FastAPI, Request
@@ -31,6 +33,43 @@ class AgentRuntime:
         self.fetch_router = fetch_router
         # Shared with background auto-title jobs (same process lifetime as the agent).
         self.ollama_http_client = ollama_http_client
+        self._run_tasks: dict[UUID, asyncio.Task[None]] = {}
+
+    def start_background_run(
+        self,
+        run_id: UUID,
+        coroutine: Coroutine[Any, Any, None],
+    ) -> None:
+        """Keep a model run alive after its browser stream disconnects."""
+
+        task = asyncio.create_task(coroutine, name=f"agent-run-{run_id}")
+        self._run_tasks[run_id] = task
+
+        def forget_task(completed_task: asyncio.Task[None]) -> None:
+            if self._run_tasks.get(run_id) is completed_task:
+                self._run_tasks.pop(run_id, None)
+
+        task.add_done_callback(forget_task)
+
+    def cancel_background_run(self, run_id: UUID) -> bool:
+        """Cancel a live model task after an explicit user stop request."""
+
+        task = self._run_tasks.get(run_id)
+        if task is None or task.done():
+            return False
+
+        task.cancel()
+        return True
+
+    async def stop_background_runs(self) -> None:
+        """Stop in-process model tasks before shared resources are closed."""
+
+        tasks = list(self._run_tasks.values())
+        for task in tasks:
+            task.cancel()
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 @asynccontextmanager
@@ -66,7 +105,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         fetch_router=fetch_router if settings.fetch_url_enabled else None,
         fetch_enabled=settings.fetch_url_enabled,
     )
-    app.state.runtime = AgentRuntime(
+    runtime = AgentRuntime(
         agent=agent,
         # Allow multiple threads to generate concurrently within the configured budget.
         model_semaphore=asyncio.Semaphore(settings.model_max_concurrent_runs),
@@ -74,10 +113,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         fetch_router=fetch_router if settings.fetch_url_enabled else None,
         ollama_http_client=http_client,
     )
+    app.state.runtime = runtime
 
     try:
         async with agent:
-            yield
+            try:
+                yield
+            finally:
+                await runtime.stop_background_runs()
     finally:
         try:
             await close_database()

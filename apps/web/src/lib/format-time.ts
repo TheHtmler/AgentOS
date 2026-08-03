@@ -29,11 +29,11 @@ export function formatRunDurationLabel(
 ): string | null {
   const startAt = startedAt ?? createdAt;
 
-  if (completedAt === null) {
-    if (status === "cancelled" || status === "failed") {
-      return "已中断";
-    }
+  if (status === "cancelled" || status === "failed") {
+    return "已中断";
+  }
 
+  if (completedAt === null) {
     return null;
   }
 

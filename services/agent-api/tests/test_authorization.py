@@ -14,6 +14,7 @@ from agent_api.db.auth_store import (
     create_user_session,
     issue_auth_token,
 )
+from agent_api.db.chat_store import start_run
 from agent_api.db.models import User
 from agent_api.db.session import close_database, session_factory
 from agent_api.main import app
@@ -99,3 +100,32 @@ async def test_chat_resources_require_a_session_and_are_owner_scoped() -> None:
                     user = await session.get(User, user_id)
                     if user is not None:
                         await session.delete(user)
+
+
+@pytest.mark.anyio
+async def test_cancel_run_requires_owner_and_persists_terminal_state(
+    authenticated_api_user: UUID,
+) -> None:
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel(custom_output_text="不会执行。")),
+        model_semaphore=asyncio.Semaphore(1),
+    )
+
+    async with session_factory() as session, session.begin():
+        started = await start_run(
+            session,
+            thread_id=None,
+            user_content="后台运行后显式停止",
+            model_name="test-model",
+            user_id=authenticated_api_user,
+        )
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(f"/v1/runs/{started.run_id}/cancel")
+        detail = await client.get(f"/v1/runs/{started.run_id}")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "cancelled"

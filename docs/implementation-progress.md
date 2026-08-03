@@ -49,7 +49,7 @@
 - 增加邀请落地页、登录门禁、账户退出和管理员邀请链接生成面板。
 - 提供受控 CLI，用于在首个管理员尚未登录时生成邀请链接。
 - 优化对话页面：输入框随内容伸缩、支持输入法组合态、长对话阅读不会被强制滚动打断，并提供起始提示、回复复制和回到最新消息操作。
-- 优化本地模型回答策略：静默分析目标、约束与不确定性后以结论优先的方式作答；温度可通过 `MODEL_TEMPERATURE` 配置，默认 `0.3` 以提高一致性。
+- 优化本地模型回答策略：按问题复杂度给出最小充分答案，区分事实与推断，避免重复、工具过程播报和无依据补全；默认输出预算恢复为 `4096`，由提示词控制日常回答长度。
 - 增加统一 `web_search` 工具与 `SearchRouter`：默认顺序 `tavily,duckduckgo`；无 Key / 429 / 传输失败时降级；空结果不降级。
 - 搜索出站使用独立 httpx 客户端（`trust_env=False`）；密钥仅存在于 Agent API 环境变量。
 - 聊天与 AG-UI Run 通过 `AgentDeps` 注入 router 与 `run_id`；工具调用写入 `tool_call` / `tool_result` run_events 摘要。
@@ -57,6 +57,7 @@
 - 聊天流改为 `agent.run()` 完成工具循环后再 SSE 输出最终回答，避免 `run_stream` 在 `web_search` 后提前结束。
 - AG-UI 主对话时间线内联展示可折叠 ToolCall 卡：订阅 `onToolCallStart/Args/End/Result`，运行中展开、完成后折叠。
 - `GET /v1/threads/{id}/messages` 增加 `tool_calls`（来自 `run_events` 摘要，按 Run↔user message 顺序锚定 `after_message_id`）；刷新后工具卡可恢复。
+- AG-UI 运行任务与浏览器 SSE 解耦：移动端切后台或短暂断网后，Agent API 进程内继续完成并持久化 Run；页面回到前台后按 Run 终态刷新历史，显式停止通过 `POST /v1/runs/{id}/cancel` 取消。
 - 聊天体验 P0：多段 Thinking 与 Tool 共用有序 `timelineSteps`；助手气泡 Markdown（GFM + sanitize）；消息时间戳与 Run 总耗时。
 - 聊天体验 P1：Thread 重命名（`PATCH /v1/threads/{id}`）与软删除（`deleted_at` + `DELETE`）；列表隐藏已删会话；Next.js 同域代理与侧栏操作菜单。
 - 聊天体验 P2：深色科技风 design tokens / 玻璃面板 / 霓虹薄荷绿强调；Space Grotesk + IBM Plex Sans；AgentOS 几何 Logo 与 favicon；桌面右侧 Run 检视默认收起可切换。
@@ -68,6 +69,7 @@
 - Tool Registry + Policy 骨架：按能力域登记工具；裁决顺序 deny → ask → allow；`TOOL_POLICY_DENY` / `TOOL_POLICY_ASK`；现有 `web_search` / `fetch_url` 默认 allow；ask 返回 `approval_required` 占位（无 HITL UI）。
 - 自动会话标题：首轮 Run 成功后后台用模型生成短标题；仅 `title IS NULL` 时写入；`AUTO_THREAD_TITLE_*` 配置；侧栏靠既有 run finalize 刷新拉取。
 - 聊天过程组 UI（Codex 风格）：Thinking + 工具收入「处理中 / 已处理」可折叠组；紧凑工具行；邀请弹窗移动端自适应；深色次要文字对比抬高。
+- Thinking UI 默认只显示紧凑状态，不实时展开模型 reasoning 文本。
 
 ## 验证
 
