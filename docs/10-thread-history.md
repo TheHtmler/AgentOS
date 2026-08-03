@@ -47,7 +47,8 @@ GET /v1/threads/{thread_id}/messages
 - `tool_calls` 来自该 Thread 下各 Run 的 `run_events`（`tool_call` + `tool_result` 配对）；只含摘要字段，不含密钥或完整搜索 hits。
 - 锚定规则：每次 `start_run` 创建一条 user message 与一个 Run；按 runs 创建顺序与 user messages 的 `seq` 顺序一一对齐，将工具摘要挂到对应 `after_message_id`。
 - 仅回放已有终态 `tool_result` 的工具卡；未完成 Run 的半截工具状态不拼进历史。
-- Thread 不存在时返回 `404`；无效 UUID 由 FastAPI 返回 `422`。
+- Thread 不存在或已软删除（`deleted_at` 非空）时返回 `404`；无效 UUID 由 FastAPI 返回 `422`。
+- 会话管理：`PATCH /v1/threads/{thread_id}` 重命名（`title` 1–80 字或清空）；`DELETE /v1/threads/{thread_id}` 软删除（幂等）；列表仅返回未删除 Thread。
 - `messages` 仍只返回最终 user/assistant 行，不把 `text_delta` 中间增量暴露为聊天记录。
 
 Next.js 提供同域代理：

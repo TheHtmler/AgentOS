@@ -116,6 +116,17 @@ export function ChatWorkspace({
     setThreadListVersion((current) => current + 1);
   }, []);
 
+  const handleThreadDeleted = useCallback(
+    (threadId: string) => {
+      setThreadListVersion((current) => current + 1);
+
+      if (activeThreadId === threadId || selectedThreadId === threadId) {
+        handleNewConversation();
+      }
+    },
+    [activeThreadId, handleNewConversation, selectedThreadId],
+  );
+
   return (
     <>
       <header className="agentos-topbar">
@@ -170,6 +181,7 @@ export function ChatWorkspace({
             isChatStreaming={isChatStreaming}
             onNewConversation={handleNewConversation}
             onSelectThread={handleSelectThread}
+            onThreadDeleted={handleThreadDeleted}
           />
         </aside>
 
@@ -239,6 +251,7 @@ export function ChatWorkspace({
                 isChatStreaming={isChatStreaming}
                 onNewConversation={handleNewConversation}
                 onSelectThread={handleSelectThread}
+                onThreadDeleted={handleThreadDeleted}
               />
             </div>
 
