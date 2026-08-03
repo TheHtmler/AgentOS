@@ -162,6 +162,14 @@ async def persist_cancelled_run(run_id: UUID) -> None:
         await cancel_run(session, run_id=run_id)
 
 
+def chunk_assistant_text(text: str, *, chunk_size: int = 32) -> list[str]:
+    """Split completed assistant text into SSE-friendly fragments."""
+
+    if not text:
+        return []
+    return [text[index : index + chunk_size] for index in range(0, len(text), chunk_size)]
+
+
 async def event_stream(
     request: Request,
     message: str,
@@ -170,9 +178,17 @@ async def event_stream(
     message_history: list[ModelMessage],
     runtime: AgentRuntime,
 ) -> AsyncIterator[str]:
-    """Stream model output while writing each durable fact in short transactions."""
+    """Run the full agent graph (including tools), then emit the final answer over SSE.
+
+    `run_stream` can treat early text as the final result and stop before tool calls
+    finish. `agent.run` always completes the tool loop first.
+    """
 
     assistant_parts: list[str] = []
+    model_messages: list[dict[str, object]] = []
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    model_request_count: int | None = None
 
     try:
         # The lock protects the configured resource budget for the model's full execution.
@@ -181,7 +197,9 @@ async def event_stream(
                 await persist_cancelled_run(run_id)
                 return
 
-            async with runtime.agent.run_stream(
+            # Prefer run() over run_stream() so web_search and other tools finish
+            # before any assistant text is treated as the final answer.
+            result = await runtime.agent.run(
                 message,
                 message_history=message_history or None,
                 conversation_id=str(thread_id),
@@ -190,23 +208,29 @@ async def event_stream(
                     search_router=runtime.search_router,
                     run_id=run_id,
                 ),
-            ) as result:
-                async for delta in result.stream_text(delta=True, debounce_by=None):
-                    if await request.is_disconnected():
-                        await persist_cancelled_run(run_id)
-                        return
+            )
 
-                    if delta:
-                        await persist_text_delta(run_id, delta)
-                        assistant_parts.append(delta)
-                        yield encode_sse_event("text_delta", {"delta": delta})
-                model_messages = strip_thinking_parts(
-                    parse_model_messages_json(result.new_messages_json()),
-                )
-                usage = result.usage
-                input_tokens = usage.input_tokens or None
-                output_tokens = usage.output_tokens or None
-                model_request_count = usage.requests
+            if await request.is_disconnected():
+                await persist_cancelled_run(run_id)
+                return
+
+            output = result.output
+            for delta in chunk_assistant_text(output):
+                if await request.is_disconnected():
+                    await persist_cancelled_run(run_id)
+                    return
+
+                await persist_text_delta(run_id, delta)
+                assistant_parts.append(delta)
+                yield encode_sse_event("text_delta", {"delta": delta})
+
+            model_messages = strip_thinking_parts(
+                parse_model_messages_json(result.new_messages_json()),
+            )
+            usage = result.usage
+            input_tokens = usage.input_tokens or None
+            output_tokens = usage.output_tokens or None
+            model_request_count = usage.requests
     except asyncio.CancelledError:
         # A cancelled response must not leave the durable Run marked as running.
         try:

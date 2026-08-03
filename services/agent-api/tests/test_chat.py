@@ -5,19 +5,21 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
     TextPart,
+    ToolCallPart,
+    ToolReturnPart,
     UserPromptPart,
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 from sqlalchemy import select
 
-from agent_api.api.chat import strip_thinking_parts
+from agent_api.api.chat import chunk_assistant_text, strip_thinking_parts
 from agent_api.db.chat_store import cancel_run, start_run
 from agent_api.db.models import Message, Run, RunEvent, RunMessageHistory, Thread
 from agent_api.db.session import close_database, session_factory
@@ -156,15 +158,16 @@ async def test_chat_stream_reuses_server_model_history(authenticated_api_user: U
 
     seen_requests: list[list[ModelMessage]] = []
 
-    async def stream_function(
+    def model_function(
         messages: list[ModelMessage],
         _: AgentInfo,
-    ) -> AsyncIterator[str]:
+    ) -> ModelResponse:
+        # chat stream uses agent.run(), which requires a non-stream FunctionModel.
         seen_requests.append(messages)
-        yield f"回复 {len(seen_requests)}"
+        return ModelResponse(parts=[TextPart(content=f"回复 {len(seen_requests)}")])
 
     app.state.runtime = AgentRuntime(
-        agent=Agent(FunctionModel(stream_function=stream_function)),
+        agent=Agent(FunctionModel(model_function)),
         model_semaphore=asyncio.Semaphore(1),
     )
     transport = ASGITransport(app=app)
@@ -267,6 +270,68 @@ async def test_chat_stream_rejects_second_running_run(authenticated_api_user: UU
         assert resumed_response.status_code == 200
         assert "event: text_delta\ndata:" in resumed_response.text
         assert resumed_response.text.endswith("event: done\ndata: {}\n\n")
+    finally:
+        if thread_id is not None:
+            async with session_factory() as session, session.begin():
+                thread = await session.get(Thread, thread_id)
+                if thread is not None:
+                    await session.delete(thread)
+
+
+@pytest.mark.anyio
+async def test_chunk_assistant_text_splits_completed_output() -> None:
+    assert chunk_assistant_text("abcdefgh", chunk_size=3) == ["abc", "def", "gh"]
+    assert chunk_assistant_text("") == []
+
+
+@pytest.mark.anyio
+async def test_chat_stream_returns_answer_after_tool_call(
+    authenticated_api_user: UUID,
+) -> None:
+    """Tool loops must finish before SSE text is emitted as the final answer."""
+
+    def lookup_rate(ctx: RunContext[None], query: str) -> str:
+        return "USD/CNY=7.12"
+
+    def model_function(
+        messages: list[ModelMessage],
+        _: AgentInfo,
+    ) -> ModelResponse:
+        for message in messages:
+            if isinstance(message, ModelRequest):
+                for part in message.parts:
+                    if isinstance(part, ToolReturnPart):
+                        return ModelResponse(
+                            parts=[TextPart(content=f"今日汇率约为 {part.content}")]
+                        )
+        return ModelResponse(
+            parts=[ToolCallPart(tool_name="lookup_rate", args={"query": "usd cny"})]
+        )
+
+    app.state.runtime = AgentRuntime(
+        agent=Agent(FunctionModel(model_function), tools=[lookup_rate]),
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+    thread_id: UUID | None = None
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.post(
+                "/v1/chat/stream",
+                json={"message": "查一下今天的人民币和美元的汇率"},
+            )
+
+        assert response.status_code == 200
+        assert "今日汇率约为 USD/CNY=7.12" in response.text
+        assert response.text.endswith("event: done\ndata: {}\n\n")
+        thread_id = UUID(response.headers["x-agentos-thread-id"])
+
+        async with session_factory() as session:
+            run = await session.scalar(select(Run).where(Run.thread_id == thread_id))
+            assert run is not None
+            assert run.status == "completed"
+            assert run.model_request_count == 2
     finally:
         if thread_id is not None:
             async with session_factory() as session, session.begin():

@@ -54,6 +54,7 @@
 - 搜索出站使用独立 httpx 客户端（`trust_env=False`）；密钥仅存在于 Agent API 环境变量。
 - 聊天与 AG-UI Run 通过 `AgentDeps` 注入 router 与 `run_id`；工具调用写入 `tool_call` / `tool_result` run_events 摘要。
 - `SEARCH_ENABLED=false` 时不向模型注册搜索工具。
+- 聊天流改为 `agent.run()` 完成工具循环后再 SSE 输出最终回答，避免 `run_stream` 在 `web_search` 后提前结束。
 
 ## 验证
 
