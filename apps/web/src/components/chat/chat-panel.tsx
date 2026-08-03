@@ -652,7 +652,8 @@ export function ChatPanel({
               id: event.messageId,
               content: "",
               status: "running",
-              expanded: true,
+              // Compact 2-line preview; no tall expand panel.
+              expanded: false,
               afterMessageId: userMessageId,
             }),
           );
@@ -668,7 +669,7 @@ export function ChatPanel({
               id: event.messageId,
               content: reasoningMessageBuffer,
               status: existing?.status ?? "running",
-              expanded: existing?.expanded ?? true,
+              expanded: false,
               afterMessageId: existing?.afterMessageId ?? userMessageId,
             });
           });

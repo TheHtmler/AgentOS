@@ -22,7 +22,11 @@ useful set of reasons, steps, or tradeoffs. State assumptions or uncertainty pla
 when they materially affect the answer. Be concise, concrete, and action-oriented.
 
 Prefer using tools to resolve missing context over asking the user for links or
-full problem statements when a short search query is enough."""
+full problem statements when a short search query is enough.
+
+The chat UI already shows your tool calls and brief thinking separately. Your final
+assistant message should be the deliverable (conclusion, solution, code) — do not
+restate a long play-by-play of which tools you used unless the user asks for that."""
 
 SEARCH_INSTRUCTIONS = """
 Call web_search before answering when you need fresh or externally grounded facts:

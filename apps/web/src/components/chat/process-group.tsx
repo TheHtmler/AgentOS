@@ -43,8 +43,13 @@ export function ProcessGroup({
         className="agentos-process-group-toggle"
       >
         <span className="agentos-process-group-title">{title}</span>
-        <span aria-hidden="true" className="agentos-process-group-chevron">
-          {expanded ? "▾" : "▸"}
+        <span className="agentos-process-group-action">
+          <span aria-hidden="true" className="agentos-process-group-chevron">
+            {expanded ? "▼" : "▶"}
+          </span>
+          <span className="agentos-process-group-action-label">
+            {expanded ? "收起" : "展开"}
+          </span>
         </span>
       </button>
       {expanded ? <div className="agentos-process-group-body">{children}</div> : null}

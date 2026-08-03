@@ -3,12 +3,12 @@
 import {
   Children,
   isValidElement,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
   type UIEvent,
-  type WheelEvent,
 } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
@@ -46,10 +46,11 @@ function requestPauseChatAutoScroll() {
 
 function CodeBlock({ children }: { children: ReactNode }) {
   const [copied, setCopied] = useState(false);
-  const preRef = useRef<HTMLPreElement | null>(null);
-  // While streaming, follow the growing code unless the user scrolls up inside the block.
+  // Dedicated scrollport — keep it stable across markdown child updates.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const savedScrollTopRef = useRef(0);
+  const userPinnedRef = useRef(false);
 
   const codeElement = Children.toArray(children).find((child) => isValidElement(child));
   const className =
@@ -61,32 +62,70 @@ function CodeBlock({ children }: { children: ReactNode }) {
   const codeText = collectText(children).replace(/\n$/, "");
 
   useLayoutEffect(() => {
-    const pre = preRef.current;
-    if (pre === null) {
+    const port = scrollRef.current;
+    if (port === null) {
       return;
     }
 
-    // Token updates often reset native scrollTop; restore follow or the user's offset.
-    if (stickToBottomRef.current) {
-      pre.scrollTop = pre.scrollHeight;
-    } else {
-      pre.scrollTop = savedScrollTopRef.current;
+    if (userPinnedRef.current) {
+      port.scrollTop = savedScrollTopRef.current;
+      return;
     }
-  });
 
-  function handlePreScroll(event: UIEvent<HTMLPreElement>) {
-    const pre = event.currentTarget;
-    savedScrollTopRef.current = pre.scrollTop;
-    const distanceFromBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight;
-    stickToBottomRef.current = distanceFromBottom < 32;
-  }
+    // Default while streaming: keep the latest lines in view.
+    stickToBottomRef.current = true;
+    port.scrollTop = port.scrollHeight;
+  }, [codeText]);
 
-  function handlePreWheel(event: WheelEvent<HTMLPreElement>) {
-    // Keep wheel inside the code pane; also stop the chat viewport from yanking back.
-    event.stopPropagation();
-    requestPauseChatAutoScroll();
-    if (event.deltaY < 0) {
-      stickToBottomRef.current = false;
+  useEffect(() => {
+    const port = scrollRef.current;
+    if (port === null) {
+      return;
+    }
+
+    // React's onWheel is passive in many browsers; native listener can preventDefault.
+    const onWheel = (event: WheelEvent) => {
+      requestPauseChatAutoScroll();
+
+      const atTop = port.scrollTop <= 0;
+      const atBottom = port.scrollHeight - port.scrollTop - port.clientHeight <= 1;
+      const scrollingUp = event.deltaY < 0;
+      const scrollingDown = event.deltaY > 0;
+      const overflow = port.scrollHeight > port.clientHeight + 1;
+      const canScrollInside =
+        overflow && ((scrollingUp && !atTop) || (scrollingDown && !atBottom));
+
+      if (!canScrollInside) {
+        event.stopPropagation();
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (scrollingUp) {
+        userPinnedRef.current = true;
+        stickToBottomRef.current = false;
+      }
+      port.scrollTop += event.deltaY;
+      savedScrollTopRef.current = port.scrollTop;
+      const distanceFromBottom = port.scrollHeight - port.scrollTop - port.clientHeight;
+      if (distanceFromBottom < 40) {
+        userPinnedRef.current = false;
+        stickToBottomRef.current = true;
+      }
+    };
+
+    port.addEventListener("wheel", onWheel, { passive: false });
+    return () => port.removeEventListener("wheel", onWheel);
+  }, []);
+
+  function handleScroll(event: UIEvent<HTMLDivElement>) {
+    const port = event.currentTarget;
+    savedScrollTopRef.current = port.scrollTop;
+    const distanceFromBottom = port.scrollHeight - port.scrollTop - port.clientHeight;
+    stickToBottomRef.current = distanceFromBottom < 40;
+    if (stickToBottomRef.current) {
+      userPinnedRef.current = false;
     }
   }
 
@@ -104,10 +143,7 @@ function CodeBlock({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div
-      className="agentos-code-block"
-      onPointerDown={requestPauseChatAutoScroll}
-    >
+    <div className="agentos-code-block" onPointerDown={requestPauseChatAutoScroll}>
       <div className="agentos-code-block-toolbar">
         <span className="agentos-code-block-lang">{language ?? "code"}</span>
         <button
@@ -119,14 +155,18 @@ function CodeBlock({ children }: { children: ReactNode }) {
           {copied ? "已复制" : "复制"}
         </button>
       </div>
-      <pre
-        ref={preRef}
-        onScroll={handlePreScroll}
-        onWheel={handlePreWheel}
-        onTouchMove={requestPauseChatAutoScroll}
+      <div
+        ref={scrollRef}
+        className="agentos-code-block-scroll"
+        onScroll={handleScroll}
+        onTouchStart={() => {
+          requestPauseChatAutoScroll();
+          userPinnedRef.current = true;
+          stickToBottomRef.current = false;
+        }}
       >
-        {children}
-      </pre>
+        <pre>{children}</pre>
+      </div>
     </div>
   );
 }

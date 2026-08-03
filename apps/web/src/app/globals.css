@@ -776,10 +776,15 @@ body {
   color: var(--accent-dim);
 }
 
-.agentos-md pre {
+.agentos-code-block-scroll {
   overflow: auto;
   overscroll-behavior: contain;
   max-height: 22rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.agentos-md pre {
+  overflow: visible;
   margin: 0;
   border: 0;
   border-radius: 0;
@@ -795,8 +800,8 @@ body {
   background: transparent;
   padding: 0;
   font-size: 0.8rem;
-  line-height: 1.6;
-  white-space: pre-wrap;
+  line-height: 1.55;
+  white-space: pre;
 }
 
 .agentos-md blockquote {
@@ -840,12 +845,39 @@ body {
   font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.agentos-process-group-action {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--panel-solid);
+  padding: 0.15rem 0.55rem 0.15rem 0.45rem;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
 }
 
 .agentos-process-group-chevron {
-  flex-shrink: 0;
-  color: var(--muted);
-  font-size: 0.75rem;
+  display: inline-block;
+  width: 0.85rem;
+  color: var(--accent-dim);
+  font-size: 0.65rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.agentos-process-group-action-label {
+  color: var(--text-secondary);
+}
+
+.agentos-process-group-toggle:hover .agentos-process-group-action {
+  border-color: var(--accent-border);
+  color: var(--text);
 }
 
 .agentos-process-group-body {
@@ -864,48 +896,42 @@ body {
   box-shadow: none;
 }
 
-.agentos-reasoning-toggle {
+.agentos-reasoning-head {
   display: flex;
-  width: 100%;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 0.9rem;
+  padding: 0.35rem 0.5rem;
   color: var(--text-secondary);
-  text-align: left;
 }
 
 .agentos-reasoning-title {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
+  gap: 0.45rem;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
 .agentos-reasoning-indicator {
-  width: 0.45rem;
-  height: 0.45rem;
+  width: 0.4rem;
+  height: 0.4rem;
   border-radius: 999px;
   background: var(--success);
   box-shadow: 0 0 6px var(--accent-glow);
 }
 
-.agentos-reasoning-state {
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
 .agentos-reasoning-content {
-  max-height: 14rem;
+  /* ~2 lines: signal activity without a tall thinking panel */
+  max-height: 2.5em;
   overflow: auto;
+  overscroll-behavior: contain;
   margin: 0;
   border-top: 1px solid var(--border);
-  padding: 0.55rem 0.75rem;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  line-height: 1.65;
+  padding: 0.2rem 0.55rem 0.35rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.25;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .agentos-reasoning-running {
