@@ -89,4 +89,4 @@
 
 ## 下一步
 
-在 Mac mini 上配置可选 `TAVILY_API_KEY` 做真实搜索 smoke；随后增加 `fetch_url` 或 Firecrawl，再进入高风险工具的 HITL。
+实现 `fetch_url`（设计见 `docs/superpowers/specs/2026-08-03-fetch-url-design.md`）：Firecrawl + local 降级、SSRF 防护、截断+大纲；随后 Artifact 按需再读，再进入高风险工具的 HITL。
