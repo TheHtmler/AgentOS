@@ -1,10 +1,10 @@
 # 实施进度
 
-最后更新：2026-08-02
+最后更新：2026-08-03
 
 ## 当前状态
 
-前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复，以及 invite-only 认证和 Thread 所有权隔离已完成。
+前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。
 
 已完成：
 
@@ -50,14 +50,19 @@
 - 提供受控 CLI，用于在首个管理员尚未登录时生成邀请链接。
 - 优化对话页面：输入框随内容伸缩、支持输入法组合态、长对话阅读不会被强制滚动打断，并提供起始提示、回复复制和回到最新消息操作。
 - 优化本地模型回答策略：静默分析目标、约束与不确定性后以结论优先的方式作答；温度可通过 `MODEL_TEMPERATURE` 配置，默认 `0.3` 以提高一致性。
+- 增加统一 `web_search` 工具与 `SearchRouter`：默认顺序 `tavily,duckduckgo`；无 Key / 429 / 传输失败时降级；空结果不降级。
+- 搜索出站使用独立 httpx 客户端（`trust_env=False`）；密钥仅存在于 Agent API 环境变量。
+- 聊天与 AG-UI Run 通过 `AgentDeps` 注入 router 与 `run_id`；工具调用写入 `tool_call` / `tool_result` run_events 摘要。
+- `SEARCH_ENABLED=false` 时不向模型注册搜索工具。
 
 ## 验证
 
 - `curl --noproxy '*' http://127.0.0.1:8000/health` 返回 `{ "status": "ok" }`。
 - `uv run --directory services/agent-api ruff check .` 通过。
 - `uv run --directory services/agent-api pyright` 通过，`0 errors, 0 warnings`。
-- `uv run --directory services/agent-api pytest` 通过。
-- `uv run --directory services/agent-api alembic upgrade head` 已应用 `4edcb11d60ef` Thread owner 迁移。
+- `uv run --directory services/agent-api pytest` 通过（含搜索 Provider / Router / 工具注册测试）。
+- `uv run --directory services/agent-api pyright` 通过，`0 errors, 0 warnings`。
+- `uv run --directory services/agent-api alembic upgrade head` 已应用至含 password hash 的最新迁移。
 - `pnpm lint:web` 通过。
 - `pnpm --filter web exec tsc --noEmit` 通过。
 - `uv run --directory services/agent-api pytest tests/test_agent.py` 通过。
@@ -69,8 +74,9 @@
 ## 未完成
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
+- `fetch_url` / Firecrawl、完整 tool message 历史回放、前端工具状态展示。
 - HITL、MCP 和 Sandbox。
 
 ## 下一步
 
-为邀请增加邮件送达与重试队列，并设计用户禁用和 session 审计；随后继续 HITL、MCP 和 Sandbox。
+在 Mac mini 上配置可选 `TAVILY_API_KEY` 做真实搜索 smoke；随后增加 `fetch_url` 或 Firecrawl，再进入高风险工具的 HITL。

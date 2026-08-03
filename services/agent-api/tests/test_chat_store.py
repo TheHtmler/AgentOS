@@ -9,6 +9,8 @@ from sqlalchemy.pool import NullPool
 from agent_api.config import get_settings
 from agent_api.db.chat_store import (
     append_text_delta,
+    append_tool_call_event,
+    append_tool_result_event,
     complete_run,
     list_completed_run_message_histories,
     list_thread_messages,
@@ -108,6 +110,55 @@ async def test_run_facts_are_ordered_and_rollback_cleanly(
         ]
     finally:
         # The test uses a real PostgreSQL transaction but must not retain developer data.
+        await transaction.rollback()
+
+
+@pytest.mark.anyio
+async def test_tool_events_are_appended_for_web_search(
+    database_session: AsyncSession,
+) -> None:
+    session = database_session
+    transaction = await session.begin()
+
+    try:
+        started = await start_run(
+            session,
+            thread_id=None,
+            user_content="最近新闻",
+            model_name="gemma4:e4b",
+        )
+        await append_tool_call_event(
+            session,
+            run_id=started.run_id,
+            tool_name="web_search",
+            args={"query": "最近新闻", "max_results": 5},
+        )
+        await append_tool_result_event(
+            session,
+            run_id=started.run_id,
+            tool_name="web_search",
+            provider="duckduckgo",
+            ok=True,
+            summary="duckduckgo: 1 results",
+        )
+
+        events = list(
+            (
+                await session.scalars(
+                    select(RunEvent)
+                    .where(RunEvent.run_id == started.run_id)
+                    .order_by(RunEvent.seq),
+                )
+            ).all()
+        )
+        assert [(event.seq, event.event_type) for event in events] == [
+            (1, "run_started"),
+            (2, "tool_call"),
+            (3, "tool_result"),
+        ]
+        assert events[2].payload["provider"] == "duckduckgo"
+        assert events[2].payload["ok"] is True
+    finally:
         await transaction.rollback()
 
 

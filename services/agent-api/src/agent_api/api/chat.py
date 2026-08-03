@@ -26,6 +26,7 @@ from agent_api.db.chat_store import (
 from agent_api.db.models import User
 from agent_api.db.session import session_factory
 from agent_api.runtime import AgentRuntime, get_runtime
+from agent_api.tools.search.tool import AgentDeps
 
 logger = logging.getLogger(__name__)
 
@@ -84,11 +85,16 @@ def strip_thinking_parts(
         parts = message.get("parts")
 
         if isinstance(parts, list):
-            sanitized_message["parts"] = [
-                part
-                for part in parts
-                if not (isinstance(part, dict) and part.get("part_kind") == "thinking")
-            ]
+            sanitized_parts: list[object] = []
+            for part in cast(list[object], parts):
+                if isinstance(part, dict):
+                    part_dict = cast(dict[str, object], part)
+                    if part_dict.get("part_kind") == "thinking":
+                        continue
+                    sanitized_parts.append(part_dict)
+                    continue
+                sanitized_parts.append(part)
+            sanitized_message["parts"] = sanitized_parts
 
         sanitized_messages.append(sanitized_message)
 
@@ -180,6 +186,10 @@ async def event_stream(
                 message_history=message_history or None,
                 conversation_id=str(thread_id),
                 run_id=str(run_id),
+                deps=AgentDeps(
+                    search_router=runtime.search_router,
+                    run_id=run_id,
+                ),
             ) as result:
                 async for delta in result.stream_text(delta=True, debounce_by=None):
                     if await request.is_disconnected():

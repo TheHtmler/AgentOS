@@ -322,6 +322,47 @@ async def append_text_delta(
     )
 
 
+async def append_tool_call_event(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    tool_name: str,
+    args: dict[str, object],
+) -> RunEvent:
+    """Record that the model requested a tool without storing secrets."""
+
+    return await append_run_event(
+        session,
+        run_id=run_id,
+        event_type="tool_call",
+        payload={"tool": tool_name, "args": args},
+    )
+
+
+async def append_tool_result_event(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    tool_name: str,
+    provider: str | None,
+    ok: bool,
+    summary: str,
+) -> RunEvent:
+    """Record a short tool outcome summary for debugging and audits."""
+
+    return await append_run_event(
+        session,
+        run_id=run_id,
+        event_type="tool_result",
+        payload={
+            "tool": tool_name,
+            "provider": provider,
+            "ok": ok,
+            "summary": summary[:500],
+        },
+    )
+
+
 async def complete_run(
     session: AsyncSession,
     *,

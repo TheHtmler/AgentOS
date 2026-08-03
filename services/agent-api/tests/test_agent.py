@@ -14,6 +14,8 @@ def test_default_settings() -> None:
     assert settings.ollama_base_url == "http://127.0.0.1:11434/v1"
     assert settings.ollama_model == "agentos-gemma4:8k"
     assert settings.model_temperature == 0.3
+    assert settings.search_enabled is True
+    assert settings.search_providers == ["tavily", "duckduckgo"]
 
 
 @pytest.mark.parametrize("temperature", [-0.1, 2.1])

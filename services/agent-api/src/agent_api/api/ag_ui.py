@@ -28,6 +28,7 @@ from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_
 from agent_api.db.models import User
 from agent_api.db.session import session_factory
 from agent_api.runtime import get_runtime
+from agent_api.tools.search.tool import AgentDeps
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,10 @@ async def stream_ag_ui_run(
                     message_history=history,
                     conversation_id=str(started.thread_id),
                     run_id=str(started.run_id),
+                    deps=AgentDeps(
+                        search_router=get_runtime(request).search_router,
+                        run_id=started.run_id,
+                    ),
                 ):
                     if await request.is_disconnected():
                         await persist_cancelled_run(started.run_id)

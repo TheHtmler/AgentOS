@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import AsyncIterator
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -286,7 +287,8 @@ async def test_strip_thinking_parts_preserves_final_answer() -> None:
         },
     ]
 
-    assert strip_thinking_parts(messages) == [
+    sanitized = strip_thinking_parts(cast(list[dict[str, object]], messages))
+    assert sanitized == [
         {
             "kind": "response",
             "parts": [{"part_kind": "text", "content": "最终回答"}],

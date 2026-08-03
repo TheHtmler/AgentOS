@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     auth_admin_emails: str = ""
     web_app_origin: str = "http://127.0.0.1:3000"
     database_url: str
+    search_enabled: bool = True
+    search_provider_order: str = "tavily,duckduckgo"
+    tavily_api_key: str = ""
+    search_timeout_seconds: float = 20.0
+    search_max_results: int = 5
 
     @field_validator("database_url")
     @classmethod
@@ -87,6 +92,22 @@ class Settings(BaseSettings):
 
         return normalized
 
+    @field_validator("search_max_results")
+    @classmethod
+    def search_max_results_must_be_in_range(cls, value: int) -> int:
+        if not 1 <= value <= 8:
+            raise ValueError("search_max_results must be between 1 and 8")
+
+        return value
+
+    @field_validator("search_timeout_seconds")
+    @classmethod
+    def search_timeout_seconds_must_be_positive(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("search_timeout_seconds must be greater than 0")
+
+        return value
+
     @property
     def admin_emails(self) -> frozenset[str]:
         """Return the explicit invite-manager allowlist without accepting client roles."""
@@ -94,6 +115,16 @@ class Settings(BaseSettings):
         return frozenset(
             email.strip().lower() for email in self.auth_admin_emails.split(",") if email.strip()
         )
+
+    @property
+    def search_providers(self) -> list[str]:
+        """Return the configured search provider order without blank entries."""
+
+        return [
+            name.strip().lower()
+            for name in self.search_provider_order.split(",")
+            if name.strip()
+        ]
 
 
 @lru_cache

@@ -12,12 +12,13 @@
 
 ## Phase 2：可控工具与 HITL
 
+- 先落地只读联网工具（`web_search`：Tavily + DuckDuckGo 降级），让本地模型具备时效信息能力。
 - 定义 Tool Registry 与 Tool Policy。
-- 接入一个只读 MCP 和一个本地 Sandbox Tool。
+- 接入 `fetch_url` / 只读 MCP，以及本地 Sandbox Tool。
 - 实现 `interrupts`、`approvals`、`resume` 与幂等处理。
 - 前端实现 Tool Call、审批和拒绝卡片。
 
-完成标准：高风险工具必须经过审批，刷新页面后审批状态和 Run 状态不丢失。
+完成标准：高风险工具必须经过审批，刷新页面后审批状态和 Run 状态不丢失。只读搜索可自动执行。
 
 ## Phase 3：受控 Runtime
 
