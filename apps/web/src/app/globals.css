@@ -489,6 +489,97 @@ body {
   animation: agentos-thinking-pulse 1.2s ease-in-out infinite;
 }
 
+.agentos-tool-call {
+  overflow: hidden;
+  border: 1px solid #9abfd0;
+  border-radius: 8px;
+  background: linear-gradient(105deg, #e8f4f8, #f7fcff 72%);
+  box-shadow: 0 8px 20px rgba(36, 120, 139, 0.07);
+}
+
+.agentos-tool-call-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.9rem;
+  color: #245c6d;
+  text-align: left;
+}
+
+.agentos-tool-call-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.agentos-tool-call-indicator {
+  flex-shrink: 0;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: #1f8fb0;
+  box-shadow: 0 0 0 3px rgba(31, 143, 176, 0.12);
+}
+
+.agentos-tool-call-state {
+  flex-shrink: 0;
+  color: #6a8f9b;
+  font-size: 0.75rem;
+}
+
+.agentos-tool-call-content {
+  display: grid;
+  gap: 0.65rem;
+  border-top: 1px solid #c5dce4;
+  padding: 0.8rem 0.9rem;
+  color: #42616b;
+  font-size: 0.75rem;
+  line-height: 1.7;
+}
+
+.agentos-tool-call-content pre {
+  margin: 0;
+  overflow: auto;
+  max-height: 12rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agentos-tool-call-label {
+  display: inline-block;
+  min-width: 4.5rem;
+  margin-right: 0.5rem;
+  color: #6a8f9b;
+  font-weight: 600;
+}
+
+.agentos-tool-call-running {
+  border-color: #6db6cb;
+  box-shadow:
+    0 0 0 1px rgba(49, 149, 173, 0.12),
+    0 10px 26px rgba(36, 120, 139, 0.12);
+}
+
+.agentos-tool-call-running .agentos-tool-call-indicator {
+  animation: agentos-thinking-pulse 1.2s ease-in-out infinite;
+}
+
+.agentos-tool-call-error {
+  border-color: #d8a3a3;
+  background: linear-gradient(105deg, #fff2f2, #fffafa 72%);
+}
+
+.agentos-tool-call-error .agentos-tool-call-indicator {
+  background: #c15b5b;
+  box-shadow: 0 0 0 3px rgba(193, 91, 91, 0.12);
+}
+
 .agentos-scroll-latest {
   border: 1px solid #91c8d0;
   border-radius: 6px;
@@ -721,7 +812,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .agentos-is-streaming .agentos-chat-header::after,
   .agentos-message-streaming::before,
-  .agentos-reasoning-running .agentos-reasoning-indicator {
+  .agentos-reasoning-running .agentos-reasoning-indicator,
+  .agentos-tool-call-running .agentos-tool-call-indicator {
     animation: none;
   }
 

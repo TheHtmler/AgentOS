@@ -3,6 +3,12 @@
 import { HttpAgent, type Message } from "@ag-ui/client";
 import { FormEvent, Fragment, KeyboardEvent, useEffect, useRef, useState } from "react";
 
+import {
+  summarizeToolResultContent,
+  ToolCallCard,
+  type ToolCallState,
+} from "@/components/chat/tool-call-card";
+
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -12,6 +18,7 @@ type ChatMessage = {
 type ThreadHistory = {
   thread_id: string;
   messages: ChatMessage[];
+  toolCalls: ToolCallState[];
 };
 
 type ReasoningState = {
@@ -56,6 +63,46 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function parseHistoryToolCalls(value: unknown): ToolCallState[] | null {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const toolCalls: ToolCallState[] = [];
+
+  for (const item of value) {
+    if (
+      !isRecord(item) ||
+      typeof item.id !== "string" ||
+      typeof item.tool_name !== "string" ||
+      !isRecord(item.args) ||
+      (item.status !== "done" && item.status !== "error") ||
+      typeof item.summary !== "string" ||
+      typeof item.after_message_id !== "string" ||
+      (item.provider !== undefined && item.provider !== null && typeof item.provider !== "string")
+    ) {
+      return null;
+    }
+
+    toolCalls.push({
+      id: item.id,
+      toolName: item.tool_name,
+      argsText: JSON.stringify(item.args),
+      status: item.status,
+      resultSummary: item.summary,
+      provider: typeof item.provider === "string" ? item.provider : undefined,
+      expanded: false,
+      afterMessageId: item.after_message_id,
+    });
+  }
+
+  return toolCalls;
+}
+
 function parseThreadHistory(value: unknown): ThreadHistory | null {
   if (
     !isRecord(value) ||
@@ -86,7 +133,12 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
     });
   }
 
-  return { thread_id: value.thread_id, messages };
+  const toolCalls = parseHistoryToolCalls(value.tool_calls);
+  if (toolCalls === null) {
+    return null;
+  }
+
+  return { thread_id: value.thread_id, messages, toolCalls };
 }
 
 function toAgentMessages(messages: ChatMessage[]): Message[] {
@@ -101,10 +153,24 @@ function toDisplayMessages(messages: readonly Message[]): ChatMessage[] {
   const displayMessages: ChatMessage[] = [];
 
   for (const message of messages) {
+    if (message.role === "tool") {
+      continue;
+    }
+
     if (
       (message.role !== "user" && message.role !== "assistant") ||
       typeof message.content !== "string"
     ) {
+      continue;
+    }
+
+    const hasToolCalls =
+      "toolCalls" in message &&
+      Array.isArray(message.toolCalls) &&
+      message.toolCalls.length > 0;
+
+    // AG-UI may keep an assistant shell that only holds toolCalls; skip empty shells.
+    if (message.role === "assistant" && !message.content && hasToolCalls) {
       continue;
     }
 
@@ -116,6 +182,20 @@ function toDisplayMessages(messages: readonly Message[]): ChatMessage[] {
   }
 
   return displayMessages;
+}
+
+function upsertToolCall(
+  current: ToolCallState[],
+  next: ToolCallState,
+): ToolCallState[] {
+  const index = current.findIndex((item) => item.id === next.id);
+  if (index === -1) {
+    return [...current, next];
+  }
+
+  const updated = [...current];
+  updated[index] = next;
+  return updated;
 }
 
 function createAgent(threadId: string, messages: ChatMessage[]): HttpAgent {
@@ -196,6 +276,7 @@ export function ChatPanel({
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const [reasoning, setReasoning] = useState<ReasoningState | null>(null);
   const [isReasoningExpanded, setIsReasoningExpanded] = useState(true);
+  const [toolCalls, setToolCalls] = useState<ToolCallState[]>([]);
 
   const agentRef = useRef<HttpAgent | null>(null);
   const cancellationRequestedRef = useRef(false);
@@ -217,7 +298,7 @@ export function ChatPanel({
     if (autoScrollRef.current) {
       scrollMessagesToBottom();
     }
-  }, [messages, reasoning?.content]);
+  }, [messages, reasoning?.content, toolCalls]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -289,6 +370,7 @@ export function ChatPanel({
           setMessages(history.messages);
           setThreadId(history.thread_id);
           setReasoning(null);
+          setToolCalls(history.toolCalls);
           setError(null);
           updateThreadInUrl(history.thread_id);
           onThreadChanged(history.thread_id);
@@ -375,8 +457,9 @@ export function ChatPanel({
       return;
     }
 
+    const userMessageId = crypto.randomUUID();
     agent.addMessage({
-      id: crypto.randomUUID(),
+      id: userMessageId,
       role: "user",
       content,
     });
@@ -431,6 +514,64 @@ export function ChatPanel({
             current?.messageId === event.messageId ? { ...current, completed: true } : current,
           );
         },
+        onToolCallStartEvent: ({ event }) => {
+          setToolCalls((current) =>
+            upsertToolCall(current, {
+              id: event.toolCallId,
+              toolName: event.toolCallName,
+              argsText: "",
+              status: "running",
+              expanded: true,
+              afterMessageId: userMessageId,
+            }),
+          );
+        },
+        onToolCallArgsEvent: ({ event, toolCallBuffer, toolCallName }) => {
+          setToolCalls((current) => {
+            const existing = current.find((item) => item.id === event.toolCallId);
+            return upsertToolCall(current, {
+              id: event.toolCallId,
+              toolName: toolCallName || existing?.toolName || "tool",
+              argsText: toolCallBuffer,
+              status: existing?.status ?? "running",
+              resultSummary: existing?.resultSummary,
+              provider: existing?.provider,
+              expanded: existing?.expanded ?? true,
+              afterMessageId: existing?.afterMessageId ?? userMessageId,
+            });
+          });
+        },
+        onToolCallEndEvent: ({ event, toolCallName, toolCallArgs }) => {
+          setToolCalls((current) => {
+            const existing = current.find((item) => item.id === event.toolCallId);
+            return upsertToolCall(current, {
+              id: event.toolCallId,
+              toolName: toolCallName || existing?.toolName || "tool",
+              argsText: existing?.argsText || JSON.stringify(toolCallArgs ?? {}),
+              status: existing?.status ?? "running",
+              resultSummary: existing?.resultSummary,
+              provider: existing?.provider,
+              expanded: existing?.expanded ?? true,
+              afterMessageId: existing?.afterMessageId ?? userMessageId,
+            });
+          });
+        },
+        onToolCallResultEvent: ({ event }) => {
+          const summarized = summarizeToolResultContent(event.content);
+          setToolCalls((current) => {
+            const existing = current.find((item) => item.id === event.toolCallId);
+            return upsertToolCall(current, {
+              id: event.toolCallId,
+              toolName: existing?.toolName || "tool",
+              argsText: existing?.argsText || "",
+              status: summarized.status,
+              resultSummary: summarized.summary,
+              provider: summarized.provider ?? existing?.provider,
+              expanded: false,
+              afterMessageId: existing?.afterMessageId ?? userMessageId,
+            });
+          });
+        },
       });
     } catch (caughtError: unknown) {
       if (!cancellationRequestedRef.current) {
@@ -475,6 +616,14 @@ export function ChatPanel({
   const currentAssistantMessageIndex = messages.findIndex(
     (message, index) => index > latestUserMessageIndex && message.role === "assistant",
   );
+
+  function toggleToolCall(toolCallId: string) {
+    setToolCalls((current) =>
+      current.map((item) =>
+        item.id === toolCallId ? { ...item, expanded: !item.expanded } : item,
+      ),
+    );
+  }
 
   const statusLabel = isLoadingHistory
     ? "读取会话中"
@@ -542,14 +691,6 @@ export function ChatPanel({
           ) : (
             messages.map((message, index) => (
               <Fragment key={message.id}>
-                {reasoning && index === currentAssistantMessageIndex ? (
-                  <ReasoningPanel
-                    reasoning={reasoning}
-                    isExpanded={isReasoningExpanded}
-                    onToggle={() => setIsReasoningExpanded((current) => !current)}
-                  />
-                ) : null}
-
                 <article
                   className={`agentos-message ${
                     message.role === "user"
@@ -584,17 +725,30 @@ export function ChatPanel({
                     </p>
                   ) : null}
                 </article>
+
+                {message.role === "user" ? (
+                  <>
+                    {reasoning && index === latestUserMessageIndex ? (
+                      <ReasoningPanel
+                        reasoning={reasoning}
+                        isExpanded={isReasoningExpanded}
+                        onToggle={() => setIsReasoningExpanded((current) => !current)}
+                      />
+                    ) : null}
+                    {toolCalls
+                      .filter((toolCall) => toolCall.afterMessageId === message.id)
+                      .map((toolCall) => (
+                        <ToolCallCard
+                          key={toolCall.id}
+                          toolCall={toolCall}
+                          onToggle={() => toggleToolCall(toolCall.id)}
+                        />
+                      ))}
+                  </>
+                ) : null}
               </Fragment>
             ))
           )}
-
-          {reasoning && currentAssistantMessageIndex === -1 ? (
-            <ReasoningPanel
-              reasoning={reasoning}
-              isExpanded={isReasoningExpanded}
-              onToggle={() => setIsReasoningExpanded((current) => !current)}
-            />
-          ) : null}
 
           <div ref={messagesEndRef} />
         </div>

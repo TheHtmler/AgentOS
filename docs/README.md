@@ -19,5 +19,6 @@
 | [adr/README.md](adr/README.md)                             | 架构决策记录                                  | 发生不可逆或高影响取舍时          |
 | [superpowers/specs/2026-08-03-web-search-tool-design.md](superpowers/specs/2026-08-03-web-search-tool-design.md) | Web Search 工具、多 Provider 降级与集成边界 | 搜索工具或 Provider 策略变化时 |
 | [superpowers/plans/2026-08-03-web-search-tool.md](superpowers/plans/2026-08-03-web-search-tool.md) | Web Search 工具实现计划（任务拆解） | 执行或调整该实现计划时 |
+| [superpowers/specs/2026-08-03-inline-tool-call-ui-design.md](superpowers/specs/2026-08-03-inline-tool-call-ui-design.md) | 内联工具调用回显（实时 + 历史） | 工具卡 UI 或历史 tool_calls 契约变化时 |
 
 后续建议增加：`api-contracts.md`、`data-model.md`、`security-model.md`、`runbook.md` 和 `incident-log.md`。
