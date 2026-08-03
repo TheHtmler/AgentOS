@@ -426,6 +426,102 @@ body {
   z-index: 1;
 }
 
+.agentos-message-meta {
+  color: #7a9299;
+  font-weight: 400;
+}
+
+.agentos-md {
+  position: relative;
+  z-index: 1;
+  color: inherit;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.agentos-md > :first-child {
+  margin-top: 0;
+}
+
+.agentos-md > :last-child {
+  margin-bottom: 0;
+}
+
+.agentos-md p,
+.agentos-md ul,
+.agentos-md ol,
+.agentos-md pre,
+.agentos-md blockquote {
+  margin: 0.65em 0;
+}
+
+.agentos-md ul,
+.agentos-md ol {
+  padding-left: 1.35rem;
+}
+
+.agentos-md li + li {
+  margin-top: 0.25rem;
+}
+
+.agentos-md a {
+  color: #1f7f93;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.agentos-md code {
+  border-radius: 4px;
+  background: rgba(17, 43, 55, 0.06);
+  padding: 0.1em 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+}
+
+.agentos-md pre {
+  overflow: auto;
+  max-height: 22rem;
+  border: 1px solid #d0e0e4;
+  border-radius: 8px;
+  background: #f4f8f9;
+  padding: 0.85rem 1rem;
+}
+
+.agentos-md pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.agentos-md h1,
+.agentos-md h2,
+.agentos-md h3 {
+  margin: 1em 0 0.4em;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.agentos-md h1 {
+  font-size: 1.2rem;
+}
+
+.agentos-md h2 {
+  font-size: 1.1rem;
+}
+
+.agentos-md h3 {
+  font-size: 1rem;
+}
+
+.agentos-md blockquote {
+  border-left: 3px solid #9ec4cd;
+  padding-left: 0.85rem;
+  color: #526c74;
+}
+
 .agentos-reasoning {
   overflow: hidden;
   border: 1px solid #9ad6ce;

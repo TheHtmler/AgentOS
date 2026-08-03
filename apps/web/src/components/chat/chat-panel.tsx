@@ -3,28 +3,34 @@
 import { HttpAgent, type Message } from "@ag-ui/client";
 import { FormEvent, Fragment, KeyboardEvent, useEffect, useRef, useState } from "react";
 
+import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
+import {
+  ThinkingStepCard,
+  type ThinkingStepState,
+} from "@/components/chat/thinking-step-card";
 import {
   summarizeToolResultContent,
   ToolCallCard,
   type ToolCallState,
 } from "@/components/chat/tool-call-card";
+import { formatMessageTimestamp, formatRunDurationLabel } from "@/lib/format-time";
 
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  createdAt?: string;
+  durationLabel?: string;
 };
+
+type ToolTimelineStep = ToolCallState & { kind: "tool" };
+
+type TimelineStep = ThinkingStepState | ToolTimelineStep;
 
 type ThreadHistory = {
   thread_id: string;
   messages: ChatMessage[];
   toolCalls: ToolCallState[];
-};
-
-type ReasoningState = {
-  messageId: string;
-  content: string;
-  completed: boolean;
 };
 
 type ChatPanelProps = {
@@ -130,6 +136,7 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
       id: message.id,
       role: message.role,
       content: message.content,
+      createdAt: message.created_at,
     });
   }
 
@@ -149,7 +156,11 @@ function toAgentMessages(messages: ChatMessage[]): Message[] {
   }));
 }
 
-function toDisplayMessages(messages: readonly Message[]): ChatMessage[] {
+function toDisplayMessages(
+  messages: readonly Message[],
+  previous: ChatMessage[] = [],
+): ChatMessage[] {
+  const previousById = new Map(previous.map((message) => [message.id, message]));
   const displayMessages: ChatMessage[] = [];
 
   for (const message of messages) {
@@ -169,25 +180,25 @@ function toDisplayMessages(messages: readonly Message[]): ChatMessage[] {
       Array.isArray(message.toolCalls) &&
       message.toolCalls.length > 0;
 
-    // AG-UI may keep an assistant shell that only holds toolCalls; skip empty shells.
     if (message.role === "assistant" && !message.content && hasToolCalls) {
       continue;
     }
+
+    const prior = previousById.get(message.id);
 
     displayMessages.push({
       id: message.id,
       role: message.role,
       content: message.content,
+      createdAt: prior?.createdAt,
+      durationLabel: prior?.durationLabel,
     });
   }
 
   return displayMessages;
 }
 
-function upsertToolCall(
-  current: ToolCallState[],
-  next: ToolCallState,
-): ToolCallState[] {
+function upsertTimelineStep(current: TimelineStep[], next: TimelineStep): TimelineStep[] {
   const index = current.findIndex((item) => item.id === next.id);
   if (index === -1) {
     return [...current, next];
@@ -196,6 +207,40 @@ function upsertToolCall(
   const updated = [...current];
   updated[index] = next;
   return updated;
+}
+
+function toolStatesFromTimeline(steps: TimelineStep[]): ToolCallState[] {
+  return steps
+    .filter((step): step is ToolTimelineStep => step.kind === "tool")
+    .map((step) => ({
+      id: step.id,
+      toolName: step.toolName,
+      argsText: step.argsText,
+      status: step.status,
+      resultSummary: step.resultSummary,
+      provider: step.provider,
+      expanded: false,
+      afterMessageId: step.afterMessageId,
+    }));
+}
+
+function mergeHistoryToolCalls(
+  current: ToolCallState[],
+  incoming: ToolCallState[],
+): ToolCallState[] {
+  const merged = [...current];
+  const seen = new Set(current.map((item) => item.id));
+
+  for (const item of incoming) {
+    if (seen.has(item.id)) {
+      continue;
+    }
+
+    merged.push({ ...item, expanded: false });
+    seen.add(item.id);
+  }
+
+  return merged;
 }
 
 function createAgent(threadId: string, messages: ChatMessage[]): HttpAgent {
@@ -220,41 +265,33 @@ function agentErrorMessage(error: unknown): string {
   return "Agent 生成失败，请稍后重试。";
 }
 
-function ReasoningPanel({
-  reasoning,
-  isExpanded,
-  onToggle,
-}: {
-  reasoning: ReasoningState;
-  isExpanded: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <section
-      className={`agentos-reasoning max-w-[92%] sm:max-w-[85%] ${
-        reasoning.completed ? "" : "agentos-reasoning-running"
-      }`}
-    >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={isExpanded}
-        className="agentos-reasoning-toggle"
-      >
-        <span className="agentos-reasoning-title">
-          <span aria-hidden="true" className="agentos-reasoning-indicator" />
-          {reasoning.completed ? "Thinking trace" : "Thinking..."}
-        </span>
-        <span className="agentos-reasoning-state">
-          {reasoning.completed ? "已完成" : "运行中"} · {isExpanded ? "收起" : "展开"}
-        </span>
-      </button>
+async function loadRunDurationLabel(runId: string): Promise<string | null> {
+  try {
+    const response = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
 
-      {isExpanded && reasoning.content ? (
-        <pre className="agentos-reasoning-content">{reasoning.content}</pre>
-      ) : null}
-    </section>
-  );
+    const payload: unknown = await response.json();
+    if (
+      !isRecord(payload) ||
+      typeof payload.created_at !== "string" ||
+      (payload.started_at !== null && typeof payload.started_at !== "string") ||
+      (payload.completed_at !== null && typeof payload.completed_at !== "string") ||
+      typeof payload.status !== "string"
+    ) {
+      return null;
+    }
+
+    return formatRunDurationLabel(
+      typeof payload.started_at === "string" ? payload.started_at : null,
+      typeof payload.completed_at === "string" ? payload.completed_at : null,
+      payload.created_at,
+      payload.status,
+    );
+  } catch {
+    return null;
+  }
 }
 
 export function ChatPanel({
@@ -274,9 +311,9 @@ export function ChatPanel({
   const [error, setError] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
-  const [reasoning, setReasoning] = useState<ReasoningState | null>(null);
-  const [isReasoningExpanded, setIsReasoningExpanded] = useState(true);
-  const [toolCalls, setToolCalls] = useState<ToolCallState[]>([]);
+  const [timelineSteps, setTimelineSteps] = useState<TimelineStep[]>([]);
+  const [historyToolCalls, setHistoryToolCalls] = useState<ToolCallState[]>([]);
+  const [liveUserMessageId, setLiveUserMessageId] = useState<string | null>(null);
 
   const agentRef = useRef<HttpAgent | null>(null);
   const cancellationRequestedRef = useRef(false);
@@ -298,7 +335,7 @@ export function ChatPanel({
     if (autoScrollRef.current) {
       scrollMessagesToBottom();
     }
-  }, [messages, reasoning?.content, toolCalls]);
+  }, [messages, timelineSteps]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -369,8 +406,9 @@ export function ChatPanel({
           agentRef.current = createAgent(history.thread_id, history.messages);
           setMessages(history.messages);
           setThreadId(history.thread_id);
-          setReasoning(null);
-          setToolCalls(history.toolCalls);
+          setTimelineSteps([]);
+          setHistoryToolCalls(history.toolCalls);
+          setLiveUserMessageId(null);
           setError(null);
           updateThreadInUrl(history.thread_id);
           onThreadChanged(history.thread_id);
@@ -458,29 +496,42 @@ export function ChatPanel({
     }
 
     const userMessageId = crypto.randomUUID();
+    const sentAt = new Date().toISOString();
+
     agent.addMessage({
       id: userMessageId,
       role: "user",
       content,
     });
 
-    setMessages(toDisplayMessages(agent.messages));
+    setMessages((previous) => {
+      const next = toDisplayMessages(agent.messages, previous);
+      return next.map((message) =>
+        message.id === userMessageId ? { ...message, createdAt: sentAt } : message,
+      );
+    });
     setDraft("");
     setError(null);
-    setReasoning(null);
-    setIsReasoningExpanded(true);
+    setHistoryToolCalls((current) =>
+      mergeHistoryToolCalls(current, toolStatesFromTimeline(timelineSteps)),
+    );
+    setTimelineSteps([]);
+    setLiveUserMessageId(userMessageId);
     setIsStreaming(true);
     autoScrollRef.current = true;
     setShowScrollToLatest(false);
     cancellationRequestedRef.current = false;
 
+    let activeRunId: string | null = null;
+
     try {
       await agent.runAgent(undefined, {
         onMessagesChanged: ({ messages: nextMessages }) => {
-          setMessages(toDisplayMessages(nextMessages));
+          setMessages((previous) => toDisplayMessages(nextMessages, previous));
         },
         onRunStartedEvent: ({ event, agent: runningAgent }) => {
           if (isUuid(event.runId)) {
+            activeRunId = event.runId;
             onRunStarted(event.runId);
           }
 
@@ -495,28 +546,46 @@ export function ChatPanel({
           setError(event.message || "Agent 生成失败，请稍后重试。");
         },
         onReasoningStartEvent: ({ event }) => {
-          setReasoning({
-            messageId: event.messageId,
-            content: "",
-            completed: false,
-          });
-          setIsReasoningExpanded(true);
+          setTimelineSteps((current) =>
+            upsertTimelineStep(current, {
+              kind: "thinking",
+              id: event.messageId,
+              content: "",
+              status: "running",
+              expanded: true,
+              afterMessageId: userMessageId,
+            }),
+          );
         },
         onReasoningMessageContentEvent: ({ event, reasoningMessageBuffer }) => {
-          setReasoning({
-            messageId: event.messageId,
-            content: reasoningMessageBuffer,
-            completed: false,
+          setTimelineSteps((current) => {
+            const existing = current.find(
+              (step): step is ThinkingStepState =>
+                step.kind === "thinking" && step.id === event.messageId,
+            );
+            return upsertTimelineStep(current, {
+              kind: "thinking",
+              id: event.messageId,
+              content: reasoningMessageBuffer,
+              status: existing?.status ?? "running",
+              expanded: existing?.expanded ?? true,
+              afterMessageId: existing?.afterMessageId ?? userMessageId,
+            });
           });
         },
         onReasoningEndEvent: ({ event }) => {
-          setReasoning((current) =>
-            current?.messageId === event.messageId ? { ...current, completed: true } : current,
+          setTimelineSteps((current) =>
+            current.map((step) =>
+              step.kind === "thinking" && step.id === event.messageId
+                ? { ...step, status: "done", expanded: false }
+                : step,
+            ),
           );
         },
         onToolCallStartEvent: ({ event }) => {
-          setToolCalls((current) =>
-            upsertToolCall(current, {
+          setTimelineSteps((current) =>
+            upsertTimelineStep(current, {
+              kind: "tool",
               id: event.toolCallId,
               toolName: event.toolCallName,
               argsText: "",
@@ -527,9 +596,13 @@ export function ChatPanel({
           );
         },
         onToolCallArgsEvent: ({ event, toolCallBuffer, toolCallName }) => {
-          setToolCalls((current) => {
-            const existing = current.find((item) => item.id === event.toolCallId);
-            return upsertToolCall(current, {
+          setTimelineSteps((current) => {
+            const existing = current.find(
+              (step): step is ToolTimelineStep =>
+                step.kind === "tool" && step.id === event.toolCallId,
+            );
+            return upsertTimelineStep(current, {
+              kind: "tool",
               id: event.toolCallId,
               toolName: toolCallName || existing?.toolName || "tool",
               argsText: toolCallBuffer,
@@ -542,9 +615,13 @@ export function ChatPanel({
           });
         },
         onToolCallEndEvent: ({ event, toolCallName, toolCallArgs }) => {
-          setToolCalls((current) => {
-            const existing = current.find((item) => item.id === event.toolCallId);
-            return upsertToolCall(current, {
+          setTimelineSteps((current) => {
+            const existing = current.find(
+              (step): step is ToolTimelineStep =>
+                step.kind === "tool" && step.id === event.toolCallId,
+            );
+            return upsertTimelineStep(current, {
+              kind: "tool",
               id: event.toolCallId,
               toolName: toolCallName || existing?.toolName || "tool",
               argsText: existing?.argsText || JSON.stringify(toolCallArgs ?? {}),
@@ -558,9 +635,13 @@ export function ChatPanel({
         },
         onToolCallResultEvent: ({ event }) => {
           const summarized = summarizeToolResultContent(event.content);
-          setToolCalls((current) => {
-            const existing = current.find((item) => item.id === event.toolCallId);
-            return upsertToolCall(current, {
+          setTimelineSteps((current) => {
+            const existing = current.find(
+              (step): step is ToolTimelineStep =>
+                step.kind === "tool" && step.id === event.toolCallId,
+            );
+            return upsertTimelineStep(current, {
+              kind: "tool",
               id: event.toolCallId,
               toolName: existing?.toolName || "tool",
               argsText: existing?.argsText || "",
@@ -573,9 +654,74 @@ export function ChatPanel({
           });
         },
       });
+
+      const completedAt = new Date().toISOString();
+      setMessages((previous) => {
+        const latestUserIndex = previous.reduce(
+          (latestIndex, message, index) => (message.role === "user" ? index : latestIndex),
+          -1,
+        );
+        const assistantIndex = previous.findIndex(
+          (message, index) => index > latestUserIndex && message.role === "assistant",
+        );
+
+        if (assistantIndex === -1) {
+          return previous;
+        }
+
+        return previous.map((message, index) =>
+          index === assistantIndex
+            ? { ...message, createdAt: message.createdAt ?? completedAt }
+            : message,
+        );
+      });
+
+      if (activeRunId !== null) {
+        const durationLabel = await loadRunDurationLabel(activeRunId);
+        if (durationLabel !== null) {
+          setMessages((previous) => {
+            const latestUserIndex = previous.reduce(
+              (latestIndex, message, index) => (message.role === "user" ? index : latestIndex),
+              -1,
+            );
+            const assistantIndex = previous.findIndex(
+              (message, index) => index > latestUserIndex && message.role === "assistant",
+            );
+
+            if (assistantIndex === -1) {
+              return previous;
+            }
+
+            return previous.map((message, index) =>
+              index === assistantIndex ? { ...message, durationLabel } : message,
+            );
+          });
+        }
+      }
     } catch (caughtError: unknown) {
       if (!cancellationRequestedRef.current) {
         setError(agentErrorMessage(caughtError));
+      } else if (activeRunId !== null) {
+        const durationLabel = await loadRunDurationLabel(activeRunId);
+        if (durationLabel !== null) {
+          setMessages((previous) => {
+            const latestUserIndex = previous.reduce(
+              (latestIndex, message, index) => (message.role === "user" ? index : latestIndex),
+              -1,
+            );
+            const assistantIndex = previous.findIndex(
+              (message, index) => index > latestUserIndex && message.role === "assistant",
+            );
+
+            if (assistantIndex === -1) {
+              return previous;
+            }
+
+            return previous.map((message, index) =>
+              index === assistantIndex ? { ...message, durationLabel } : message,
+            );
+          });
+        }
       }
     } finally {
       cancellationRequestedRef.current = false;
@@ -608,6 +754,22 @@ export function ChatPanel({
     }
   }
 
+  function toggleTimelineStep(stepId: string) {
+    setTimelineSteps((current) =>
+      current.map((step) =>
+        step.id === stepId ? { ...step, expanded: !step.expanded } : step,
+      ),
+    );
+  }
+
+  function toggleHistoryToolCall(toolCallId: string) {
+    setHistoryToolCalls((current) =>
+      current.map((item) =>
+        item.id === toolCallId ? { ...item, expanded: !item.expanded } : item,
+      ),
+    );
+  }
+
   const latestUserMessageIndex = messages.reduce(
     (latestIndex, message, index) => (message.role === "user" ? index : latestIndex),
     -1,
@@ -616,14 +778,6 @@ export function ChatPanel({
   const currentAssistantMessageIndex = messages.findIndex(
     (message, index) => index > latestUserMessageIndex && message.role === "assistant",
   );
-
-  function toggleToolCall(toolCallId: string) {
-    setToolCalls((current) =>
-      current.map((item) =>
-        item.id === toolCallId ? { ...item, expanded: !item.expanded } : item,
-      ),
-    );
-  }
 
   const statusLabel = isLoadingHistory
     ? "读取会话中"
@@ -689,65 +843,106 @@ export function ChatPanel({
               </div>
             </div>
           ) : (
-            messages.map((message, index) => (
-              <Fragment key={message.id}>
-                <article
-                  className={`agentos-message ${
-                    message.role === "user"
-                      ? "agentos-message-user ml-auto max-w-[88%] sm:max-w-[72%]"
-                      : `agentos-message-assistant max-w-full sm:max-w-[92%] ${
-                          isStreaming && index === currentAssistantMessageIndex
-                            ? "agentos-message-streaming"
-                            : ""
-                        }`
-                  }`}
-                >
-                  <div className="mb-2 flex items-center justify-between gap-3 text-xs">
-                    <p className="agentos-message-author">
-                      {message.role === "user" ? "你" : "AgentOS"}
-                    </p>
-                    {message.role === "assistant" && message.content ? (
-                      <button
-                        type="button"
-                        onClick={() => void copyAssistantMessage(message)}
-                        className="agentos-copy-button"
-                      >
-                        {copiedMessageId === message.id ? "已复制" : "复制"}
-                      </button>
-                    ) : null}
-                  </div>
+            messages.map((message, index) => {
+              const liveSteps =
+                liveUserMessageId === message.id
+                  ? timelineSteps.filter((step) => step.afterMessageId === message.id)
+                  : [];
+              const historicalTools =
+                liveUserMessageId === message.id
+                  ? []
+                  : historyToolCalls.filter((toolCall) => toolCall.afterMessageId === message.id);
 
-                  {message.content ? (
-                    <p className="break-words whitespace-pre-wrap">{message.content}</p>
-                  ) : message.role === "assistant" && isStreaming ? (
-                    <p aria-live="polite" className="text-zinc-500">
-                      正在生成最终回答...
-                    </p>
-                  ) : null}
-                </article>
+              let thinkingOrdinal = 0;
 
-                {message.role === "user" ? (
-                  <>
-                    {reasoning && index === latestUserMessageIndex ? (
-                      <ReasoningPanel
-                        reasoning={reasoning}
-                        isExpanded={isReasoningExpanded}
-                        onToggle={() => setIsReasoningExpanded((current) => !current)}
-                      />
+              return (
+                <Fragment key={message.id}>
+                  <article
+                    className={`agentos-message ${
+                      message.role === "user"
+                        ? "agentos-message-user ml-auto max-w-[88%] sm:max-w-[72%]"
+                        : `agentos-message-assistant max-w-full sm:max-w-[92%] ${
+                            isStreaming && index === currentAssistantMessageIndex
+                              ? "agentos-message-streaming"
+                              : ""
+                          }`
+                    }`}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+                      <p className="agentos-message-author">
+                        {message.role === "user" ? "你" : "AgentOS"}
+                        {message.createdAt ? (
+                          <span className="agentos-message-meta">
+                            {" "}
+                            · {formatMessageTimestamp(message.createdAt)}
+                          </span>
+                        ) : null}
+                        {message.role === "assistant" && message.durationLabel ? (
+                          <span className="agentos-message-meta">
+                            {" "}
+                            · {message.durationLabel}
+                          </span>
+                        ) : null}
+                      </p>
+                      {message.role === "assistant" && message.content ? (
+                        <button
+                          type="button"
+                          onClick={() => void copyAssistantMessage(message)}
+                          className="agentos-copy-button"
+                        >
+                          {copiedMessageId === message.id ? "已复制" : "复制"}
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {message.content ? (
+                      message.role === "assistant" ? (
+                        <AssistantMarkdown content={message.content} />
+                      ) : (
+                        <p className="break-words whitespace-pre-wrap">{message.content}</p>
+                      )
+                    ) : message.role === "assistant" && isStreaming ? (
+                      <p aria-live="polite" className="text-zinc-500">
+                        正在生成最终回答...
+                      </p>
                     ) : null}
-                    {toolCalls
-                      .filter((toolCall) => toolCall.afterMessageId === message.id)
-                      .map((toolCall) => (
+                  </article>
+
+                  {message.role === "user" ? (
+                    <>
+                      {liveSteps.map((step) => {
+                        if (step.kind === "thinking") {
+                          thinkingOrdinal += 1;
+                          return (
+                            <ThinkingStepCard
+                              key={step.id}
+                              step={step}
+                              index={thinkingOrdinal}
+                              onToggle={() => toggleTimelineStep(step.id)}
+                            />
+                          );
+                        }
+
+                        return (
+                          <ToolCallCard
+                            key={step.id}
+                            toolCall={step}
+                            onToggle={() => toggleTimelineStep(step.id)}
+                          />
+                        );
+                      })}
+                      {historicalTools.map((toolCall) => (
                         <ToolCallCard
                           key={toolCall.id}
                           toolCall={toolCall}
-                          onToggle={() => toggleToolCall(toolCall.id)}
+                          onToggle={() => toggleHistoryToolCall(toolCall.id)}
                         />
                       ))}
-                  </>
-                ) : null}
-              </Fragment>
-            ))
+                    </>
+                  ) : null}
+                </Fragment>
+              );
+            })
           )}
 
           <div ref={messagesEndRef} />
