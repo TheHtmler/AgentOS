@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Conversation = {
   id: string;
@@ -15,6 +15,7 @@ type ConversationListProps = {
   isChatStreaming: boolean;
   onNewConversation: () => void;
   onSelectThread: (threadId: string) => void;
+  onThreadDeleted: (threadId: string) => void;
 };
 
 type ConversationGroup = {
@@ -118,10 +119,15 @@ export function ConversationList({
   isChatStreaming,
   onNewConversation,
   onSelectThread,
+  onThreadDeleted,
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [menuThreadId, setMenuThreadId] = useState<string | null>(null);
+  const [renamingThreadId, setRenamingThreadId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [busyThreadId, setBusyThreadId] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -182,6 +188,82 @@ export function ConversationList({
     return groupConversations(filtered);
   }, [conversations, query]);
 
+  function beginRename(conversation: Conversation) {
+    setMenuThreadId(null);
+    setRenamingThreadId(conversation.id);
+    setRenameDraft(conversation.title ?? conversationLabel(conversation));
+  }
+
+  async function submitRename(event: FormEvent<HTMLFormElement>, threadId: string) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const title = renameDraft.trim();
+    setBusyThreadId(threadId);
+
+    try {
+      const response = await fetch(`/api/threads/${threadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title || null }),
+      });
+
+      if (!response.ok) {
+        throw new Error("重命名失败，请稍后重试。");
+      }
+
+      const payload: unknown = await response.json();
+      if (!isRecord(payload) || (payload.title !== null && typeof payload.title !== "string")) {
+        throw new Error("重命名响应无效。");
+      }
+
+      setConversations((current) =>
+        current.map((item) =>
+          item.id === threadId
+            ? {
+                ...item,
+                title: typeof payload.title === "string" ? payload.title : null,
+                updated_at:
+                  typeof payload.updated_at === "string" ? payload.updated_at : item.updated_at,
+              }
+            : item,
+        ),
+      );
+      setRenamingThreadId(null);
+      setError(null);
+    } catch (caughtError: unknown) {
+      setError(caughtError instanceof Error ? caughtError.message : "重命名失败，请稍后重试。");
+    } finally {
+      setBusyThreadId(null);
+    }
+  }
+
+  async function deleteThread(threadId: string) {
+    setMenuThreadId(null);
+
+    if (!window.confirm("删除后会话将从列表中隐藏，确定删除？")) {
+      return;
+    }
+
+    setBusyThreadId(threadId);
+
+    try {
+      const response = await fetch(`/api/threads/${threadId}`, { method: "DELETE" });
+
+      if (!response.ok) {
+        throw new Error("删除失败，请稍后重试。");
+      }
+
+      setConversations((current) => current.filter((item) => item.id !== threadId));
+      setError(null);
+      onThreadDeleted(threadId);
+    } catch (caughtError: unknown) {
+      setError(caughtError instanceof Error ? caughtError.message : "删除失败，请稍后重试。");
+    } finally {
+      setBusyThreadId(null);
+    }
+  }
+
   return (
     <section className="agentos-conversation-list flex h-full min-h-0 min-w-0 flex-col overflow-hidden border border-zinc-200 bg-white">
       <header className="border-b border-zinc-200 p-3">
@@ -226,35 +308,110 @@ export function ConversationList({
               {group.conversations.map((conversation) => {
                 const active = conversation.id === activeThreadId;
                 const preview = conversation.latest_message_content ?? "暂无消息";
+                const isBusy = busyThreadId === conversation.id;
+                const isRenaming = renamingThreadId === conversation.id;
 
                 return (
-                  <button
+                  <div
                     key={conversation.id}
-                    type="button"
-                    onClick={() => onSelectThread(conversation.id)}
-                    disabled={isChatStreaming}
-                    aria-current={active ? "page" : undefined}
-                    className={`block w-full min-w-0 px-3 py-2.5 text-left transition disabled:cursor-not-allowed ${
-                      active ? "bg-zinc-900 text-white" : "text-zinc-900 hover:bg-zinc-50"
-                    }`}
+                    className={`relative px-2 py-1 ${active ? "bg-zinc-900 text-white" : "text-zinc-900"}`}
                   >
-                    <div className="flex min-w-0 items-start justify-between gap-3">
-                      <p className="min-w-0 truncate text-sm font-medium">
-                        {conversationLabel(conversation)}
-                      </p>
-                      <time
-                        className={`shrink-0 text-xs ${active ? "text-zinc-300" : "text-zinc-400"}`}
-                        dateTime={conversation.updated_at}
+                    {isRenaming ? (
+                      <form
+                        className="flex items-center gap-2 px-1 py-1.5"
+                        onSubmit={(event) => void submitRename(event, conversation.id)}
                       >
-                        {formatUpdatedAt(conversation.updated_at)}
-                      </time>
-                    </div>
-                    <p
-                      className={`mt-1 truncate text-xs ${active ? "text-zinc-300" : "text-zinc-500"}`}
-                    >
-                      {preview}
-                    </p>
-                  </button>
+                        <input
+                          aria-label="会话标题"
+                          value={renameDraft}
+                          maxLength={80}
+                          autoFocus
+                          disabled={isBusy}
+                          onChange={(event) => setRenameDraft(event.target.value)}
+                          className="min-w-0 flex-1 border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-900 outline-none"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isBusy}
+                          className="shrink-0 text-xs font-medium text-teal-700 disabled:opacity-40"
+                        >
+                          保存
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => setRenamingThreadId(null)}
+                          className="shrink-0 text-xs text-zinc-500"
+                        >
+                          取消
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="flex min-w-0 items-stretch gap-1">
+                        <button
+                          type="button"
+                          onClick={() => onSelectThread(conversation.id)}
+                          disabled={isChatStreaming || isBusy}
+                          aria-current={active ? "page" : undefined}
+                          className={`min-w-0 flex-1 px-1 py-2 text-left transition disabled:cursor-not-allowed ${
+                            active ? "" : "hover:bg-zinc-50"
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-start justify-between gap-3">
+                            <p className="min-w-0 truncate text-sm font-medium">
+                              {conversationLabel(conversation)}
+                            </p>
+                            <time
+                              className={`shrink-0 text-xs ${active ? "text-zinc-300" : "text-zinc-400"}`}
+                              dateTime={conversation.updated_at}
+                            >
+                              {formatUpdatedAt(conversation.updated_at)}
+                            </time>
+                          </div>
+                          <p
+                            className={`mt-1 truncate text-xs ${active ? "text-zinc-300" : "text-zinc-500"}`}
+                          >
+                            {preview}
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          aria-label="会话操作"
+                          disabled={isChatStreaming || isBusy}
+                          onClick={() =>
+                            setMenuThreadId((current) =>
+                              current === conversation.id ? null : conversation.id,
+                            )
+                          }
+                          className={`shrink-0 px-2 text-lg leading-none disabled:opacity-40 ${
+                            active ? "text-zinc-200" : "text-zinc-400 hover:text-zinc-700"
+                          }`}
+                        >
+                          ⋯
+                        </button>
+                      </div>
+                    )}
+
+                    {menuThreadId === conversation.id ? (
+                      <div className="absolute top-10 right-2 z-20 min-w-28 border border-zinc-200 bg-white py-1 text-zinc-900 shadow-lg">
+                        <button
+                          type="button"
+                          className="block w-full px-3 py-2 text-left text-xs hover:bg-zinc-50"
+                          onClick={() => beginRename(conversation)}
+                        >
+                          重命名
+                        </button>
+                        <button
+                          type="button"
+                          className="block w-full px-3 py-2 text-left text-xs text-rose-700 hover:bg-rose-50"
+                          onClick={() => void deleteThread(conversation.id)}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })}
             </section>

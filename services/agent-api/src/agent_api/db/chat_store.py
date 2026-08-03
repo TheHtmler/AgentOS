@@ -63,20 +63,39 @@ async def _create_thread(session: AsyncSession, *, user_id: UUID) -> Thread:
     return thread
 
 
-async def _lock_thread(session: AsyncSession, *, thread_id: UUID, user_id: UUID) -> Thread:
-    # Locking the parent row serializes allocation of messages.seq within one thread.
-    thread = await session.scalar(
-        select(Thread)
-        .where(
-            Thread.id == thread_id,
-            Thread.user_id == user_id,
-        )
-        .with_for_update(),
+async def _get_active_thread(
+    session: AsyncSession,
+    *,
+    thread_id: UUID,
+    user_id: UUID | None = None,
+    for_update: bool = False,
+) -> Thread:
+    """Load a non-deleted Thread, optionally scoped to an owner."""
+
+    statement = select(Thread).where(
+        Thread.id == thread_id,
+        Thread.deleted_at.is_(None),
     )
+    if user_id is not None:
+        statement = statement.where(Thread.user_id == user_id)
+    if for_update:
+        statement = statement.with_for_update()
+
+    thread = await session.scalar(statement)
     if thread is None:
         raise ThreadNotFoundError(f"Thread {thread_id} does not exist")
 
     return thread
+
+
+async def _lock_thread(session: AsyncSession, *, thread_id: UUID, user_id: UUID) -> Thread:
+    # Locking the parent row serializes allocation of messages.seq within one thread.
+    return await _get_active_thread(
+        session,
+        thread_id=thread_id,
+        user_id=user_id,
+        for_update=True,
+    )
 
 
 async def _ensure_thread_has_no_running_run(
@@ -133,6 +152,7 @@ async def get_run(
         .where(
             Run.id == run_id,
             Thread.user_id == user_id,
+            Thread.deleted_at.is_(None),
         )
     )
     if run is None:
@@ -149,17 +169,7 @@ async def list_thread_messages(
 ) -> list[Message]:
     """Return final messages in their durable conversation order."""
 
-    if user_id is None:
-        thread = await session.get(Thread, thread_id)
-    else:
-        thread = await session.scalar(
-            select(Thread).where(
-                Thread.id == thread_id,
-                Thread.user_id == user_id,
-            )
-        )
-    if thread is None:
-        raise ThreadNotFoundError(f"Thread {thread_id} does not exist")
+    thread = await _get_active_thread(session, thread_id=thread_id, user_id=user_id)
 
     messages = await session.scalars(
         select(Message).where(Message.thread_id == thread.id).order_by(Message.seq),
@@ -179,17 +189,7 @@ async def list_thread_tool_calls(
     that user message by pairing runs and user messages in creation order.
     """
 
-    if user_id is None:
-        thread = await session.get(Thread, thread_id)
-    else:
-        thread = await session.scalar(
-            select(Thread).where(
-                Thread.id == thread_id,
-                Thread.user_id == user_id,
-            )
-        )
-    if thread is None:
-        raise ThreadNotFoundError(f"Thread {thread_id} does not exist")
+    thread = await _get_active_thread(session, thread_id=thread_id, user_id=user_id)
 
     user_messages = list(
         (
@@ -300,7 +300,10 @@ async def list_threads(
 
     result = await session.execute(
         select(Thread, latest_message_content)
-        .where(Thread.user_id == user_id)
+        .where(
+            Thread.user_id == user_id,
+            Thread.deleted_at.is_(None),
+        )
         .order_by(Thread.updated_at.desc(), Thread.id.desc())
         .limit(limit),
     )
@@ -316,6 +319,49 @@ async def list_threads(
     ]
 
 
+async def rename_thread(
+    session: AsyncSession,
+    *,
+    thread_id: UUID,
+    user_id: UUID,
+    title: str | None,
+) -> Thread:
+    """Set or clear a Thread title for the owning user."""
+
+    thread = await _get_active_thread(session, thread_id=thread_id, user_id=user_id)
+    thread.title = title
+    thread.updated_at = datetime.now(UTC)
+    await session.flush()
+    return thread
+
+
+async def soft_delete_thread(
+    session: AsyncSession,
+    *,
+    thread_id: UUID,
+    user_id: UUID,
+) -> bool:
+    """Mark a Thread deleted. Returns False when already deleted or missing for this user."""
+
+    thread = await session.scalar(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user_id,
+        ),
+    )
+    if thread is None:
+        raise ThreadNotFoundError(f"Thread {thread_id} does not exist")
+
+    if thread.deleted_at is not None:
+        return False
+
+    deleted_at = datetime.now(UTC)
+    thread.deleted_at = deleted_at
+    thread.updated_at = deleted_at
+    await session.flush()
+    return True
+
+
 async def list_completed_run_message_histories(
     session: AsyncSession,
     *,
@@ -325,18 +371,7 @@ async def list_completed_run_message_histories(
 ) -> list[RunMessageHistory]:
     """Return recent complete model-message blocks in chronological order."""
 
-    if user_id is None:
-        thread = await session.get(Thread, thread_id)
-    else:
-        thread = await session.scalar(
-            select(Thread).where(
-                Thread.id == thread_id,
-                Thread.user_id == user_id,
-            )
-        )
-
-    if thread is None:
-        raise ThreadNotFoundError(f"Thread {thread_id} does not exist")
+    thread = await _get_active_thread(session, thread_id=thread_id, user_id=user_id)
 
     recent_run_ids = (
         select(RunMessageHistory.run_id.label("run_id"))
@@ -382,11 +417,11 @@ async def start_run(
             thread = await _create_thread(session, user_id=user_id)
     else:
         if user_id is None:
-            thread = await session.scalar(
-                select(Thread).where(Thread.id == thread_id).with_for_update(),
+            thread = await _get_active_thread(
+                session,
+                thread_id=thread_id,
+                for_update=True,
             )
-            if thread is None:
-                raise ThreadNotFoundError(f"Thread {thread_id} does not exist")
         else:
             thread = await _lock_thread(session, thread_id=thread_id, user_id=user_id)
         await _ensure_thread_has_no_running_run(session, thread.id)
