@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_ai import ModelMessagesTypeAdapter
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 
 from agent_api.api.auth import get_current_user
 from agent_api.config import get_settings
@@ -21,9 +21,10 @@ from agent_api.db.chat_store import (
     complete_run,
     fail_run,
     list_completed_run_message_histories,
+    list_thread_messages,
     start_run,
 )
-from agent_api.db.models import User
+from agent_api.db.models import Message, User
 from agent_api.db.session import session_factory
 from agent_api.runtime import AgentRuntime, get_runtime
 from agent_api.tools.search.tool import AgentDeps
@@ -101,8 +102,39 @@ def strip_thinking_parts(
     return sanitized_messages
 
 
+def model_history_from_thread_messages(rows: list[Message]) -> list[ModelMessage]:
+    """Rebuild a minimal prompt history from durable user/assistant Message rows."""
+
+    history: list[ModelMessage] = []
+    pending_user: str | None = None
+
+    for row in rows:
+        if row.role == "user":
+            if pending_user is not None:
+                history.append(ModelRequest(parts=[UserPromptPart(content=pending_user)]))
+            pending_user = row.content
+            continue
+
+        if row.role != "assistant":
+            continue
+
+        if pending_user is not None:
+            history.append(ModelRequest(parts=[UserPromptPart(content=pending_user)]))
+            pending_user = None
+
+        history.append(ModelResponse(parts=[TextPart(content=row.content)]))
+
+    return history
+
+
 async def load_thread_model_history(thread_id: UUID, *, user_id: UUID) -> list[ModelMessage]:
-    """Load only server-authored, completed model-message blocks for one Thread."""
+    """Load server-authored history for the next model turn.
+
+    Prefer ``run_message_histories`` snapshots. If they are missing or empty (for example
+    after a partial persist failure), fall back to completed user/assistant Message rows.
+    Callers invoke this after ``start_run``, so the newest trailing user Message belongs to
+    the in-progress turn and must be omitted from the fallback history.
+    """
 
     async with session_factory() as session:
         snapshots = await list_completed_run_message_histories(
@@ -112,11 +144,24 @@ async def load_thread_model_history(thread_id: UUID, *, user_id: UUID) -> list[M
             user_id=user_id,
         )
 
-    history: list[ModelMessage] = []
-    for snapshot in snapshots:
-        history.extend(ModelMessagesTypeAdapter.validate_python(snapshot.messages))
+        history: list[ModelMessage] = []
+        for snapshot in snapshots:
+            history.extend(ModelMessagesTypeAdapter.validate_python(snapshot.messages))
 
-    return history
+        if history:
+            return history
+
+        rows = await list_thread_messages(session, thread_id=thread_id, user_id=user_id)
+
+    if rows and rows[-1].role == "user":
+        rows = rows[:-1]
+
+    # Keep the same run window as HISTORY_MAX_RUNS (each run ~= user+assistant pair).
+    max_messages = get_settings().history_max_runs * 2
+    if len(rows) > max_messages:
+        rows = rows[-max_messages:]
+
+    return model_history_from_thread_messages(rows)
 
 
 async def persist_text_delta(run_id: UUID, delta: str) -> None:

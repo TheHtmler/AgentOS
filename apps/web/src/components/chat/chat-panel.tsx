@@ -749,7 +749,7 @@ export function ChatPanel({
   }
 
   function startNewConversation() {
-    if (!isStreaming && !isLoadingHistory) {
+    if (!isLoadingHistory) {
       onNewConversation();
     }
   }
@@ -809,7 +809,7 @@ export function ChatPanel({
           <button
             type="button"
             onClick={startNewConversation}
-            disabled={isStreaming || isLoadingHistory}
+            disabled={isLoadingHistory}
             className="agentos-new-chat-button text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40"
           >
             新建对话

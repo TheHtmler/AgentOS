@@ -272,8 +272,7 @@ export function ConversationList({
           <button
             type="button"
             onClick={onNewConversation}
-            disabled={isChatStreaming}
-            className="border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-zinc-500 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-40"
+            className="border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-zinc-500 hover:text-zinc-950"
           >
             新建
           </button>
@@ -351,7 +350,7 @@ export function ConversationList({
                         <button
                           type="button"
                           onClick={() => onSelectThread(conversation.id)}
-                          disabled={isChatStreaming || isBusy}
+                          disabled={isBusy}
                           aria-current={active ? "page" : undefined}
                           className={`min-w-0 flex-1 px-1 py-2 text-left transition disabled:cursor-not-allowed ${
                             active ? "" : "hover:bg-zinc-50"
