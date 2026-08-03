@@ -79,43 +79,50 @@ export function InvitationManager() {
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="shrink-0 border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:border-zinc-500 hover:text-zinc-950"
+        className="agentos-invite-trigger shrink-0 px-3 py-2 text-sm font-medium"
       >
         邀请成员
       </button>
 
       {isOpen ? (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-zinc-950/30 p-4"
+          className="agentos-invite-overlay fixed inset-0 z-50 overflow-y-auto p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
           role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsOpen(false);
+            }
+          }}
         >
           <section
             aria-labelledby="invite-title"
-            className="w-full max-w-lg border border-zinc-200 bg-white p-5 shadow-xl sm:p-6"
+            className="agentos-invite-dialog mx-auto my-6 w-full max-w-lg"
             role="dialog"
             aria-modal="true"
           >
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 id="invite-title" className="text-lg font-semibold text-zinc-950">
+              <div className="min-w-0">
+                <h2 id="invite-title" className="agentos-invite-title text-lg font-semibold">
                   创建邀请
                 </h2>
-                <p className="mt-1 text-sm text-zinc-600">生成后请将链接发送给对应成员。</p>
+                <p className="agentos-invite-desc mt-1 text-sm">
+                  生成后请将链接发送给对应成员。
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="shrink-0 border border-zinc-300 px-2 py-1 text-sm text-zinc-700 hover:border-zinc-500"
+                className="agentos-invite-secondary shrink-0 px-2 py-1 text-sm"
                 aria-label="关闭邀请窗口"
               >
                 关闭
               </button>
             </div>
 
-            <label className="mt-5 block text-sm font-medium text-zinc-800" htmlFor="invite-email">
+            <label className="agentos-invite-label mt-5 block text-sm font-medium" htmlFor="invite-email">
               邮箱
             </label>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
               <input
                 id="invite-email"
                 type="email"
@@ -124,40 +131,40 @@ export function InvitationManager() {
                 required
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="name@example.com"
-                className="min-w-0 flex-1 border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-700"
+                className="agentos-invite-input min-w-0 w-full flex-1 px-3 py-2 text-sm outline-none sm:w-auto"
               />
               <button
                 type="button"
                 onClick={() => void submitInvitation()}
                 disabled={isSubmitting || !email.trim()}
-                className="shrink-0 bg-zinc-950 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="agentos-invite-primary w-full shrink-0 px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               >
                 {isSubmitting ? "创建中" : "创建"}
               </button>
             </div>
 
             {error ? (
-              <p role="alert" className="mt-3 text-sm text-rose-700">
+              <p role="alert" className="agentos-invite-error mt-3 text-sm">
                 {error}
               </p>
             ) : null}
 
             {invitation ? (
-              <div className="mt-5 border border-zinc-200 bg-zinc-50 p-3">
-                <p className="text-sm font-medium text-zinc-800">{invitation.email}</p>
-                <p className="mt-1 text-xs text-zinc-500">
+              <div className="agentos-invite-result mt-5 p-3">
+                <p className="agentos-invite-label text-sm font-medium">{invitation.email}</p>
+                <p className="agentos-invite-desc mt-1 text-xs">
                   有效至 {new Date(invitation.expires_at).toLocaleString("zh-CN")}
                 </p>
                 <input
                   readOnly
                   value={invitation.invitation_url}
                   aria-label="邀请链接"
-                  className="mt-3 w-full border border-zinc-300 bg-white px-2 py-2 font-mono text-xs text-zinc-700"
+                  className="agentos-invite-url mt-3 w-full px-2 py-2 font-mono text-xs break-all"
                 />
                 <button
                   type="button"
                   onClick={() => void copyInvitationUrl()}
-                  className="mt-3 border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:border-zinc-500"
+                  className="agentos-invite-secondary mt-3 w-full px-3 py-2 text-sm font-medium sm:w-auto"
                 >
                   {copied ? "已复制" : "复制链接"}
                 </button>

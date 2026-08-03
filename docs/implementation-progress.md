@@ -67,6 +67,7 @@
 - `fetch_url` 工具：Firecrawl → local（trafilatura）降级；SSRF 公网校验；正文截断+大纲；`run_events` 工具摘要；`FETCH_URL_*` / `FIRECRAWL_API_KEY` 配置。
 - Tool Registry + Policy 骨架：按能力域登记工具；裁决顺序 deny → ask → allow；`TOOL_POLICY_DENY` / `TOOL_POLICY_ASK`；现有 `web_search` / `fetch_url` 默认 allow；ask 返回 `approval_required` 占位（无 HITL UI）。
 - 自动会话标题：首轮 Run 成功后后台用模型生成短标题；仅 `title IS NULL` 时写入；`AUTO_THREAD_TITLE_*` 配置；侧栏靠既有 run finalize 刷新拉取。
+- 聊天过程组 UI（Codex 风格）：Thinking + 工具收入「处理中 / 已处理」可折叠组；紧凑工具行；邀请弹窗移动端自适应；深色次要文字对比抬高。
 
 ## 验证
 

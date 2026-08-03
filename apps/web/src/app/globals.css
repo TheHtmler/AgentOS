@@ -64,10 +64,11 @@
   --surface-code: rgba(8, 12, 11, 0.85);
   --border: rgba(57, 255, 154, 0.12);
   --border-strong: rgba(57, 255, 154, 0.22);
-  --text: #e6eee9;
-  --text-secondary: #d4ddd8;
-  --muted: #8a9a92;
-  --placeholder: #5c6e66;
+  --text: #eef4f0;
+  --text-secondary: #dce6e0;
+  /* Secondary copy must stay readable on near-black panels. */
+  --muted: #a8b8b0;
+  --placeholder: #7a8c84;
   --accent: #39ff9a;
   --accent-dim: #22e6a0;
   --accent-soft: rgba(57, 255, 154, 0.1);
@@ -88,7 +89,7 @@
   --message-user-fg: #d8eee4;
   --message-assistant-bg: linear-gradient(110deg, rgba(57, 255, 154, 0.05), transparent 34%),
     rgba(16, 22, 20, 0.82);
-  --message-assistant-fg: #d0dcd6;
+  --message-assistant-fg: #e2ebe6;
   --card-soft: linear-gradient(105deg, rgba(57, 255, 154, 0.08), rgba(16, 22, 20, 0.75) 72%);
   --card-error: linear-gradient(105deg, rgba(255, 107, 122, 0.1), rgba(22, 16, 18, 0.78) 72%);
   --stop-bg: linear-gradient(135deg, rgba(255, 140, 60, 0.35), rgba(200, 90, 40, 0.25));
@@ -230,19 +231,19 @@ body {
 
 [data-theme="dark"] .agentos-app .text-zinc-500,
 [data-theme="dark"] .agentos-auth-shell .text-zinc-500 {
-  color: #6f8179;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .agentos-app .text-zinc-400,
 [data-theme="dark"] .agentos-auth-shell .text-zinc-400 {
-  color: #5c6e66;
+  color: var(--muted);
 }
 
 [data-theme="dark"] .agentos-app .text-zinc-300,
 [data-theme="dark"] .agentos-app .text-zinc-200,
 [data-theme="dark"] .agentos-auth-shell .text-zinc-300,
 [data-theme="dark"] .agentos-auth-shell .text-zinc-200 {
-  color: #a8b8b0;
+  color: var(--text-secondary);
 }
 
 [data-theme="dark"] .agentos-app .text-teal-700,
@@ -654,7 +655,7 @@ body {
 }
 
 .agentos-message-meta {
-  color: var(--placeholder);
+  color: var(--muted);
   font-weight: 400;
 }
 
@@ -676,12 +677,33 @@ body {
   margin-bottom: 0;
 }
 
+.agentos-md h1,
+.agentos-md h2,
+.agentos-md h3 {
+  margin: 1em 0 0.45em;
+  color: var(--text);
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.agentos-md h1 {
+  font-size: 1.25em;
+}
+
+.agentos-md h2 {
+  font-size: 1.12em;
+}
+
+.agentos-md h3 {
+  font-size: 1.02em;
+}
+
 .agentos-md p,
 .agentos-md ul,
 .agentos-md ol,
 .agentos-md pre,
 .agentos-md blockquote {
-  margin: 0.65em 0;
+  margin: 0.75em 0;
 }
 
 .agentos-md ul,
@@ -724,39 +746,69 @@ body {
   white-space: pre-wrap;
 }
 
-.agentos-md h1,
-.agentos-md h2,
-.agentos-md h3 {
-  margin: 1em 0 0.4em;
-  font-weight: 650;
-  line-height: 1.35;
-}
-
-.agentos-md h1 {
-  font-size: 1.2rem;
-}
-
-.agentos-md h2 {
-  font-size: 1.1rem;
-}
-
-.agentos-md h3 {
-  font-size: 1rem;
-}
-
 .agentos-md blockquote {
   border-left: 3px solid var(--accent-border);
   padding-left: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.agentos-chat-heading {
+  color: var(--text);
+}
+
+.agentos-chat-subheading {
+  color: var(--text-secondary);
+}
+
+/* ── Process group (Codex-style collapse) ── */
+.agentos-process-group {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-muted);
+}
+
+.agentos-process-group-active {
+  border-color: var(--accent-border);
+}
+
+.agentos-process-group-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.85rem;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.agentos-process-group-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.agentos-process-group-chevron {
+  flex-shrink: 0;
   color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.agentos-process-group-body {
+  display: grid;
+  gap: 0.35rem;
+  border-top: 1px solid var(--border);
+  padding: 0.45rem 0.55rem 0.55rem;
 }
 
 /* ── Reasoning step ── */
 .agentos-reasoning {
   overflow: hidden;
-  border: 1px solid var(--accent-border);
-  border-radius: 8px;
-  background: var(--card-soft);
-  box-shadow: var(--shadow);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
 }
 
 .agentos-reasoning-toggle {
@@ -792,35 +844,33 @@ body {
 }
 
 .agentos-reasoning-content {
-  max-height: 18rem;
+  max-height: 14rem;
   overflow: auto;
   margin: 0;
   border-top: 1px solid var(--border);
-  padding: 0.8rem 0.9rem;
-  color: var(--muted);
+  padding: 0.55rem 0.75rem;
+  color: var(--text-secondary);
   font-size: 0.75rem;
-  line-height: 1.7;
+  line-height: 1.65;
   white-space: pre-wrap;
 }
 
 .agentos-reasoning-running {
-  border-color: var(--accent-border);
-  box-shadow:
-    0 0 0 1px var(--accent-softer),
-    var(--shadow);
+  border-color: var(--border);
+  background: var(--accent-softer);
 }
 
 .agentos-reasoning-running .agentos-reasoning-indicator {
   animation: agentos-thinking-pulse 1.2s ease-in-out infinite;
 }
 
-/* ── Tool call ── */
+/* ── Tool call (compact Codex-style row) ── */
 .agentos-tool-call {
   overflow: hidden;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--card-soft);
-  box-shadow: var(--shadow);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
 }
 
 .agentos-tool-call-toggle {
@@ -828,8 +878,8 @@ body {
   width: 100%;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 0.9rem;
+  gap: 0.75rem;
+  padding: 0.35rem 0.5rem;
   color: var(--text-secondary);
   text-align: left;
 }
@@ -837,20 +887,30 @@ body {
 .agentos-tool-call-title {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
   min-width: 0;
   font-size: 0.8rem;
-  font-weight: 600;
+  font-weight: 500;
   word-break: break-word;
 }
 
-.agentos-tool-call-indicator {
+.agentos-tool-call-icon {
   flex-shrink: 0;
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 999px;
-  background: var(--accent-dim);
-  box-shadow: 0 0 6px var(--accent-glow);
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.agentos-tool-call-headline {
+  min-width: 0;
+  color: var(--text);
+}
+
+.agentos-tool-call-badge {
+  flex-shrink: 0;
+  margin-left: 0.25rem;
+  color: var(--danger);
+  font-size: 0.7rem;
+  font-weight: 600;
 }
 
 .agentos-tool-call-state {
@@ -861,12 +921,12 @@ body {
 
 .agentos-tool-call-content {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.55rem;
   border-top: 1px solid var(--border);
-  padding: 0.8rem 0.9rem;
-  color: var(--muted);
+  padding: 0.55rem 0.65rem;
+  color: var(--text-secondary);
   font-size: 0.75rem;
-  line-height: 1.7;
+  line-height: 1.65;
 }
 
 .agentos-tool-call-content pre {
@@ -886,24 +946,106 @@ body {
 }
 
 .agentos-tool-call-running {
-  border-color: var(--accent-border);
-  box-shadow:
-    0 0 0 1px var(--accent-softer),
-    var(--shadow);
+  background: var(--accent-softer);
 }
 
-.agentos-tool-call-running .agentos-tool-call-indicator {
+.agentos-tool-call-running .agentos-tool-call-headline {
   animation: agentos-thinking-pulse 1.2s ease-in-out infinite;
 }
 
 .agentos-tool-call-error {
-  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
-  background: var(--card-error);
+  background: var(--danger-soft);
 }
 
-.agentos-tool-call-error .agentos-tool-call-indicator {
-  background: var(--danger);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--danger) 40%, transparent);
+.agentos-tool-call-error .agentos-tool-call-headline {
+  color: var(--danger);
+}
+
+/* ── Invite dialog ── */
+.agentos-invite-trigger {
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel-solid);
+  color: var(--text);
+}
+
+.agentos-invite-trigger:hover {
+  border-color: var(--accent-border);
+  color: var(--accent-dim);
+}
+
+.agentos-invite-overlay {
+  display: grid;
+  align-items: start;
+  justify-items: center;
+  background: var(--overlay);
+}
+
+.agentos-invite-dialog {
+  max-height: min(90dvh, 40rem);
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--panel-solid);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+}
+
+.agentos-invite-title {
+  color: var(--text);
+}
+
+.agentos-invite-desc {
+  color: var(--text-secondary);
+}
+
+.agentos-invite-label {
+  color: var(--text);
+}
+
+.agentos-invite-input,
+.agentos-invite-url {
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-input);
+  color: var(--text);
+}
+
+.agentos-invite-input::placeholder {
+  color: var(--placeholder);
+}
+
+.agentos-invite-input:focus {
+  border-color: var(--accent-border);
+}
+
+.agentos-invite-primary {
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--send-fg);
+}
+
+.agentos-invite-secondary {
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.agentos-invite-secondary:hover {
+  border-color: var(--accent-border);
+  color: var(--text);
+}
+
+.agentos-invite-result {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+}
+
+.agentos-invite-error {
+  color: var(--danger);
 }
 
 /* ── Composer & actions ── */

@@ -18,12 +18,11 @@ export function ThinkingStepCard({
   index: number;
   onToggle: () => void;
 }) {
-  const title =
-    step.status === "done" ? `Thinking #${index}` : `Thinking #${index}...`;
+  const title = step.status === "done" ? `思考 ${index}` : `思考 ${index}…`;
 
   return (
     <section
-      className={`agentos-reasoning max-w-[92%] sm:max-w-[85%] ${
+      className={`agentos-reasoning ${
         step.status === "running" ? "agentos-reasoning-running" : ""
       }`}
     >
@@ -37,8 +36,8 @@ export function ThinkingStepCard({
           <span aria-hidden="true" className="agentos-reasoning-indicator" />
           {title}
         </span>
-        <span className="agentos-reasoning-state">
-          {step.status === "done" ? "已完成" : "运行中"} · {step.expanded ? "收起" : "展开"}
+        <span className="agentos-reasoning-state" aria-hidden="true">
+          {step.expanded ? "▾" : "▸"}
         </span>
       </button>
 

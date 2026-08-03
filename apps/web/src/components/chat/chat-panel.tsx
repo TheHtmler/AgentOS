@@ -4,6 +4,7 @@ import { HttpAgent, type Message } from "@ag-ui/client";
 import { FormEvent, Fragment, KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
+import { ProcessGroup } from "@/components/chat/process-group";
 import {
   ThinkingStepCard,
   type ThinkingStepState,
@@ -820,10 +821,10 @@ export function ChatPanel({
     >
       <header className="agentos-chat-header flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3.5 sm:px-5 sm:py-4">
         <div>
-          <p className="text-sm font-semibold text-zinc-950">
+          <p className="agentos-chat-heading text-sm font-semibold">
             {threadId === null ? "新建 Agent 会话" : "Agent conversation"}
           </p>
-          <p className="mt-1 text-xs text-zinc-500">
+          <p className="agentos-chat-subheading mt-1 text-xs">
             {threadId === null ? "准备新的执行上下文" : "当前 Thread 已恢复"}
           </p>
         </div>
@@ -852,9 +853,9 @@ export function ChatPanel({
         <div className="mx-auto max-w-3xl space-y-5">
           {messages.length === 0 ? (
             <div className="agentos-empty-state flex min-h-72 flex-col justify-center py-8">
-              <p className="text-lg font-semibold text-zinc-950">从一个任务开始</p>
-              <p className="mt-2 max-w-lg text-sm leading-6 text-zinc-500">
-                AgentOS 会在同一条运行轨迹中展示对话、Thinking 与最终执行结果。
+              <p className="agentos-chat-heading text-lg font-semibold">从一个任务开始</p>
+              <p className="agentos-chat-subheading mt-2 max-w-lg text-sm leading-6">
+                AgentOS 会在同一条运行轨迹中展示对话、思考过程与最终执行结果。
               </p>
               <div className="mt-6 flex flex-col items-start gap-2">
                 {STARTER_PROMPTS.map((prompt) => (
@@ -880,7 +881,53 @@ export function ChatPanel({
                   ? []
                   : historyToolCalls.filter((toolCall) => toolCall.afterMessageId === message.id);
 
+              // Duration for the process group comes from the following assistant reply.
+              const followingAssistant =
+                message.role === "user"
+                  ? messages.slice(index + 1).find((item) => item.role === "assistant")
+                  : undefined;
+              const processStepsActive =
+                message.role === "user" &&
+                isStreaming &&
+                liveUserMessageId === message.id &&
+                (liveSteps.length > 0 ||
+                  (followingAssistant !== undefined && !followingAssistant.content));
+
               let thinkingOrdinal = 0;
+              const processChildren =
+                message.role === "user"
+                  ? [
+                      ...liveSteps.map((step) => {
+                        if (step.kind === "thinking") {
+                          thinkingOrdinal += 1;
+                          const ordinal = thinkingOrdinal;
+                          return (
+                            <ThinkingStepCard
+                              key={step.id}
+                              step={step}
+                              index={ordinal}
+                              onToggle={() => toggleTimelineStep(step.id)}
+                            />
+                          );
+                        }
+
+                        return (
+                          <ToolCallCard
+                            key={step.id}
+                            toolCall={step}
+                            onToggle={() => toggleTimelineStep(step.id)}
+                          />
+                        );
+                      }),
+                      ...historicalTools.map((toolCall) => (
+                        <ToolCallCard
+                          key={toolCall.id}
+                          toolCall={toolCall}
+                          onToggle={() => toggleHistoryToolCall(toolCall.id)}
+                        />
+                      )),
+                    ]
+                  : [];
 
               return (
                 <Fragment key={message.id}>
@@ -929,43 +976,19 @@ export function ChatPanel({
                         <p className="break-words whitespace-pre-wrap">{message.content}</p>
                       )
                     ) : message.role === "assistant" && isStreaming ? (
-                      <p aria-live="polite" className="text-zinc-500">
+                      <p aria-live="polite" className="agentos-chat-subheading">
                         正在生成最终回答...
                       </p>
                     ) : null}
                   </article>
 
-                  {message.role === "user" ? (
-                    <>
-                      {liveSteps.map((step) => {
-                        if (step.kind === "thinking") {
-                          thinkingOrdinal += 1;
-                          return (
-                            <ThinkingStepCard
-                              key={step.id}
-                              step={step}
-                              index={thinkingOrdinal}
-                              onToggle={() => toggleTimelineStep(step.id)}
-                            />
-                          );
-                        }
-
-                        return (
-                          <ToolCallCard
-                            key={step.id}
-                            toolCall={step}
-                            onToggle={() => toggleTimelineStep(step.id)}
-                          />
-                        );
-                      })}
-                      {historicalTools.map((toolCall) => (
-                        <ToolCallCard
-                          key={toolCall.id}
-                          toolCall={toolCall}
-                          onToggle={() => toggleHistoryToolCall(toolCall.id)}
-                        />
-                      ))}
-                    </>
+                  {message.role === "user" && processChildren.length > 0 ? (
+                    <ProcessGroup
+                      isActive={processStepsActive}
+                      durationLabel={followingAssistant?.durationLabel}
+                    >
+                      {processChildren}
+                    </ProcessGroup>
                   ) : null}
                 </Fragment>
               );
@@ -1010,7 +1033,7 @@ export function ChatPanel({
         />
 
         <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-xs text-zinc-500">
+          <span className="agentos-chat-subheading text-xs">
             {draft.length}/4000 <span className="hidden sm:inline">Shift + Enter 换行</span>
           </span>
 

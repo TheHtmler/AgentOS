@@ -59,37 +59,56 @@ function urlFromArgsText(argsText: string): string | null {
   return null;
 }
 
-function statusLabel(status: ToolCallStatus): string {
-  if (status === "running") {
-    return "运行中";
+function shortUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname === "/" ? "" : parsed.pathname;
+    const display = `${parsed.hostname}${path}`;
+    return display.length > 48 ? `${display.slice(0, 47)}…` : display;
+  } catch {
+    return url.length > 48 ? `${url.slice(0, 47)}…` : url;
   }
-
-  if (status === "error") {
-    return "失败";
-  }
-
-  return "完成";
 }
 
-function collapsedSummary(toolCall: ToolCallState): string {
+function truncate(text: string, max = 42): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= max) {
+    return normalized;
+  }
+  return `${normalized.slice(0, max - 1)}…`;
+}
+
+function toolIcon(toolName: string): string {
+  if (toolName === "web_search") {
+    return "🌐";
+  }
+  if (toolName === "fetch_url") {
+    return "🔗";
+  }
+  return "⚙";
+}
+
+/** Codex-style one-line verb phrase for the collapsed tool row. */
+export function toolCallHeadline(toolCall: ToolCallState): string {
   const query = queryFromArgsText(toolCall.argsText);
   const url = urlFromArgsText(toolCall.argsText);
-  const parts = [toolCall.toolName];
+  const running = toolCall.status === "running";
 
-  if (query) {
-    parts.push(query);
-  } else if (url) {
-    parts.push(url);
+  if (toolCall.toolName === "web_search") {
+    const target = query ? truncate(query) : "…";
+    return running ? `正在搜索：${target}` : `已搜索网页：${target}`;
   }
 
-  const status = statusLabel(toolCall.status);
-  if (toolCall.provider && toolCall.status !== "running") {
-    parts.push(`${status}（${toolCall.provider}）`);
-  } else {
-    parts.push(status);
+  if (toolCall.toolName === "fetch_url") {
+    const target = url ? shortUrl(url) : "…";
+    return running ? `正在打开：${target}` : `已打开链接：${target}`;
   }
 
-  return parts.join(" · ");
+  if (running) {
+    return `正在调用 ${toolCall.toolName}`;
+  }
+
+  return `已调用 ${toolCall.toolName}`;
 }
 
 export function ToolCallCard({
@@ -101,10 +120,11 @@ export function ToolCallCard({
 }) {
   const query = queryFromArgsText(toolCall.argsText);
   const url = urlFromArgsText(toolCall.argsText);
+  const headline = toolCallHeadline(toolCall);
 
   return (
     <section
-      className={`agentos-tool-call max-w-[92%] sm:max-w-[85%] ${
+      className={`agentos-tool-call ${
         toolCall.status === "running" ? "agentos-tool-call-running" : ""
       } ${toolCall.status === "error" ? "agentos-tool-call-error" : ""}`}
     >
@@ -115,11 +135,16 @@ export function ToolCallCard({
         className="agentos-tool-call-toggle"
       >
         <span className="agentos-tool-call-title">
-          <span aria-hidden="true" className="agentos-tool-call-indicator" />
-          {collapsedSummary(toolCall)}
+          <span aria-hidden="true" className="agentos-tool-call-icon">
+            {toolIcon(toolCall.toolName)}
+          </span>
+          <span className="agentos-tool-call-headline">{headline}</span>
+          {toolCall.status === "error" ? (
+            <span className="agentos-tool-call-badge">失败</span>
+          ) : null}
         </span>
-        <span className="agentos-tool-call-state">
-          {toolCall.expanded ? "收起" : "展开"}
+        <span className="agentos-tool-call-state" aria-hidden="true">
+          {toolCall.expanded ? "▾" : "▸"}
         </span>
       </button>
 
@@ -137,7 +162,7 @@ export function ToolCallCard({
               {url}
             </p>
           ) : null}
-          {toolCall.argsText.trim() ? (
+          {toolCall.argsText.trim() && !query && !url ? (
             <pre>{toolCall.argsText.trim()}</pre>
           ) : null}
           {toolCall.provider ? (
@@ -176,6 +201,14 @@ export function summarizeToolResultContent(content: string): {
       if (typeof record.error === "string" && record.error.trim()) {
         return {
           summary: record.error.slice(0, 500),
+          provider,
+          status: "error",
+        };
+      }
+
+      if (typeof record.status === "string" && record.status === "approval_required") {
+        return {
+          summary: "需要审批后才能执行",
           provider,
           status: "error",
         };
