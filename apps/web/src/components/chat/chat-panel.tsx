@@ -1,7 +1,16 @@
 "use client";
 
 import { HttpAgent, type Message } from "@ag-ui/client";
-import { FormEvent, Fragment, KeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+  FormEvent,
+  Fragment,
+  KeyboardEvent,
+  TouchEvent,
+  WheelEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
 import { ProcessGroup } from "@/components/chat/process-group";
@@ -51,7 +60,7 @@ const STARTER_PROMPTS = [
   "请审查下面的思路，指出不成立的假设。",
 ];
 
-const AUTO_SCROLL_THRESHOLD = 96;
+const AUTO_SCROLL_THRESHOLD = 80;
 const MAX_COMPOSER_HEIGHT = 200;
 
 function isUuid(value: string): boolean {
@@ -321,7 +330,11 @@ export function ChatPanel({
 
   const agentRef = useRef<HttpAgent | null>(null);
   const cancellationRequestedRef = useRef(false);
+  // Follow new tokens only while the user stays near the bottom.
   const autoScrollRef = useRef(true);
+  // Ignore scroll events caused by our own scrollTo(bottom) calls.
+  const programmaticScrollRef = useRef(false);
+  const touchStartYRef = useRef<number | null>(null);
   const isActiveRef = useRef(isActive);
   const initialThreadIdRef = useRef<string | null | undefined>(undefined);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
@@ -464,9 +477,14 @@ export function ChatPanel({
       return;
     }
 
+    programmaticScrollRef.current = true;
     viewport.scrollTo({
       top: viewport.scrollHeight,
       behavior,
+    });
+    // Clear after the browser applies the scroll so onScroll does not treat it as user intent.
+    window.requestAnimationFrame(() => {
+      programmaticScrollRef.current = false;
     });
   }
 
@@ -481,7 +499,40 @@ export function ChatPanel({
     scrollMessagesToBottom("smooth");
   }
 
+  function pauseAutoScroll() {
+    // User is reading history; do not yank them back when new tokens arrive.
+    if (!autoScrollRef.current) {
+      return;
+    }
+    autoScrollRef.current = false;
+    setShowScrollToLatest(true);
+  }
+
+  function handleViewportWheel(event: WheelEvent<HTMLDivElement>) {
+    // deltaY < 0 means scrolling up toward older messages.
+    if (event.deltaY < 0) {
+      pauseAutoScroll();
+    }
+  }
+
+  function handleViewportTouchStart(event: TouchEvent<HTMLDivElement>) {
+    touchStartYRef.current = event.touches[0]?.clientY ?? null;
+  }
+
+  function handleViewportTouchMove(event: TouchEvent<HTMLDivElement>) {
+    const startY = touchStartYRef.current;
+    const currentY = event.touches[0]?.clientY;
+    // Finger moved down → content scrolls up → user is leaving the live edge.
+    if (startY !== null && currentY !== undefined && currentY - startY > 10) {
+      pauseAutoScroll();
+    }
+  }
+
   function handleMessageScroll() {
+    if (programmaticScrollRef.current) {
+      return;
+    }
+
     const viewport = messagesViewportRef.current;
 
     if (viewport === null) {
@@ -489,8 +540,9 @@ export function ChatPanel({
     }
 
     const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-    autoScrollRef.current = distanceFromBottom < AUTO_SCROLL_THRESHOLD;
-    setShowScrollToLatest(!autoScrollRef.current);
+    const nearBottom = distanceFromBottom < AUTO_SCROLL_THRESHOLD;
+    autoScrollRef.current = nearBottom;
+    setShowScrollToLatest(!nearBottom);
   }
 
   async function copyAssistantMessage(message: ChatMessage) {
@@ -849,6 +901,9 @@ export function ChatPanel({
       <div
         ref={messagesViewportRef}
         onScroll={handleMessageScroll}
+        onWheel={handleViewportWheel}
+        onTouchStart={handleViewportTouchStart}
+        onTouchMove={handleViewportTouchMove}
         className="agentos-message-viewport min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5"
       >
         <div className="mx-auto max-w-3xl space-y-5">
