@@ -778,6 +778,7 @@ body {
 
 .agentos-md pre {
   overflow: auto;
+  overscroll-behavior: contain;
   max-height: 22rem;
   margin: 0;
   border: 0;

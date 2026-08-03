@@ -12,7 +12,10 @@ import {
   useState,
 } from "react";
 
-import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
+import {
+  AssistantMarkdown,
+  PAUSE_CHAT_AUTOSCROLL_EVENT,
+} from "@/components/chat/assistant-markdown";
 import { ProcessGroup } from "@/components/chat/process-group";
 import {
   ThinkingStepCard,
@@ -375,6 +378,16 @@ export function ChatPanel({
   }, [messages, timelineSteps]);
 
   useEffect(() => {
+    // Code blocks (and other nested panes) ask the chat to stop following the live edge.
+    const onPause = () => {
+      autoScrollRef.current = false;
+      setShowScrollToLatest(true);
+    };
+    window.addEventListener(PAUSE_CHAT_AUTOSCROLL_EVENT, onPause);
+    return () => window.removeEventListener(PAUSE_CHAT_AUTOSCROLL_EVENT, onPause);
+  }, []);
+
+  useEffect(() => {
     const textarea = textareaRef.current;
 
     if (textarea === null) {
@@ -509,6 +522,13 @@ export function ChatPanel({
   }
 
   function handleViewportWheel(event: WheelEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (target instanceof Element && target.closest(".agentos-code-block")) {
+      // Nested code scroll owns the gesture; never yank the chat while reading code.
+      pauseAutoScroll();
+      return;
+    }
+
     // deltaY < 0 means scrolling up toward older messages.
     if (event.deltaY < 0) {
       pauseAutoScroll();
