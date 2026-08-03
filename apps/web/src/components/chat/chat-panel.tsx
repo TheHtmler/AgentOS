@@ -611,6 +611,7 @@ export function ChatPanel({
           );
         },
         onToolCallStartEvent: ({ event }) => {
+          // Keep tools as a single status line; details only after the user expands.
           setTimelineSteps((current) =>
             upsertTimelineStep(current, {
               kind: "tool",
@@ -618,7 +619,7 @@ export function ChatPanel({
               toolName: event.toolCallName,
               argsText: "",
               status: "running",
-              expanded: true,
+              expanded: false,
               afterMessageId: userMessageId,
             }),
           );
@@ -637,7 +638,7 @@ export function ChatPanel({
               status: existing?.status ?? "running",
               resultSummary: existing?.resultSummary,
               provider: existing?.provider,
-              expanded: existing?.expanded ?? true,
+              expanded: existing?.expanded ?? false,
               afterMessageId: existing?.afterMessageId ?? userMessageId,
             });
           });
@@ -656,7 +657,7 @@ export function ChatPanel({
               status: existing?.status ?? "running",
               resultSummary: existing?.resultSummary,
               provider: existing?.provider,
-              expanded: existing?.expanded ?? true,
+              expanded: existing?.expanded ?? false,
               afterMessageId: existing?.afterMessageId ?? userMessageId,
             });
           });

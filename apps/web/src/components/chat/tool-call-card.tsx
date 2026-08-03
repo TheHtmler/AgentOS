@@ -64,13 +64,13 @@ function shortUrl(url: string): string {
     const parsed = new URL(url);
     const path = parsed.pathname === "/" ? "" : parsed.pathname;
     const display = `${parsed.hostname}${path}`;
-    return display.length > 48 ? `${display.slice(0, 47)}…` : display;
+    return display.length > 56 ? `${display.slice(0, 55)}…` : display;
   } catch {
-    return url.length > 48 ? `${url.slice(0, 47)}…` : url;
+    return url.length > 56 ? `${url.slice(0, 55)}…` : url;
   }
 }
 
-function truncate(text: string, max = 42): string {
+function truncate(text: string, max = 48): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (normalized.length <= max) {
     return normalized;
@@ -83,32 +83,48 @@ function toolIcon(toolName: string): string {
     return "🌐";
   }
   if (toolName === "fetch_url") {
-    return "🔗";
+    return "📄";
   }
   return "⚙";
 }
 
-/** Codex-style one-line verb phrase for the collapsed tool row. */
+/**
+ * Single-line Codex-style status: 正在… / 已… (+ short target).
+ * Keep verb phrases tool-specific so the row reads as an action log, not a card title.
+ */
 export function toolCallHeadline(toolCall: ToolCallState): string {
   const query = queryFromArgsText(toolCall.argsText);
   const url = urlFromArgsText(toolCall.argsText);
-  const running = toolCall.status === "running";
 
   if (toolCall.toolName === "web_search") {
-    const target = query ? truncate(query) : "…";
-    return running ? `正在搜索：${target}` : `已搜索网页：${target}`;
+    if (toolCall.status === "running") {
+      return query ? `正在搜索网页：${truncate(query)}` : "正在搜索网页…";
+    }
+    if (toolCall.status === "error") {
+      return query ? `搜索网页失败：${truncate(query)}` : "搜索网页失败";
+    }
+    return query ? `已搜索网页：${truncate(query)}` : "已完成搜索";
   }
 
   if (toolCall.toolName === "fetch_url") {
-    const target = url ? shortUrl(url) : "…";
-    return running ? `正在打开：${target}` : `已打开链接：${target}`;
+    const target = url ? shortUrl(url) : null;
+    if (toolCall.status === "running") {
+      return target ? `正在读取：${target}` : "正在读取网页…";
+    }
+    if (toolCall.status === "error") {
+      return target ? `读取失败：${target}` : "读取网页失败";
+    }
+    return target ? `已读取：${target}` : "已完成读取";
   }
 
-  if (running) {
-    return `正在调用 ${toolCall.toolName}`;
+  // Future tools (file/edit/shell) can plug verb maps here.
+  if (toolCall.status === "running") {
+    return `正在调用 ${toolCall.toolName}…`;
   }
-
-  return `已调用 ${toolCall.toolName}`;
+  if (toolCall.status === "error") {
+    return `${toolCall.toolName} 失败`;
+  }
+  return `已完成 ${toolCall.toolName}`;
 }
 
 export function ToolCallCard({
@@ -133,15 +149,13 @@ export function ToolCallCard({
         onClick={onToggle}
         aria-expanded={toolCall.expanded}
         className="agentos-tool-call-toggle"
+        title={headline}
       >
         <span className="agentos-tool-call-title">
           <span aria-hidden="true" className="agentos-tool-call-icon">
             {toolIcon(toolCall.toolName)}
           </span>
           <span className="agentos-tool-call-headline">{headline}</span>
-          {toolCall.status === "error" ? (
-            <span className="agentos-tool-call-badge">失败</span>
-          ) : null}
         </span>
         <span className="agentos-tool-call-state" aria-hidden="true">
           {toolCall.expanded ? "▾" : "▸"}

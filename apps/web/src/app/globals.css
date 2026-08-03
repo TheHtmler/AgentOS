@@ -889,34 +889,31 @@ body {
   align-items: center;
   gap: 0.45rem;
   min-width: 0;
-  font-size: 0.8rem;
-  font-weight: 500;
-  word-break: break-word;
+  flex: 1 1 auto;
+  font-size: 0.8125rem;
+  font-weight: 450;
 }
 
 .agentos-tool-call-icon {
   flex-shrink: 0;
   font-size: 0.85rem;
   line-height: 1;
+  opacity: 0.9;
 }
 
 .agentos-tool-call-headline {
   min-width: 0;
-  color: var(--text);
-}
-
-.agentos-tool-call-badge {
-  flex-shrink: 0;
-  margin-left: 0.25rem;
-  color: var(--danger);
-  font-size: 0.7rem;
-  font-weight: 600;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agentos-tool-call-state {
   flex-shrink: 0;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
+  opacity: 0.7;
 }
 
 .agentos-tool-call-content {
@@ -945,16 +942,8 @@ body {
   font-weight: 600;
 }
 
-.agentos-tool-call-running {
-  background: var(--accent-softer);
-}
-
 .agentos-tool-call-running .agentos-tool-call-headline {
-  animation: agentos-thinking-pulse 1.2s ease-in-out infinite;
-}
-
-.agentos-tool-call-error {
-  background: var(--danger-soft);
+  color: var(--text);
 }
 
 .agentos-tool-call-error .agentos-tool-call-headline {
