@@ -15,6 +15,9 @@ def test_default_settings() -> None:
     assert settings.ollama_model == "agentos-gemma4:8k"
     assert settings.model_temperature == 0.3
     assert settings.model_max_concurrent_runs == 3
+    # Class default (local .env may still override the instance value).
+    assert Settings.model_fields["model_max_output_tokens"].default == 4_096
+
     assert settings.search_enabled is True
     assert settings.search_providers == ["tavily", "duckduckgo"]
     assert settings.fetch_url_enabled is True

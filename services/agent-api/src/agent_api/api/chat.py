@@ -26,6 +26,7 @@ from agent_api.db.chat_store import (
 )
 from agent_api.db.models import Message, User
 from agent_api.db.session import session_factory
+from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import AgentRuntime, get_runtime
 from agent_api.thread_title import schedule_auto_thread_title
 from agent_api.tools.search.tool import AgentDeps
@@ -261,7 +262,8 @@ async def event_stream(
                 await persist_cancelled_run(run_id)
                 return
 
-            output = result.output
+            new_messages = result.new_messages()
+            output = with_truncation_notice_if_needed(result.output, new_messages)
             for delta in chunk_assistant_text(output):
                 if await request.is_disconnected():
                     await persist_cancelled_run(run_id)

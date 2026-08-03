@@ -27,6 +27,7 @@ from agent_api.config import get_settings
 from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_run
 from agent_api.db.models import User
 from agent_api.db.session import session_factory
+from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import get_runtime
 from agent_api.thread_title import schedule_auto_thread_title
 from agent_api.tools.search.tool import AgentDeps
@@ -161,13 +162,19 @@ async def stream_ag_ui_run(
     async def persist_completed(result: AgentRunResult[str]) -> None:
         try:
             usage = result.usage
+            new_messages = result.new_messages()
+            # Surface max_tokens cuts so users know to continue or raise the limit.
+            assistant_content = with_truncation_notice_if_needed(
+                result.output,
+                new_messages,
+            )
             await persist_completed_run(
                 run_id=started.run_id,
-                assistant_content=result.output,
+                assistant_content=assistant_content,
                 model_messages=strip_thinking_parts(
                     parse_model_messages_json(
                         ModelMessagesTypeAdapter.dump_json(
-                            [*adapter.messages, *result.new_messages()],
+                            [*adapter.messages, *new_messages],
                         ),
                     ),
                 ),
@@ -181,7 +188,7 @@ async def stream_ag_ui_run(
                 schedule_auto_thread_title(
                     thread_id=started.thread_id,
                     user_message=prompt,
-                    assistant_content=result.output,
+                    assistant_content=assistant_content,
                     model_semaphore=runtime.model_semaphore,
                     http_client=runtime.ollama_http_client,
                 )
