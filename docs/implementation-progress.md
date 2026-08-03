@@ -55,6 +55,8 @@
 - 聊天与 AG-UI Run 通过 `AgentDeps` 注入 router 与 `run_id`；工具调用写入 `tool_call` / `tool_result` run_events 摘要。
 - `SEARCH_ENABLED=false` 时不向模型注册搜索工具。
 - 聊天流改为 `agent.run()` 完成工具循环后再 SSE 输出最终回答，避免 `run_stream` 在 `web_search` 后提前结束。
+- AG-UI 主对话时间线内联展示可折叠 ToolCall 卡：订阅 `onToolCallStart/Args/End/Result`，运行中展开、完成后折叠。
+- `GET /v1/threads/{id}/messages` 增加 `tool_calls`（来自 `run_events` 摘要，按 Run↔user message 顺序锚定 `after_message_id`）；刷新后工具卡可恢复。
 
 ## 验证
 
@@ -75,8 +77,8 @@
 ## 未完成
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
-- `fetch_url` / Firecrawl、完整 tool message 历史回放、前端工具状态展示。
-- HITL、MCP 和 Sandbox。
+- `fetch_url` / Firecrawl、完整 `messages.role=tool` 模型历史对齐。
+- HITL、MCP 和 Sandbox；侧栏 Run 活动时间线与按工具类型的富展示。
 
 ## 下一步
 

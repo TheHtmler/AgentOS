@@ -9,6 +9,7 @@ from agent_api.api.auth import get_current_user
 from agent_api.db.chat_store import (
     ThreadNotFoundError,
     list_thread_messages,
+    list_thread_tool_calls,
     list_threads,
 )
 from agent_api.db.models import User
@@ -41,11 +42,24 @@ class ThreadMessageResponse(BaseModel):
     created_at: datetime
 
 
+class ThreadToolCallResponse(BaseModel):
+    """One completed tool call summary safe to render in the chat timeline."""
+
+    id: UUID
+    tool_name: str
+    args: dict[str, object]
+    status: str
+    provider: str | None
+    summary: str
+    after_message_id: UUID
+
+
 class ThreadMessagesResponse(BaseModel):
     """Ordered durable messages belonging to one existing Thread."""
 
     thread_id: UUID
     messages: list[ThreadMessageResponse]
+    tool_calls: list[ThreadToolCallResponse] = []
 
 
 @router.get("", response_model=ThreadListResponse)
@@ -81,6 +95,11 @@ async def get_thread_messages(
     try:
         async with session_factory() as session:
             messages = await list_thread_messages(session, thread_id=thread_id, user_id=user.id)
+            tool_calls = await list_thread_tool_calls(
+                session,
+                thread_id=thread_id,
+                user_id=user.id,
+            )
     except ThreadNotFoundError as error:
         raise HTTPException(status_code=404, detail="Thread not found") from error
 
@@ -94,5 +113,17 @@ async def get_thread_messages(
                 created_at=message.created_at,
             )
             for message in messages
+        ],
+        tool_calls=[
+            ThreadToolCallResponse(
+                id=tool_call.id,
+                tool_name=tool_call.tool_name,
+                args=tool_call.args,
+                status=tool_call.status,
+                provider=tool_call.provider,
+                summary=tool_call.summary,
+                after_message_id=tool_call.after_message_id,
+            )
+            for tool_call in tool_calls
         ],
     )

@@ -14,6 +14,7 @@ from agent_api.db.chat_store import (
     complete_run,
     list_completed_run_message_histories,
     list_thread_messages,
+    list_thread_tool_calls,
     start_run,
 )
 from agent_api.db.models import Run, RunEvent, RunMessageHistory, Thread
@@ -158,6 +159,85 @@ async def test_tool_events_are_appended_for_web_search(
         ]
         assert events[2].payload["provider"] == "duckduckgo"
         assert events[2].payload["ok"] is True
+    finally:
+        await transaction.rollback()
+
+
+@pytest.mark.anyio
+async def test_list_thread_tool_calls_anchors_to_matching_user_message(
+    database_session: AsyncSession,
+) -> None:
+    session = database_session
+    transaction = await session.begin()
+
+    try:
+        first = await start_run(
+            session,
+            thread_id=None,
+            user_content="第一轮搜索",
+            model_name="gemma4:e4b",
+        )
+        await append_tool_call_event(
+            session,
+            run_id=first.run_id,
+            tool_name="web_search",
+            args={"query": "第一轮搜索", "max_results": 5},
+        )
+        await append_tool_result_event(
+            session,
+            run_id=first.run_id,
+            tool_name="web_search",
+            provider="duckduckgo",
+            ok=True,
+            summary="duckduckgo: 2 results",
+        )
+        await complete_run(session, run_id=first.run_id, assistant_content="第一轮回答")
+
+        second = await start_run(
+            session,
+            thread_id=first.thread_id,
+            user_content="第二轮不搜索",
+            model_name="gemma4:e4b",
+        )
+        await complete_run(session, run_id=second.run_id, assistant_content="第二轮回答")
+
+        third = await start_run(
+            session,
+            thread_id=first.thread_id,
+            user_content="第三轮失败搜索",
+            model_name="gemma4:e4b",
+        )
+        await append_tool_call_event(
+            session,
+            run_id=third.run_id,
+            tool_name="web_search",
+            args={"query": "第三轮失败搜索", "max_results": 3},
+        )
+        await append_tool_result_event(
+            session,
+            run_id=third.run_id,
+            tool_name="web_search",
+            provider="tavily",
+            ok=False,
+            summary="tavily rate limited",
+        )
+        await complete_run(session, run_id=third.run_id, assistant_content="第三轮回答")
+
+        messages = await list_thread_messages(session, thread_id=first.thread_id)
+        user_ids = [message.id for message in messages if message.role == "user"]
+        tool_calls = await list_thread_tool_calls(session, thread_id=first.thread_id)
+
+        assert len(user_ids) == 3
+        assert len(tool_calls) == 2
+        assert tool_calls[0].tool_name == "web_search"
+        assert tool_calls[0].status == "done"
+        assert tool_calls[0].provider == "duckduckgo"
+        assert tool_calls[0].summary == "duckduckgo: 2 results"
+        assert tool_calls[0].after_message_id == user_ids[0]
+        assert tool_calls[0].args == {"query": "第一轮搜索", "max_results": 5}
+        assert tool_calls[1].status == "error"
+        assert tool_calls[1].provider == "tavily"
+        assert tool_calls[1].after_message_id == user_ids[2]
     finally:
         await transaction.rollback()
 

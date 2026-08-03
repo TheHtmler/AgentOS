@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -40,6 +41,19 @@ class ThreadListItem:
     title: str | None
     latest_message_content: str | None
     updated_at: datetime
+
+
+@dataclass(frozen=True)
+class ThreadToolCallItem:
+    """A render-safe tool summary anchored after one user message."""
+
+    id: UUID
+    tool_name: str
+    args: dict[str, object]
+    status: str
+    provider: str | None
+    summary: str
+    after_message_id: UUID
 
 
 async def _create_thread(session: AsyncSession, *, user_id: UUID) -> Thread:
@@ -151,6 +165,121 @@ async def list_thread_messages(
         select(Message).where(Message.thread_id == thread.id).order_by(Message.seq),
     )
     return list(messages)
+
+
+async def list_thread_tool_calls(
+    session: AsyncSession,
+    *,
+    thread_id: UUID,
+    user_id: UUID | None = None,
+) -> list[ThreadToolCallItem]:
+    """Return completed tool summaries for UI history, without secrets or full hits.
+
+    Each ``start_run`` creates one user message and one Run. Tool events are anchored to
+    that user message by pairing runs and user messages in creation order.
+    """
+
+    if user_id is None:
+        thread = await session.get(Thread, thread_id)
+    else:
+        thread = await session.scalar(
+            select(Thread).where(
+                Thread.id == thread_id,
+                Thread.user_id == user_id,
+            )
+        )
+    if thread is None:
+        raise ThreadNotFoundError(f"Thread {thread_id} does not exist")
+
+    user_messages = list(
+        (
+            await session.scalars(
+                select(Message)
+                .where(
+                    Message.thread_id == thread.id,
+                    Message.role == "user",
+                )
+                .order_by(Message.seq),
+            )
+        ).all()
+    )
+    # Prefer started_at: created_at can collide for same-transaction inserts, and UUID
+    # order does not match start_run order.
+    runs = list(
+        (
+            await session.scalars(
+                select(Run)
+                .where(Run.thread_id == thread.id)
+                .order_by(Run.started_at.asc().nulls_last(), Run.created_at, Run.id),
+            )
+        ).all()
+    )
+
+    if not user_messages or not runs:
+        return []
+
+    run_ids = [run.id for run in runs]
+    events = list(
+        (
+            await session.scalars(
+                select(RunEvent)
+                .where(
+                    RunEvent.run_id.in_(run_ids),
+                    RunEvent.event_type.in_(("tool_call", "tool_result")),
+                )
+                .order_by(RunEvent.run_id, RunEvent.seq),
+            )
+        ).all()
+    )
+    events_by_run: dict[UUID, list[RunEvent]] = {}
+    for event in events:
+        events_by_run.setdefault(event.run_id, []).append(event)
+
+    items: list[ThreadToolCallItem] = []
+    for index, run in enumerate(runs):
+        if index >= len(user_messages):
+            break
+
+        after_message_id = user_messages[index].id
+        pending_calls: list[RunEvent] = []
+
+        for event in events_by_run.get(run.id, []):
+            if event.event_type == "tool_call":
+                pending_calls.append(event)
+                continue
+
+            if event.event_type != "tool_result" or not pending_calls:
+                continue
+
+            call_event = pending_calls.pop(0)
+            call_payload = call_event.payload
+            result_payload = event.payload
+
+            tool_name = str(call_payload.get("tool") or result_payload.get("tool") or "tool")
+            raw_args = call_payload.get("args")
+            args: dict[str, object] = {}
+            if isinstance(raw_args, dict):
+                typed_args = cast(dict[object, object], raw_args)
+                args = {str(key): value for key, value in typed_args.items()}
+            ok = result_payload.get("ok")
+            provider_value = result_payload.get("provider")
+            provider = provider_value if isinstance(provider_value, str) else None
+            summary_value = result_payload.get("summary")
+            summary = summary_value if isinstance(summary_value, str) else ""
+
+            items.append(
+                ThreadToolCallItem(
+                    id=call_event.id,
+                    tool_name=tool_name,
+                    args=args,
+                    status="done" if ok is True else "error",
+                    provider=provider,
+                    summary=summary[:500],
+                    after_message_id=after_message_id,
+                )
+            )
+
+    return items
 
 
 async def list_threads(

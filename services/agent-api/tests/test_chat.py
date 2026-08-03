@@ -75,6 +75,7 @@ async def test_chat_stream_persists_messages_and_events(authenticated_api_user: 
             "你好",
             "AgentOS 已连接。",
         ]
+        assert history_response.json()["tool_calls"] == []
 
         async with AsyncClient(transport=transport, base_url="http://testserver") as client:
             not_found_response = await client.get(f"/v1/threads/{uuid4()}/messages")
