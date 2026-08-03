@@ -59,7 +59,7 @@ data: {}
 
 FastAPI lifespan 创建一个共享的 Ollama `httpx.AsyncClient` 与 Pydantic AI Agent，并在关闭时释放客户端连接池。Ollama 客户端必须使用 `trust_env=False`，确保 `127.0.0.1` 的模型请求不会继承开发代理环境变量。
 
-初期只允许一个模型流同时执行，以保持运行在配置的资源预算内。用于限制并发的 `asyncio.Semaphore(1)` 必须覆盖整个模型流，而不是只覆盖创建 HTTP 响应的瞬间；排队中的请求可以被客户端取消。
+进程内同时执行的模型流数量由 `MODEL_MAX_CONCURRENT_RUNS`（默认 3）限制，以保持运行在配置的资源预算内。用于限制并发的 `asyncio.Semaphore` 必须覆盖整个模型流，而不是只覆盖创建 HTTP 响应的瞬间；排队中的请求可以被客户端取消。同一 Thread 仍最多允许一个 `running` Run。
 
 ## 错误与暂不实现的范围
 

@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     ollama_model: str = "agentos-gemma4:8k"
     model_max_output_tokens: int = 2_048
     model_temperature: float = 0.3
+    # How many model streams may execute at once across threads in one API process.
+    model_max_concurrent_runs: int = 3
     history_max_runs: int = 4  # max runs in next context
     auth_session_ttl_days: int = 30
     auth_invite_ttl_minutes: int = 1_440
@@ -64,6 +66,14 @@ class Settings(BaseSettings):
     def model_temperature_must_be_valid(cls, value: float) -> float:
         if not 0 <= value <= 2:
             raise ValueError("model_temperature must be between 0 and 2")
+
+        return value
+
+    @field_validator("model_max_concurrent_runs")
+    @classmethod
+    def model_max_concurrent_runs_must_be_positive(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("model_max_concurrent_runs must be at least 1")
 
         return value
 

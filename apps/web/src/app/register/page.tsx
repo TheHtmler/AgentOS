@@ -3,6 +3,8 @@
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { ThemeToggle } from "@/components/theme/theme-toggle";
+
 type RegistrationState = "checking" | "ready" | "submitting" | "failed";
 
 type InvitationInspectionResponse = {
@@ -122,8 +124,11 @@ function RegisterPageContent() {
 
   if (invitationToken === null) {
     return (
-      <main className="grid min-h-screen place-items-center bg-zinc-100 px-4 py-8">
-        <section className="w-full max-w-md border border-zinc-200 bg-white p-6 sm:p-8">
+      <main className="agentos-auth-shell relative grid place-items-center overflow-auto px-4 py-8">
+        <div className="absolute right-4 top-4">
+          <ThemeToggle />
+        </div>
+        <section className="agentos-auth-card w-full max-w-md p-6 sm:p-8">
           <p className="text-sm font-medium text-zinc-500">AgentOS</p>
           <h1 className="mt-2 text-xl font-semibold text-zinc-950">Create your account</h1>
           <p role="alert" className="mt-4 text-sm text-rose-700">
@@ -135,8 +140,11 @@ function RegisterPageContent() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-zinc-100 px-4 py-8">
-      <section className="w-full max-w-md border border-zinc-200 bg-white p-6 sm:p-8">
+    <main className="agentos-auth-shell relative grid place-items-center overflow-auto px-4 py-8">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
+      <section className="agentos-auth-card w-full max-w-md p-6 sm:p-8">
         <p className="text-sm font-medium text-zinc-500">AgentOS</p>
         <h1 className="mt-2 text-xl font-semibold text-zinc-950">Create your account</h1>
 
@@ -151,7 +159,7 @@ function RegisterPageContent() {
               <input
                 readOnly
                 value={email}
-                className="mt-2 w-full cursor-not-allowed border border-zinc-300 bg-zinc-100 px-3 py-2 text-zinc-600"
+                className="agentos-auth-input mt-2 w-full cursor-not-allowed px-3 py-2 text-zinc-600 opacity-80"
               />
             </label>
 
@@ -163,7 +171,7 @@ function RegisterPageContent() {
                 name="password"
                 type="password"
                 autoComplete="new-password"
-                className="mt-2 w-full border border-zinc-300 px-3 py-2"
+                className="agentos-auth-input mt-2 w-full px-3 py-2"
               />
             </label>
 
@@ -175,7 +183,7 @@ function RegisterPageContent() {
                 name="passwordConfirmation"
                 type="password"
                 autoComplete="new-password"
-                className="mt-2 w-full border border-zinc-300 px-3 py-2"
+                className="agentos-auth-input mt-2 w-full px-3 py-2"
               />
             </label>
 
@@ -184,7 +192,7 @@ function RegisterPageContent() {
             <button
               type="submit"
               disabled={state === "submitting"}
-              className="mt-6 w-full bg-zinc-950 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="agentos-auth-submit mt-6 w-full px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
               {state === "submitting" ? "Creating account..." : "Create account"}
             </button>
@@ -201,7 +209,7 @@ function RegisterPageContent() {
 
 export default function RegisterPage() {
   return (
-    <Suspense fallback={<main className="min-h-screen bg-zinc-100" aria-busy="true" />}>
+    <Suspense fallback={<main className="agentos-auth-shell" aria-busy="true" />}>
       <RegisterPageContent />
     </Suspense>
   );

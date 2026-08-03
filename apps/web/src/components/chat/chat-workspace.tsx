@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InvitationManager } from "@/components/auth/invitation-manager";
 import { AgentOsLogo } from "@/components/brand/agentos-logo";
@@ -8,6 +8,7 @@ import { ChatPanel } from "@/components/chat/chat-panel";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { RunInspector } from "@/components/run/run-inspector";
 import { HealthStatus } from "@/components/system/health-status";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 type ChatWorkspaceProps = {
   userEmail: string;
@@ -16,11 +17,37 @@ type ChatWorkspaceProps = {
   onLogout: () => void;
 };
 
+type ChatSlot = {
+  key: string;
+  /** null = blank draft; string = bound Thread */
+  threadId: string | null;
+};
+
+function isUuid(value: string): boolean {
+  const parts = value.split("-");
+
+  return (
+    parts.length === 5 &&
+    parts[0].length === 8 &&
+    parts[1].length === 4 &&
+    parts[2].length === 4 &&
+    parts[3].length === 4 &&
+    parts[4].length === 12 &&
+    parts.every((part) => /^[0-9a-f]+$/i.test(part))
+  );
+}
+
 const runtimeItems = [
   { label: "执行入口", value: "FastAPI Agent API" },
   { label: "模型路由", value: "Ollama · agentos-gemma4:8k" },
   { label: "会话存储", value: "PostgreSQL Thread" },
 ];
+
+const MAX_IDLE_SLOTS = 8;
+
+function createSlotKey(): string {
+  return crypto.randomUUID();
+}
 
 function setThreadInUrl(threadId: string) {
   const url = new URL(window.location.href);
@@ -34,6 +61,25 @@ function clearThreadFromUrl() {
   window.history.replaceState(window.history.state, "", url);
 }
 
+function pruneIdleSlots(
+  slots: ChatSlot[],
+  visibleSlotKey: string,
+  streamingBySlotKey: Record<string, boolean>,
+): ChatSlot[] {
+  const keep = slots.filter(
+    (slot) => slot.key === visibleSlotKey || Boolean(streamingBySlotKey[slot.key]),
+  );
+  const idle = slots.filter(
+    (slot) => slot.key !== visibleSlotKey && !streamingBySlotKey[slot.key],
+  );
+
+  if (idle.length <= MAX_IDLE_SLOTS) {
+    return slots;
+  }
+
+  return [...keep, ...idle.slice(idle.length - MAX_IDLE_SLOTS)];
+}
+
 export function ChatWorkspace({
   userEmail,
   canManageInvitations,
@@ -44,10 +90,55 @@ export function ChatWorkspace({
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadListVersion, setThreadListVersion] = useState(0);
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null | undefined>(undefined);
-  const [chatViewKey, setChatViewKey] = useState(0);
-  const [isChatStreaming, setIsChatStreaming] = useState(false);
   const [isRuntimeRailOpen, setIsRuntimeRailOpen] = useState(false);
+  const [slots, setSlots] = useState<ChatSlot[]>([{ key: "boot", threadId: null }]);
+  const [visibleSlotKey, setVisibleSlotKey] = useState("boot");
+  const [streamingBySlotKey, setStreamingBySlotKey] = useState<Record<string, boolean>>({});
+  const [runIdBySlotKey, setRunIdBySlotKey] = useState<Record<string, string | null>>({});
+  const [hasHydratedFromUrl, setHasHydratedFromUrl] = useState(false);
+
+  const streamingBySlotKeyRef = useRef(streamingBySlotKey);
+  const runIdBySlotKeyRef = useRef(runIdBySlotKey);
+  const slotsRef = useRef(slots);
+  const visibleSlotKeyRef = useRef(visibleSlotKey);
+
+  streamingBySlotKeyRef.current = streamingBySlotKey;
+  runIdBySlotKeyRef.current = runIdBySlotKey;
+  slotsRef.current = slots;
+  visibleSlotKeyRef.current = visibleSlotKey;
+
+  const streamingThreadIds = useMemo(() => {
+    const ids = new Set<string>();
+
+    for (const slot of slots) {
+      if (streamingBySlotKey[slot.key] && typeof slot.threadId === "string") {
+        ids.add(slot.threadId);
+      }
+    }
+
+    return ids;
+  }, [slots, streamingBySlotKey]);
+
+  useEffect(() => {
+    if (hasHydratedFromUrl) {
+      return;
+    }
+
+    const threadFromUrl = new URL(window.location.href).searchParams.get("thread");
+
+    if (threadFromUrl !== null && isUuid(threadFromUrl)) {
+      setSlots([{ key: threadFromUrl, threadId: threadFromUrl }]);
+      setVisibleSlotKey(threadFromUrl);
+      setActiveThreadId(threadFromUrl);
+    } else {
+      const key = createSlotKey();
+      setSlots([{ key, threadId: null }]);
+      setVisibleSlotKey(key);
+      setActiveThreadId(null);
+    }
+
+    setHasHydratedFromUrl(true);
+  }, [hasHydratedFromUrl]);
 
   useEffect(() => {
     if (!isMobileMenuOpen) {
@@ -75,35 +166,99 @@ export function ChatWorkspace({
     };
   }, [isMobileMenuOpen]);
 
-  const handleSelectThread = useCallback((threadId: string) => {
-    // Remounting ChatPanel aborts any in-flight run for the previous Thread.
-    setThreadInUrl(threadId);
+  const focusSlot = useCallback((slotKey: string, threadId: string | null) => {
+    setVisibleSlotKey(slotKey);
     setActiveThreadId(threadId);
-    setActiveRunId(null);
-    setSelectedThreadId(threadId);
+    setActiveRunId(runIdBySlotKeyRef.current[slotKey] ?? null);
     setIsMobileMenuOpen(false);
-    setIsChatStreaming(false);
-    setChatViewKey((current) => current + 1);
-  }, []);
-
-  const handleNewConversation = useCallback(() => {
-    clearThreadFromUrl();
-    setActiveThreadId(null);
-    setActiveRunId(null);
-    setSelectedThreadId(null);
-    setIsMobileMenuOpen(false);
-    setIsChatStreaming(false);
-    setChatViewKey((current) => current + 1);
-  }, []);
-
-  const handleThreadChanged = useCallback((threadId: string | null) => {
-    setActiveThreadId(threadId);
 
     if (threadId === null) {
-      setActiveRunId(null);
+      clearThreadFromUrl();
+    } else {
+      setThreadInUrl(threadId);
+    }
+  }, []);
+
+  const handleSelectThread = useCallback(
+    (threadId: string) => {
+      const currentSlots = slotsRef.current;
+      const existing = currentSlots.find((slot) => slot.threadId === threadId);
+
+      if (existing) {
+        focusSlot(existing.key, threadId);
+        return;
+      }
+
+      const nextSlot: ChatSlot = { key: threadId, threadId };
+      setSlots(
+        pruneIdleSlots(
+          [...currentSlots, nextSlot],
+          nextSlot.key,
+          streamingBySlotKeyRef.current,
+        ),
+      );
+      focusSlot(nextSlot.key, threadId);
+    },
+    [focusSlot],
+  );
+
+  const handleNewConversation = useCallback(() => {
+    const currentSlots = slotsRef.current;
+    const emptyDraft = currentSlots.find(
+      (slot) => slot.threadId === null && !streamingBySlotKeyRef.current[slot.key],
+    );
+
+    if (emptyDraft) {
+      focusSlot(emptyDraft.key, null);
+      return;
+    }
+
+    const key = createSlotKey();
+    setSlots(
+      pruneIdleSlots(
+        [...currentSlots, { key, threadId: null }],
+        key,
+        streamingBySlotKeyRef.current,
+      ),
+    );
+    focusSlot(key, null);
+  }, [focusSlot]);
+
+  const handleSlotThreadChanged = useCallback((slotKey: string, threadId: string | null) => {
+    setSlots((current) =>
+      current.map((slot) => (slot.key === slotKey ? { ...slot, threadId } : slot)),
+    );
+
+    if (slotKey === visibleSlotKeyRef.current) {
+      setActiveThreadId(threadId);
+
+      if (threadId === null) {
+        setActiveRunId(null);
+        clearThreadFromUrl();
+      } else {
+        setThreadInUrl(threadId);
+      }
     }
 
     setThreadListVersion((current) => current + 1);
+  }, []);
+
+  const handleSlotRunStarted = useCallback((slotKey: string, runId: string) => {
+    setRunIdBySlotKey((current) => ({ ...current, [slotKey]: runId }));
+
+    if (slotKey === visibleSlotKeyRef.current) {
+      setActiveRunId(runId);
+    }
+  }, []);
+
+  const handleSlotStreamingChanged = useCallback((slotKey: string, isStreaming: boolean) => {
+    setStreamingBySlotKey((current) => {
+      if (Boolean(current[slotKey]) === isStreaming) {
+        return current;
+      }
+
+      return { ...current, [slotKey]: isStreaming };
+    });
   }, []);
 
   const handleRunFinalized = useCallback(() => {
@@ -114,11 +269,52 @@ export function ChatWorkspace({
     (threadId: string) => {
       setThreadListVersion((current) => current + 1);
 
-      if (activeThreadId === threadId || selectedThreadId === threadId) {
-        handleNewConversation();
+      const currentSlots = slotsRef.current;
+      const deletedKeys = currentSlots
+        .filter((slot) => slot.threadId === threadId)
+        .map((slot) => slot.key);
+      const remaining = currentSlots.filter((slot) => slot.threadId !== threadId);
+      const deletedVisible = deletedKeys.includes(visibleSlotKeyRef.current);
+
+      setStreamingBySlotKey((current) => {
+        const next = { ...current };
+        for (const key of deletedKeys) {
+          delete next[key];
+        }
+        return next;
+      });
+
+      setRunIdBySlotKey((current) => {
+        const next = { ...current };
+        for (const key of deletedKeys) {
+          delete next[key];
+        }
+        return next;
+      });
+
+      if (!deletedVisible) {
+        setSlots(
+          remaining.length > 0 ? remaining : [{ key: createSlotKey(), threadId: null }],
+        );
+        return;
       }
+
+      const fallback =
+        remaining.find(
+          (slot) => slot.threadId === null && !streamingBySlotKeyRef.current[slot.key],
+        ) ?? remaining[0];
+
+      if (fallback) {
+        setSlots(remaining);
+        focusSlot(fallback.key, fallback.threadId ?? null);
+        return;
+      }
+
+      const key = createSlotKey();
+      setSlots([{ key, threadId: null }]);
+      focusSlot(key, null);
     },
-    [activeThreadId, handleNewConversation, selectedThreadId],
+    [focusSlot],
   );
 
   return (
@@ -148,6 +344,7 @@ export function ChatWorkspace({
             >
               {isRuntimeRailOpen ? "收起检视" : "运行检视"}
             </button>
+            <ThemeToggle />
             <span className="agentos-runtime-tag">Local runtime · Ready</span>
             <p className="max-w-48 truncate text-sm text-zinc-600" title={userEmail}>
               {userEmail}
@@ -163,7 +360,10 @@ export function ChatWorkspace({
             </button>
           </div>
 
-          <span className="agentos-runtime-tag ml-auto lg:hidden">Ready</span>
+          <div className="ml-auto flex items-center gap-2 lg:hidden">
+            <ThemeToggle compact />
+            <span className="agentos-runtime-tag">Ready</span>
+          </div>
         </div>
       </header>
 
@@ -176,7 +376,7 @@ export function ChatWorkspace({
           <ConversationList
             activeThreadId={activeThreadId}
             refreshKey={threadListVersion}
-            isChatStreaming={isChatStreaming}
+            streamingThreadIds={streamingThreadIds}
             onNewConversation={handleNewConversation}
             onSelectThread={handleSelectThread}
             onThreadDeleted={handleThreadDeleted}
@@ -184,15 +384,33 @@ export function ChatWorkspace({
         </aside>
 
         <section className="agentos-main-column min-h-0">
-          <ChatPanel
-            key={chatViewKey}
-            selectedThreadId={selectedThreadId}
-            onNewConversation={handleNewConversation}
-            onRunStarted={setActiveRunId}
-            onStreamingChanged={setIsChatStreaming}
-            onThreadChanged={handleThreadChanged}
-            onRunFinalized={handleRunFinalized}
-          />
+          {hasHydratedFromUrl
+            ? slots.map((slot) => {
+                const isActive = slot.key === visibleSlotKey;
+
+                return (
+                  <div
+                    key={slot.key}
+                    className={isActive ? "h-full min-h-0" : "hidden"}
+                    aria-hidden={!isActive}
+                  >
+                    <ChatPanel
+                      selectedThreadId={slot.threadId}
+                      isActive={isActive}
+                      onNewConversation={handleNewConversation}
+                      onRunStarted={(runId) => handleSlotRunStarted(slot.key, runId)}
+                      onStreamingChanged={(isStreaming) =>
+                        handleSlotStreamingChanged(slot.key, isStreaming)
+                      }
+                      onThreadChanged={(threadId) =>
+                        handleSlotThreadChanged(slot.key, threadId)
+                      }
+                      onRunFinalized={handleRunFinalized}
+                    />
+                  </div>
+                );
+              })
+            : null}
         </section>
 
         <aside
@@ -250,7 +468,7 @@ export function ChatWorkspace({
               <ConversationList
                 activeThreadId={activeThreadId}
                 refreshKey={threadListVersion}
-                isChatStreaming={isChatStreaming}
+                streamingThreadIds={streamingThreadIds}
                 onNewConversation={handleNewConversation}
                 onSelectThread={handleSelectThread}
                 onThreadDeleted={handleThreadDeleted}
