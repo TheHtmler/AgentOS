@@ -137,6 +137,7 @@ async def stream_ag_ui_run(
                     run_id=str(started.run_id),
                     deps=AgentDeps(
                         search_router=get_runtime(request).search_router,
+                        fetch_router=get_runtime(request).fetch_router,
                         run_id=started.run_id,
                     ),
                 ):

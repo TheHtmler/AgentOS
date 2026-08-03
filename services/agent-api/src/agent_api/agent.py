@@ -1,9 +1,13 @@
+from collections.abc import Callable
+
 import httpx
 from pydantic_ai import Agent
 from pydantic_ai.models.ollama import OllamaModel
 from pydantic_ai.providers.ollama import OllamaProvider
 
 from agent_api.config import get_settings
+from agent_api.tools.fetch.router import FetchRouter
+from agent_api.tools.fetch.tool import fetch_url
 from agent_api.tools.search.router import SearchRouter
 from agent_api.tools.search.tool import AgentDeps, web_search
 
@@ -23,6 +27,12 @@ outdated in your training data, call web_search before answering. Base claims on
 tool results and include source URLs. Never pretend you searched if you did not.
 """
 
+FETCH_INSTRUCTIONS = """
+When you need the full content of a specific public URL (including a search result
+link), call fetch_url. Base claims on the returned text/outline and cite the URL.
+Never pretend you opened a link if you did not.
+"""
+
 
 def create_ollama_http_client() -> httpx.AsyncClient:
     """Create a local-only client that never inherits shell proxy settings."""
@@ -38,16 +48,28 @@ def create_agent(
     *,
     search_router: SearchRouter | None = None,
     search_enabled: bool | None = None,
+    fetch_router: FetchRouter | None = None,
+    fetch_enabled: bool | None = None,
 ) -> Agent[AgentDeps, str]:
     """Build a stateless agent; the caller owns and closes the HTTP client."""
 
     settings = get_settings()
-    enabled = settings.search_enabled if search_enabled is None else search_enabled
-    use_search = enabled and search_router is not None
+    search_on = settings.search_enabled if search_enabled is None else search_enabled
+    fetch_on = settings.fetch_url_enabled if fetch_enabled is None else fetch_enabled
+    use_search = search_on and search_router is not None
+    use_fetch = fetch_on and fetch_router is not None
 
     instructions = SYSTEM_INSTRUCTIONS
     if use_search:
-        instructions = f"{SYSTEM_INSTRUCTIONS}\n{SEARCH_INSTRUCTIONS}"
+        instructions = f"{instructions}\n{SEARCH_INSTRUCTIONS}"
+    if use_fetch:
+        instructions = f"{instructions}\n{FETCH_INSTRUCTIONS}"
+
+    tools: list[Callable[..., object]] = []
+    if use_search:
+        tools.append(web_search)
+    if use_fetch:
+        tools.append(fetch_url)
 
     model = OllamaModel(
         settings.ollama_model,
@@ -61,7 +83,7 @@ def create_agent(
         model,
         deps_type=AgentDeps,
         instructions=instructions,
-        tools=[web_search] if use_search else (),
+        tools=tools,
         model_settings={
             "max_tokens": settings.model_max_output_tokens,
             # Lower variance makes local-model reasoning and follow-up answers more consistent.

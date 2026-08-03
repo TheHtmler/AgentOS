@@ -64,6 +64,7 @@
 - 模型并发：`MODEL_MAX_CONCURRENT_RUNS`（默认 3）控制进程内同时执行的模型流；同 Thread 仍最多一个 `running` Run。
 - 模型上下文在 `run_message_histories` 缺失时回退到 `messages` 表成对历史。
 - 主题切换：`light` / `dark`（`html[data-theme]` + CSS 变量）；偏好写入 `localStorage`（`agentos-theme`），首屏脚本防闪烁；顶栏与登录/注册页可切换。
+- `fetch_url` 工具：Firecrawl → local（trafilatura）降级；SSRF 公网校验；正文截断+大纲；`run_events` 工具摘要；`FETCH_URL_*` / `FIRECRAWL_API_KEY` 配置。
 
 ## 验证
 
@@ -84,9 +85,9 @@
 ## 未完成
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
-- `fetch_url` / Firecrawl、完整 `messages.role=tool` 模型历史对齐。
+- Artifact 落库 / `read_artifact`、完整 `messages.role=tool` 模型历史对齐。
 - HITL、MCP 和 Sandbox；侧栏 Run 活动时间线与按工具类型的富展示。
 
 ## 下一步
 
-实现 `fetch_url`（设计见 `docs/superpowers/specs/2026-08-03-fetch-url-design.md`）：Firecrawl + local 降级、SSRF 防护、截断+大纲；随后 Artifact 按需再读，再进入高风险工具的 HITL。
+在 Mac mini 配置 `FIRECRAWL_API_KEY` 并重启 API，对公开 URL 做 `fetch_url` smoke；随后 Artifact 按需再读，再进入高风险工具的 HITL。

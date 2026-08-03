@@ -1,7 +1,7 @@
 # fetch_url 工具与多 Provider 降级
 
 日期：2026-08-03  
-状态：accepted（待实现）  
+状态：accepted（已实现）  
 前置：`2026-08-03-web-search-tool-design.md`（`web_search`、SearchRouter、`run_events` 工具摘要已存在）
 
 ## 背景

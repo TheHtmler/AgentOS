@@ -18,6 +18,7 @@ dependencies = [
     "pydantic-ai[ag-ui]==2.22.0",
     "pydantic-settings>=2.14.2",
     "sqlalchemy>=2.0.51",
+    "trafilatura>=2.2.0",
 ]
 
 [project.scripts]
