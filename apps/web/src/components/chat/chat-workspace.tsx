@@ -75,34 +75,26 @@ export function ChatWorkspace({
     };
   }, [isMobileMenuOpen]);
 
-  const handleSelectThread = useCallback(
-    (threadId: string) => {
-      if (isChatStreaming) {
-        return;
-      }
-
-      setThreadInUrl(threadId);
-      setActiveThreadId(threadId);
-      setActiveRunId(null);
-      setSelectedThreadId(threadId);
-      setIsMobileMenuOpen(false);
-      setChatViewKey((current) => current + 1);
-    },
-    [isChatStreaming],
-  );
+  const handleSelectThread = useCallback((threadId: string) => {
+    // Remounting ChatPanel aborts any in-flight run for the previous Thread.
+    setThreadInUrl(threadId);
+    setActiveThreadId(threadId);
+    setActiveRunId(null);
+    setSelectedThreadId(threadId);
+    setIsMobileMenuOpen(false);
+    setIsChatStreaming(false);
+    setChatViewKey((current) => current + 1);
+  }, []);
 
   const handleNewConversation = useCallback(() => {
-    if (isChatStreaming) {
-      return;
-    }
-
     clearThreadFromUrl();
     setActiveThreadId(null);
     setActiveRunId(null);
     setSelectedThreadId(null);
     setIsMobileMenuOpen(false);
+    setIsChatStreaming(false);
     setChatViewKey((current) => current + 1);
-  }, [isChatStreaming]);
+  }, []);
 
   const handleThreadChanged = useCallback((threadId: string | null) => {
     setActiveThreadId(threadId);

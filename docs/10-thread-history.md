@@ -71,7 +71,7 @@ GET /api/threads/{threadId}/messages
 
 当前助手 Message 仅在 Run `completed` 时写入。用户在生成中刷新页面时，恢复结果可能只包含该轮 user Message，不包含尚未完成的助手回复；页面不尝试从 `text_delta` 事件拼接不完整输出。若该 Run 已有终态 `tool_result`，仍可显示完成态工具卡。
 
-将历史转换为 Pydantic AI 的消息历史并传入模型，是单独能力；工具调用对模型上下文的正式 `role=tool` 持久化不在本接口范围内。
+续聊时，Agent API 会把服务端历史注入模型：优先使用各 Run 的 `run_message_histories`；若缺失则回退为 `messages` 表中的 user/assistant 成对内容（窗口受 `HISTORY_MAX_RUNS` 约束）。完整 `role=tool` 工具轨迹写回模型上下文仍为后续能力。
 
 ## 验收标准
 

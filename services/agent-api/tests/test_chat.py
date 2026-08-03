@@ -19,8 +19,13 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 from sqlalchemy import select
 
-from agent_api.api.chat import chunk_assistant_text, strip_thinking_parts
-from agent_api.db.chat_store import cancel_run, start_run
+from agent_api.api.chat import (
+    chunk_assistant_text,
+    load_thread_model_history,
+    model_history_from_thread_messages,
+    strip_thinking_parts,
+)
+from agent_api.db.chat_store import cancel_run, complete_run, start_run
 from agent_api.db.models import Message, Run, RunEvent, RunMessageHistory, Thread
 from agent_api.db.session import close_database, session_factory
 from agent_api.main import app
@@ -151,6 +156,70 @@ async def test_chat_stream_rejects_blank_message(authenticated_api_user: UUID) -
         response = await client.post("/v1/chat/stream", json={"message": "   "})
 
     assert response.status_code == 422
+
+
+@pytest.mark.anyio
+@pytest.mark.anyio
+async def test_model_history_from_thread_messages_pairs_turns() -> None:
+    rows = [
+        Message(role="user", content="第一问", seq=1),
+        Message(role="assistant", content="第一答", seq=2),
+        Message(role="user", content="第二问", seq=3),
+        Message(role="assistant", content="第二答", seq=4),
+    ]
+    history = model_history_from_thread_messages(rows)
+    assert len(history) == 4
+    assert isinstance(history[0], ModelRequest)
+    assert isinstance(history[0].parts[0], UserPromptPart)
+    assert history[0].parts[0].content == "第一问"
+    assert isinstance(history[1], ModelResponse)
+    assert isinstance(history[1].parts[0], TextPart)
+    assert history[1].parts[0].content == "第一答"
+
+
+@pytest.mark.anyio
+async def test_load_thread_model_history_falls_back_to_messages(
+    authenticated_api_user: UUID,
+) -> None:
+    """When run_message_histories are absent, rebuild context from Message rows."""
+
+    async with session_factory() as session, session.begin():
+        first = await start_run(
+            session,
+            thread_id=None,
+            user_content="历史问题",
+            model_name="gemma4:e4b",
+            user_id=authenticated_api_user,
+        )
+        await complete_run(
+            session,
+            run_id=first.run_id,
+            assistant_content="历史回答",
+            model_messages=None,
+        )
+        second = await start_run(
+            session,
+            thread_id=first.thread_id,
+            user_content="当前问题",
+            model_name="gemma4:e4b",
+            user_id=authenticated_api_user,
+        )
+        thread_id = first.thread_id
+        current_run_id = second.run_id
+
+    try:
+        history = await load_thread_model_history(thread_id, user_id=authenticated_api_user)
+        assert len(history) == 2
+        assert isinstance(history[0].parts[0], UserPromptPart)
+        assert history[0].parts[0].content == "历史问题"
+        assert isinstance(history[1].parts[0], TextPart)
+        assert history[1].parts[0].content == "历史回答"
+    finally:
+        async with session_factory() as session, session.begin():
+            await cancel_run(session, run_id=current_run_id)
+            thread = await session.get(Thread, thread_id)
+            if thread is not None:
+                await session.delete(thread)
 
 
 @pytest.mark.anyio
