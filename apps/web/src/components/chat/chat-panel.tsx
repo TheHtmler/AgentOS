@@ -60,7 +60,10 @@ const STARTER_PROMPTS = [
   "请审查下面的思路，指出不成立的假设。",
 ];
 
-const AUTO_SCROLL_THRESHOLD = 80;
+/** Re-enable follow / hide button when this close to the bottom. */
+const AUTO_SCROLL_THRESHOLD = 96;
+/** Only show「回到最新」after the user has clearly left the live edge. */
+const SHOW_SCROLL_TO_LATEST_THRESHOLD = 180;
 const MAX_COMPOSER_HEIGHT = 200;
 
 function isUuid(value: string): boolean {
@@ -501,11 +504,8 @@ export function ChatPanel({
 
   function pauseAutoScroll() {
     // User is reading history; do not yank them back when new tokens arrive.
-    if (!autoScrollRef.current) {
-      return;
-    }
+    // Button visibility is owned by handleMessageScroll (actual distance from bottom).
     autoScrollRef.current = false;
-    setShowScrollToLatest(true);
   }
 
   function isNestedScrollTarget(target: EventTarget | null): boolean {
@@ -559,11 +559,25 @@ export function ChatPanel({
       return;
     }
 
-    // Only the conversation scroller controls follow / "回到最新".
+    // Session viewport only. Content growth while following must not flash「回到最新」
+    // or cancel follow before the stick-to-bottom effect runs.
     const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
     const nearBottom = distanceFromBottom < AUTO_SCROLL_THRESHOLD;
-    autoScrollRef.current = nearBottom;
-    setShowScrollToLatest(!nearBottom);
+
+    if (nearBottom) {
+      autoScrollRef.current = true;
+      setShowScrollToLatest(false);
+      return;
+    }
+
+    if (autoScrollRef.current) {
+      // Still in follow mode (likely new tokens grew the list). Keep button hidden;
+      // the messages effect will pin us back to the bottom.
+      setShowScrollToLatest(false);
+      return;
+    }
+
+    setShowScrollToLatest(distanceFromBottom > SHOW_SCROLL_TO_LATEST_THRESHOLD);
   }
 
   async function copyAssistantMessage(message: ChatMessage) {
