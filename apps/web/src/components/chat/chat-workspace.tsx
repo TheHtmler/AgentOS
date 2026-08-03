@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { InvitationManager } from "@/components/auth/invitation-manager";
+import { AgentOsLogo } from "@/components/brand/agentos-logo";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { RunInspector } from "@/components/run/run-inspector";
@@ -46,6 +47,7 @@ export function ChatWorkspace({
   const [selectedThreadId, setSelectedThreadId] = useState<string | null | undefined>(undefined);
   const [chatViewKey, setChatViewKey] = useState(0);
   const [isChatStreaming, setIsChatStreaming] = useState(false);
+  const [isRuntimeRailOpen, setIsRuntimeRailOpen] = useState(false);
 
   useEffect(() => {
     if (!isMobileMenuOpen) {
@@ -143,17 +145,17 @@ export function ChatWorkspace({
             <span />
           </button>
 
-          <div className="flex min-w-0 items-center gap-3">
-            <span aria-hidden="true" className="agentos-logo-mark">
-              AO
-            </span>
-            <div>
-              <p className="text-base font-semibold text-zinc-950">AgentOS</p>
-              <p className="hidden text-xs text-zinc-500 sm:block">Runtime control plane</p>
-            </div>
-          </div>
+          <AgentOsLogo subtitle="Runtime control plane" />
 
           <div className="ml-auto hidden items-center gap-3 lg:flex">
+            <button
+              type="button"
+              onClick={() => setIsRuntimeRailOpen((current) => !current)}
+              aria-pressed={isRuntimeRailOpen}
+              className="agentos-header-action"
+            >
+              {isRuntimeRailOpen ? "收起检视" : "运行检视"}
+            </button>
             <span className="agentos-runtime-tag">Local runtime · Ready</span>
             <p className="max-w-48 truncate text-sm text-zinc-600" title={userEmail}>
               {userEmail}
@@ -173,7 +175,11 @@ export function ChatWorkspace({
         </div>
       </header>
 
-      <div className="agentos-workspace">
+      <div
+        className={`agentos-workspace ${
+          isRuntimeRailOpen ? "" : "agentos-workspace-runtime-collapsed"
+        }`}
+      >
         <aside className="agentos-conversation-rail hidden min-h-0 lg:flex lg:flex-col">
           <ConversationList
             activeThreadId={activeThreadId}
@@ -197,7 +203,11 @@ export function ChatWorkspace({
           />
         </section>
 
-        <aside className="agentos-runtime-rail hidden min-h-0 lg:flex lg:flex-col">
+        <aside
+          className={`agentos-runtime-rail hidden min-h-0 lg:flex lg:flex-col ${
+            isRuntimeRailOpen ? "" : "agentos-runtime-rail-collapsed"
+          }`}
+        >
           <HealthStatus />
           <RunInspector runId={activeRunId} />
 

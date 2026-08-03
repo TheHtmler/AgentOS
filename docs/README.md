@@ -23,5 +23,6 @@
 | [superpowers/specs/2026-08-03-chat-experience-redesign-design.md](superpowers/specs/2026-08-03-chat-experience-redesign-design.md) | 聊天体验改版（时间线/MD/会话/科技风） | 聊天时间线、会话管理或视觉品牌变化时 |
 | [superpowers/plans/2026-08-03-chat-experience-p0.md](superpowers/plans/2026-08-03-chat-experience-p0.md) | 聊天体验 P0 实现计划（时间线/MD/时间） | 执行或调整该 P0 计划时 |
 | [superpowers/plans/2026-08-03-chat-experience-p1.md](superpowers/plans/2026-08-03-chat-experience-p1.md) | 聊天体验 P1 实现计划（重命名/软删除） | 执行或调整该 P1 计划时 |
+| [superpowers/plans/2026-08-03-chat-experience-p2.md](superpowers/plans/2026-08-03-chat-experience-p2.md) | 聊天体验 P2 实现计划（科技风视觉/Logo） | 执行或调整该 P2 计划时 |
 
 后续建议增加：`api-contracts.md`、`data-model.md`、`security-model.md`、`runbook.md` 和 `incident-log.md`。

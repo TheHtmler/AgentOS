@@ -1,15 +1,30 @@
 @import "tailwindcss";
 
+/* ── Design tokens (P2 dark tech) ── */
 :root {
-  --background: #edf4f6;
-  --foreground: #112b37;
+  --bg: #0b0f0e;
+  --panel: rgba(18, 24, 22, 0.72);
+  --panel-solid: #141a18;
+  --border: rgba(57, 255, 154, 0.12);
+  --text: #e6eee9;
+  --muted: #8a9a92;
+  --accent: #39ff9a;
+  --accent-dim: #22e6a0;
+  --danger: #ff6b7a;
+  --success: #39ff9a;
+
+  --background: var(--bg);
+  --foreground: var(--text);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --font-sans:
+    "Space Grotesk Variable", "IBM Plex Sans Variable", ui-sans-serif, system-ui,
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 * {
@@ -25,92 +40,153 @@ body {
 
 body {
   overflow: hidden;
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
 }
 
+/* ── Shared utilities ── */
+.agentos-glass {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.agentos-accent-glow {
+  box-shadow: 0 0 18px rgba(57, 255, 154, 0.22);
+}
+
+.agentos-runtime-rail-collapsed {
+  width: 0;
+  overflow: hidden;
+  padding: 0;
+  border-width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── App shell ── */
 .agentos-app {
   height: 100dvh;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(89, 194, 210, 0.1), transparent 15rem), #edf4f6;
-  color: #112b37;
+  background:
+    radial-gradient(ellipse 80% 40% at 50% -10%, rgba(57, 255, 154, 0.07), transparent),
+    var(--bg);
+  color: var(--text);
 }
 
+/* Tailwind class remaps for dark UI */
 .agentos-app .bg-white {
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: var(--panel);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .agentos-app .bg-zinc-50 {
-  background-color: #f4f8f9;
+  background-color: rgba(22, 30, 27, 0.55);
 }
 
 .agentos-app .bg-zinc-100 {
-  background-color: #e7eff1;
+  background-color: rgba(26, 34, 31, 0.65);
 }
 
 .agentos-app .bg-zinc-900 {
-  background-color: #156f82;
+  background: rgba(57, 255, 154, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: inset 0 0 0 1px rgba(57, 255, 154, 0.18);
+}
+
+.agentos-app .bg-zinc-950 {
+  background-color: rgba(57, 255, 154, 0.18);
 }
 
 .agentos-app .border-zinc-100,
 .agentos-app .border-zinc-200 {
-  border-color: #d7e4e7;
+  border-color: rgba(57, 255, 154, 0.1);
 }
 
 .agentos-app .border-zinc-300 {
-  border-color: #bdd0d6;
+  border-color: rgba(57, 255, 154, 0.16);
 }
 
 .agentos-app .border-zinc-900 {
-  border-color: #156f82;
+  border-color: rgba(57, 255, 154, 0.28);
 }
 
-.agentos-app .text-zinc-950 {
-  color: #112b37;
+.agentos-app .text-zinc-950,
+.agentos-app .text-white {
+  color: var(--text);
 }
 
 .agentos-app .text-zinc-900,
 .agentos-app .text-zinc-800 {
-  color: #24414b;
+  color: #d4ddd8;
 }
 
 .agentos-app .text-zinc-700,
 .agentos-app .text-zinc-600 {
-  color: #526c74;
+  color: var(--muted);
 }
 
 .agentos-app .text-zinc-500 {
-  color: #6f858c;
+  color: #6f8179;
 }
 
 .agentos-app .text-zinc-400 {
-  color: #8ba0a6;
+  color: #5c6e66;
 }
 
-.agentos-app .text-zinc-300 {
-  color: #d8eaed;
+.agentos-app .text-zinc-300,
+.agentos-app .text-zinc-200 {
+  color: #a8b8b0;
+}
+
+.agentos-app .text-teal-700 {
+  color: var(--accent-dim);
+}
+
+.agentos-app .text-rose-700 {
+  color: var(--danger);
 }
 
 .agentos-app .hover\:bg-zinc-50:hover {
-  background-color: #eaf4f5;
+  background-color: rgba(57, 255, 154, 0.06);
 }
 
 .agentos-app .hover\:bg-zinc-700:hover {
-  background-color: #0d8799;
+  background-color: rgba(57, 255, 154, 0.14);
+}
+
+.agentos-app .hover\:bg-rose-50:hover {
+  background-color: rgba(255, 107, 122, 0.1);
 }
 
 .agentos-app .hover\:border-zinc-400:hover,
 .agentos-app .hover\:border-zinc-500:hover,
 .agentos-app .focus\:border-zinc-500:focus,
 .agentos-app .focus\:border-zinc-700:focus {
-  border-color: #16a5bd;
+  border-color: rgba(57, 255, 154, 0.35);
 }
 
+.agentos-app .focus\:bg-white:focus {
+  background-color: rgba(22, 30, 27, 0.85);
+}
+
+.agentos-app .shadow-lg {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Topbar ── */
 .agentos-topbar {
   height: 4rem;
-  border-bottom: 1px solid #d6e4e7;
-  background: rgba(250, 253, 253, 0.88);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.78);
+  border-bottom: 1px solid var(--border);
+  background: rgba(11, 15, 14, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 1px 0 rgba(57, 255, 154, 0.06);
 }
 
 .agentos-topbar-inner {
@@ -129,20 +205,20 @@ body {
   width: 2rem;
   height: 2rem;
   place-items: center;
-  border: 1px solid #75cbd7;
-  border-radius: 7px;
-  background: linear-gradient(135deg, #197d94, #27ae9b);
-  color: #f5ffff;
+  border: 1px solid rgba(57, 255, 154, 0.45);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(34, 230, 160, 0.22), rgba(57, 255, 154, 0.1));
+  color: var(--accent);
   font-size: 0.7rem;
   font-weight: 700;
-  box-shadow: 0 7px 16px rgba(28, 145, 164, 0.22);
+  box-shadow: 0 0 16px rgba(57, 255, 154, 0.2);
 }
 
 .agentos-runtime-tag {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  color: #46717a;
+  color: var(--muted);
   font-size: 0.75rem;
 }
 
@@ -150,17 +226,17 @@ body {
   width: 0.42rem;
   height: 0.42rem;
   border-radius: 999px;
-  background: #20b879;
-  box-shadow: 0 0 0 3px rgba(32, 184, 121, 0.13);
+  background: var(--success);
+  box-shadow: 0 0 8px rgba(57, 255, 154, 0.45);
   content: "";
 }
 
 .agentos-header-action {
-  border: 1px solid #c7d8dc;
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid rgba(57, 255, 154, 0.18);
+  border-radius: 8px;
+  background: rgba(18, 24, 22, 0.65);
   padding: 0.48rem 0.75rem;
-  color: #37555e;
+  color: var(--muted);
   font-size: 0.875rem;
   transition:
     border-color 150ms ease,
@@ -169,11 +245,12 @@ body {
 }
 
 .agentos-header-action:hover {
-  border-color: #48b9c9;
-  background: #f3fbfc;
-  color: #0a7287;
+  border-color: rgba(57, 255, 154, 0.38);
+  background: rgba(57, 255, 154, 0.08);
+  color: var(--accent);
 }
 
+/* ── Workspace layout ── */
 .agentos-workspace {
   display: grid;
   height: calc(100dvh - 4rem);
@@ -199,10 +276,12 @@ body {
 .agentos-conversation-rail,
 .agentos-runtime-rail,
 .agentos-chat-panel {
-  border: 1px solid #d2e1e4;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 14px 35px rgba(38, 76, 88, 0.09);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
 }
 
 .agentos-conversation-rail,
@@ -214,7 +293,7 @@ body {
   overflow-y: auto;
   padding: 0.75rem;
   scrollbar-width: thin;
-  scrollbar-color: #9ac5cd transparent;
+  scrollbar-color: rgba(57, 255, 154, 0.25) transparent;
 }
 
 .agentos-runtime-rail > * + * {
@@ -231,20 +310,21 @@ body {
 .agentos-message-viewport::-webkit-scrollbar-thumb,
 .agentos-conversation-list-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: #9ac5cd;
+  background: rgba(57, 255, 154, 0.25);
 }
 
 .agentos-context-card {
-  border: 1px solid #d3e3e5;
-  border-radius: 7px;
-  background: #f5fafb;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(18, 24, 22, 0.55);
   padding: 1rem;
 }
 
 .agentos-context-card dd {
-  color: #31515b;
+  color: #b8c8c0;
 }
 
+/* ── Conversation list ── */
 .agentos-conversation-list {
   min-height: 0;
   border: 0;
@@ -254,72 +334,78 @@ body {
 
 .agentos-conversation-list-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #9ac5cd transparent;
+  scrollbar-color: rgba(57, 255, 154, 0.25) transparent;
 }
 
+/* ── Chat panel ── */
 .agentos-chat-panel {
   overflow: hidden;
-  background: #f7fbfc;
+  background: rgba(14, 19, 17, 0.78);
 }
 
 .agentos-chat-header,
 .agentos-composer {
   flex: none;
-  border-color: #d7e5e7;
-  background: rgba(255, 255, 255, 0.92);
+  border-color: var(--border);
+  background: rgba(14, 19, 17, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .agentos-chat-header {
   background:
-    linear-gradient(100deg, rgba(61, 191, 195, 0.12), transparent 44%), rgba(255, 255, 255, 0.92);
+    linear-gradient(100deg, rgba(57, 255, 154, 0.06), transparent 44%),
+    rgba(14, 19, 17, 0.88);
 }
 
 .agentos-chat-status {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  color: #50808a;
+  color: var(--muted);
 }
 
 .agentos-chat-status span {
   width: 0.4rem;
   height: 0.4rem;
   border-radius: 999px;
-  background: #1eb879;
-  box-shadow: 0 0 0 3px rgba(30, 184, 121, 0.12);
+  background: var(--success);
+  box-shadow: 0 0 8px rgba(57, 255, 154, 0.45);
 }
 
 .agentos-new-chat-button,
 .agentos-copy-button {
-  color: #278397;
+  color: var(--accent-dim);
 }
 
 .agentos-new-chat-button:hover,
 .agentos-copy-button:hover {
-  color: #0c6579;
+  color: var(--accent);
 }
 
+/* ── Message viewport ── */
 .agentos-message-viewport {
   min-height: 0;
   overscroll-behavior: contain;
   background:
-    linear-gradient(rgba(70, 151, 165, 0.065) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(70, 151, 165, 0.065) 1px, transparent 1px), #f4fafb;
+    linear-gradient(rgba(57, 255, 154, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(57, 255, 154, 0.035) 1px, transparent 1px),
+    #0a0e0d;
   background-size: 32px 32px;
   scrollbar-width: thin;
-  scrollbar-color: #9ac5cd transparent;
+  scrollbar-color: rgba(57, 255, 154, 0.25) transparent;
 }
 
 .agentos-empty-state {
-  color: #1e414b;
+  color: #c4d4cc;
 }
 
 .agentos-starter-prompt {
-  border: 1px solid #c7dce0;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(57, 255, 154, 0.16);
+  border-radius: 8px;
+  background: rgba(18, 24, 22, 0.65);
   padding: 0.65rem 0.8rem;
-  color: #42636b;
+  color: var(--muted);
   transition:
     border-color 150ms ease,
     box-shadow 150ms ease,
@@ -327,11 +413,12 @@ body {
 }
 
 .agentos-starter-prompt:hover {
-  border-color: #6ac3ce;
-  box-shadow: 0 8px 18px rgba(33, 134, 153, 0.1);
+  border-color: rgba(57, 255, 154, 0.32);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
   transform: translateY(-1px);
 }
 
+/* ── Messages ── */
 .agentos-message {
   padding: 0.85rem 1rem;
   font-size: 0.875rem;
@@ -340,11 +427,12 @@ body {
 
 .agentos-message-user {
   position: relative;
-  border: 1px solid #91d5df;
+  border: 1px solid rgba(57, 255, 154, 0.22);
   border-radius: 15px 5px 15px 15px;
-  background: linear-gradient(135deg, rgba(80, 207, 218, 0.28), rgba(86, 210, 169, 0.16)), #effcff;
-  color: #174c5a;
-  box-shadow: 0 8px 20px rgba(29, 141, 161, 0.1);
+  background: linear-gradient(135deg, rgba(57, 255, 154, 0.12), rgba(34, 230, 160, 0.06)),
+    rgba(18, 26, 23, 0.75);
+  color: #d8eee4;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 
 .agentos-message-user::after {
@@ -353,22 +441,23 @@ body {
   right: -1px;
   width: 1.1rem;
   height: 1.1rem;
-  border-top: 1px solid #91d5df;
-  border-right: 1px solid #91d5df;
+  border-top: 1px solid rgba(57, 255, 154, 0.22);
+  border-right: 1px solid rgba(57, 255, 154, 0.22);
   border-radius: 0 5px 0 0;
-  background: #f4fdff;
+  background: rgba(14, 19, 17, 0.9);
   content: "";
 }
 
 .agentos-message-assistant {
   position: relative;
   overflow: hidden;
-  border: 1px solid #d6e4e7;
+  border: 1px solid var(--border);
   border-radius: 5px 14px 14px 14px;
   background:
-    linear-gradient(110deg, rgba(89, 195, 210, 0.075), transparent 34%), rgba(255, 255, 255, 0.92);
-  color: #27444e;
-  box-shadow: 0 7px 18px rgba(39, 86, 96, 0.055);
+    linear-gradient(110deg, rgba(57, 255, 154, 0.05), transparent 34%),
+    rgba(16, 22, 20, 0.82);
+  color: #d0dcd6;
+  box-shadow: 0 7px 22px rgba(0, 0, 0, 0.25);
 }
 
 .agentos-message-assistant::before {
@@ -378,13 +467,13 @@ body {
   left: 0;
   width: 2px;
   border-radius: 999px;
-  background: #56b7c5;
+  background: var(--accent-dim);
   content: "";
 }
 
 .agentos-message-streaming::before {
-  background: #20b879;
-  box-shadow: 0 0 12px #20b879;
+  background: var(--accent);
+  box-shadow: 0 0 12px rgba(57, 255, 154, 0.55);
   animation: agentos-stream-pulse 1.4s ease-in-out infinite;
 }
 
@@ -394,30 +483,30 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  color: #71929a;
+  color: var(--muted);
   font-size: 0.7rem;
   font-weight: 650;
   letter-spacing: 0.03em;
 }
 
 .agentos-message-user .agentos-message-author {
-  color: #187385;
+  color: var(--accent-dim);
 }
 
 .agentos-message-user .agentos-message-author::before {
   width: 0.38rem;
   height: 0.38rem;
   border-radius: 999px;
-  background: #1eb879;
+  background: var(--success);
   content: "";
 }
 
 .agentos-message-assistant .agentos-message-author::before {
   width: 0.38rem;
   height: 0.38rem;
-  border: 1px solid #52b7c6;
+  border: 1px solid rgba(57, 255, 154, 0.45);
   border-radius: 2px;
-  background: #e7fbfe;
+  background: rgba(57, 255, 154, 0.12);
   content: "";
 }
 
@@ -427,10 +516,11 @@ body {
 }
 
 .agentos-message-meta {
-  color: #7a9299;
+  color: #6f8179;
   font-weight: 400;
 }
 
+/* ── Markdown ── */
 .agentos-md {
   position: relative;
   z-index: 1;
@@ -466,14 +556,14 @@ body {
 }
 
 .agentos-md a {
-  color: #1f7f93;
+  color: var(--accent-dim);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .agentos-md code {
   border-radius: 4px;
-  background: rgba(17, 43, 55, 0.06);
+  background: rgba(57, 255, 154, 0.08);
   padding: 0.1em 0.35em;
   font-family: var(--font-mono);
   font-size: 0.86em;
@@ -482,9 +572,9 @@ body {
 .agentos-md pre {
   overflow: auto;
   max-height: 22rem;
-  border: 1px solid #d0e0e4;
+  border: 1px solid rgba(57, 255, 154, 0.14);
   border-radius: 8px;
-  background: #f4f8f9;
+  background: rgba(8, 12, 11, 0.85);
   padding: 0.85rem 1rem;
 }
 
@@ -517,17 +607,18 @@ body {
 }
 
 .agentos-md blockquote {
-  border-left: 3px solid #9ec4cd;
+  border-left: 3px solid rgba(57, 255, 154, 0.35);
   padding-left: 0.85rem;
-  color: #526c74;
+  color: var(--muted);
 }
 
+/* ── Reasoning step ── */
 .agentos-reasoning {
   overflow: hidden;
-  border: 1px solid #9ad6ce;
+  border: 1px solid rgba(57, 255, 154, 0.2);
   border-radius: 8px;
-  background: linear-gradient(105deg, #e4f8f2, #f8fffd 72%);
-  box-shadow: 0 8px 20px rgba(48, 150, 121, 0.07);
+  background: linear-gradient(105deg, rgba(57, 255, 154, 0.08), rgba(16, 22, 20, 0.75) 72%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 
 .agentos-reasoning-toggle {
@@ -537,7 +628,7 @@ body {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.75rem 0.9rem;
-  color: #266b5b;
+  color: #a8c8b8;
   text-align: left;
 }
 
@@ -553,12 +644,12 @@ body {
   width: 0.45rem;
   height: 0.45rem;
   border-radius: 999px;
-  background: #1eb879;
-  box-shadow: 0 0 0 3px rgba(30, 184, 121, 0.12);
+  background: var(--success);
+  box-shadow: 0 0 6px rgba(57, 255, 154, 0.4);
 }
 
 .agentos-reasoning-state {
-  color: #669587;
+  color: #6f9588;
   font-size: 0.75rem;
 }
 
@@ -566,31 +657,32 @@ body {
   max-height: 18rem;
   overflow: auto;
   margin: 0;
-  border-top: 1px solid #c5e5dd;
+  border-top: 1px solid rgba(57, 255, 154, 0.14);
   padding: 0.8rem 0.9rem;
-  color: #426b60;
+  color: #8aa89c;
   font-size: 0.75rem;
   line-height: 1.7;
   white-space: pre-wrap;
 }
 
 .agentos-reasoning-running {
-  border-color: #65cba9;
+  border-color: rgba(57, 255, 154, 0.35);
   box-shadow:
-    0 0 0 1px rgba(60, 189, 140, 0.12),
-    0 10px 26px rgba(37, 167, 112, 0.12);
+    0 0 0 1px rgba(57, 255, 154, 0.1),
+    0 10px 28px rgba(0, 0, 0, 0.32);
 }
 
 .agentos-reasoning-running .agentos-reasoning-indicator {
   animation: agentos-thinking-pulse 1.2s ease-in-out infinite;
 }
 
+/* ── Tool call ── */
 .agentos-tool-call {
   overflow: hidden;
-  border: 1px solid #9abfd0;
+  border: 1px solid rgba(57, 255, 154, 0.18);
   border-radius: 8px;
-  background: linear-gradient(105deg, #e8f4f8, #f7fcff 72%);
-  box-shadow: 0 8px 20px rgba(36, 120, 139, 0.07);
+  background: linear-gradient(105deg, rgba(34, 230, 160, 0.07), rgba(16, 22, 20, 0.78) 72%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 
 .agentos-tool-call-toggle {
@@ -600,7 +692,7 @@ body {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.75rem 0.9rem;
-  color: #245c6d;
+  color: #b0ccc4;
   text-align: left;
 }
 
@@ -619,22 +711,22 @@ body {
   width: 0.45rem;
   height: 0.45rem;
   border-radius: 999px;
-  background: #1f8fb0;
-  box-shadow: 0 0 0 3px rgba(31, 143, 176, 0.12);
+  background: var(--accent-dim);
+  box-shadow: 0 0 6px rgba(34, 230, 160, 0.35);
 }
 
 .agentos-tool-call-state {
   flex-shrink: 0;
-  color: #6a8f9b;
+  color: var(--muted);
   font-size: 0.75rem;
 }
 
 .agentos-tool-call-content {
   display: grid;
   gap: 0.65rem;
-  border-top: 1px solid #c5dce4;
+  border-top: 1px solid rgba(57, 255, 154, 0.12);
   padding: 0.8rem 0.9rem;
-  color: #42616b;
+  color: #9ab0a8;
   font-size: 0.75rem;
   line-height: 1.7;
 }
@@ -651,15 +743,15 @@ body {
   display: inline-block;
   min-width: 4.5rem;
   margin-right: 0.5rem;
-  color: #6a8f9b;
+  color: var(--muted);
   font-weight: 600;
 }
 
 .agentos-tool-call-running {
-  border-color: #6db6cb;
+  border-color: rgba(57, 255, 154, 0.32);
   box-shadow:
-    0 0 0 1px rgba(49, 149, 173, 0.12),
-    0 10px 26px rgba(36, 120, 139, 0.12);
+    0 0 0 1px rgba(57, 255, 154, 0.08),
+    0 10px 28px rgba(0, 0, 0, 0.32);
 }
 
 .agentos-tool-call-running .agentos-tool-call-indicator {
@@ -667,74 +759,77 @@ body {
 }
 
 .agentos-tool-call-error {
-  border-color: #d8a3a3;
-  background: linear-gradient(105deg, #fff2f2, #fffafa 72%);
+  border-color: rgba(255, 107, 122, 0.35);
+  background: linear-gradient(105deg, rgba(255, 107, 122, 0.1), rgba(22, 16, 18, 0.78) 72%);
 }
 
 .agentos-tool-call-error .agentos-tool-call-indicator {
-  background: #c15b5b;
-  box-shadow: 0 0 0 3px rgba(193, 91, 91, 0.12);
+  background: var(--danger);
+  box-shadow: 0 0 6px rgba(255, 107, 122, 0.35);
 }
 
+/* ── Composer & actions ── */
 .agentos-scroll-latest {
-  border: 1px solid #91c8d0;
-  border-radius: 6px;
-  background: #fff;
-  color: #24788b;
-  box-shadow: 0 9px 22px rgba(30, 91, 104, 0.18);
+  border: 1px solid rgba(57, 255, 154, 0.28);
+  border-radius: 8px;
+  background: rgba(18, 24, 22, 0.9);
+  color: var(--accent-dim);
+  box-shadow: 0 0 16px rgba(57, 255, 154, 0.15);
 }
 
 .agentos-chat-error {
-  border-color: #eeb4b4;
-  background: #fff2f2;
-  color: #b04444;
+  border-color: rgba(255, 107, 122, 0.28);
+  background: rgba(255, 107, 122, 0.08);
+  color: var(--danger);
 }
 
 .agentos-composer-input {
   overflow-y: hidden;
-  border: 1px solid #bdd6da;
+  border: 1px solid rgba(57, 255, 154, 0.16);
   border-radius: 8px;
-  background: #fff;
-  color: #173b45;
+  background: rgba(12, 16, 15, 0.85);
+  color: var(--text);
   scrollbar-width: thin;
-  scrollbar-color: #8ac6cf transparent;
+  scrollbar-color: rgba(57, 255, 154, 0.25) transparent;
 }
 
 .agentos-composer-input::placeholder {
-  color: #89a0a6;
+  color: #5c6e66;
 }
 
 .agentos-composer-input:focus {
-  border-color: #24a9bd;
-  box-shadow: 0 0 0 3px rgba(36, 169, 189, 0.13);
+  border-color: rgba(57, 255, 154, 0.4);
+  box-shadow: 0 0 0 3px rgba(57, 255, 154, 0.1);
 }
 
 .agentos-composer-input:disabled {
-  background: #edf3f4;
-  color: #809399;
+  background: rgba(18, 24, 22, 0.5);
+  color: #5c6e66;
 }
 
 .agentos-send-button {
   min-width: 6.4rem;
-  border: 1px solid #138da2;
-  border-radius: 7px;
-  background: linear-gradient(135deg, #168ba0, #24ad91);
-  color: #f5ffff;
-  box-shadow: 0 8px 17px rgba(30, 151, 160, 0.22);
+  border: 1px solid var(--accent-dim);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(57, 255, 154, 0.28), rgba(34, 230, 160, 0.18));
+  color: #0b0f0e;
+  font-weight: 600;
+  box-shadow: 0 0 18px rgba(57, 255, 154, 0.22);
   transition:
     box-shadow 150ms ease,
     transform 150ms ease;
 }
 
 .agentos-send-button:hover {
-  box-shadow: 0 11px 23px rgba(30, 151, 160, 0.3);
+  box-shadow: 0 0 24px rgba(57, 255, 154, 0.32);
   transform: translateY(-1px);
 }
 
 .agentos-stop-button {
-  border-color: #d2974d;
-  background: #a96c2e;
-  color: #fff8eb;
+  border-color: rgba(255, 160, 80, 0.45);
+  background: linear-gradient(135deg, rgba(255, 140, 60, 0.35), rgba(200, 90, 40, 0.25));
+  color: #fff4e8;
+  box-shadow: 0 0 14px rgba(255, 140, 60, 0.2);
 }
 
 .agentos-is-streaming .agentos-chat-header {
@@ -748,12 +843,13 @@ body {
   left: 0;
   width: 28%;
   height: 2px;
-  background: #21b68a;
-  box-shadow: 0 0 14px #21b68a;
+  background: var(--accent);
+  box-shadow: 0 0 14px rgba(57, 255, 154, 0.55);
   content: "";
   animation: agentos-run-scan 2.2s ease-in-out infinite;
 }
 
+/* ── Mobile menu ── */
 .agentos-mobile-menu {
   position: fixed;
   z-index: 50;
@@ -765,7 +861,9 @@ body {
   position: absolute;
   inset: 0;
   border: 0;
-  background: rgba(20, 44, 53, 0.38);
+  background: rgba(4, 8, 7, 0.62);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   touch-action: none;
 }
 
@@ -777,9 +875,11 @@ body {
   height: 100%;
   min-height: 0;
   flex-direction: column;
-  border-right: 1px solid #c4dde1;
-  background: #f8fcfc;
-  box-shadow: 18px 0 42px rgba(22, 67, 78, 0.2);
+  border-right: 1px solid var(--border);
+  background: rgba(12, 16, 15, 0.94);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 18px 0 48px rgba(0, 0, 0, 0.55);
 }
 
 .agentos-mobile-drawer-header {
@@ -787,7 +887,7 @@ body {
   flex: none;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #d6e5e8;
+  border-bottom: 1px solid var(--border);
   padding: 1rem;
 }
 
@@ -797,10 +897,10 @@ body {
   place-items: center;
   width: 2.5rem;
   height: 2.5rem;
-  border: 1px solid #bad3d8;
-  border-radius: 7px;
-  background: #fff;
-  color: #27606e;
+  border: 1px solid rgba(57, 255, 154, 0.18);
+  border-radius: 8px;
+  background: rgba(18, 24, 22, 0.65);
+  color: var(--accent-dim);
 }
 
 .agentos-mobile-menu-toggle {
@@ -812,7 +912,7 @@ body {
   display: block;
   width: 100%;
   height: 1px;
-  background: #286979;
+  background: var(--accent-dim);
 }
 
 .agentos-mobile-close {
@@ -827,7 +927,7 @@ body {
 
 .agentos-mobile-account {
   flex: none;
-  border-top: 1px solid #d6e5e8;
+  border-top: 1px solid var(--border);
   padding: 1rem;
 }
 
@@ -835,18 +935,19 @@ body {
 .agentos-mobile-logout {
   width: 100%;
   min-height: 2.5rem;
-  border: 1px solid #bfd5d9;
-  border-radius: 6px;
-  background: #fff;
-  color: #3c626b;
+  border: 1px solid rgba(57, 255, 154, 0.16);
+  border-radius: 8px;
+  background: rgba(18, 24, 22, 0.65);
+  color: var(--muted);
   font-size: 0.875rem;
 }
 
 .agentos-mobile-logout {
-  border-color: #efc5c5;
-  color: #b25353;
+  border-color: rgba(255, 107, 122, 0.28);
+  color: var(--danger);
 }
 
+/* ── Animations ── */
 @keyframes agentos-run-scan {
   0%,
   100% {
@@ -880,11 +981,20 @@ body {
   }
 }
 
+/* ── Responsive ── */
 @media (min-width: 1024px) {
   .agentos-workspace {
     grid-template-columns: 18rem minmax(0, 1fr) 20rem;
     gap: 1rem;
     padding: 1rem 1.25rem;
+  }
+
+  .agentos-workspace.agentos-workspace-runtime-collapsed {
+    grid-template-columns: 18rem minmax(0, 1fr);
+  }
+
+  .agentos-workspace.agentos-workspace-runtime-collapsed .agentos-runtime-rail {
+    display: none;
   }
 }
 
