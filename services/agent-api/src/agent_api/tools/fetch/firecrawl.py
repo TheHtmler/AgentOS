@@ -5,7 +5,7 @@ import httpx
 
 from agent_api.tools.fetch.truncate import apply_fetch_limits
 from agent_api.tools.fetch.types import FetchProviderError, FetchResponse
-from agent_api.tools.fetch.url_guard import UnsafeUrlError, assert_public_http_url
+from agent_api.tools.fetch.url_guard import UnsafeUrlError, assert_remote_fetch_url
 
 _DEFAULT_BASE_URL = "https://api.firecrawl.dev"
 
@@ -45,7 +45,9 @@ class FirecrawlProvider:
             )
 
         try:
-            safe_url = assert_public_http_url(url)
+            # Firecrawl fetches from its own network; skip local DNS checks so
+            # polluted/resolving-to-loopback answers on the Mac do not block it.
+            safe_url = assert_remote_fetch_url(url)
         except UnsafeUrlError as exc:
             raise FetchProviderError(
                 str(exc),

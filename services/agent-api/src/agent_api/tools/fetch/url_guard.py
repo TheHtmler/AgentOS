@@ -25,8 +25,14 @@ class UnsafeUrlError(ValueError):
     """URL failed SSRF policy checks."""
 
 
-def assert_public_http_url(url: str) -> str:
-    """Validate scheme/host and resolve DNS to reject private targets."""
+def assert_safe_fetch_url(url: str, *, resolve_dns: bool) -> str:
+    """Validate a fetch target.
+
+    Structural checks always run (scheme, blocked hosts, literal private IPs).
+    DNS resolution is only for direct local fetches. Remote providers like
+    Firecrawl resolve from their own network, so local DNS pollution must not
+    block them.
+    """
 
     normalized = url.strip()
     if not normalized:
@@ -46,21 +52,33 @@ def assert_public_http_url(url: str) -> str:
     if parsed.username or parsed.password:
         raise UnsafeUrlError("urls with embedded credentials are not allowed")
 
-    _assert_hostname_resolves_public(hostname)
-    return normalized
-
-
-def _assert_hostname_resolves_public(hostname: str) -> None:
     try:
         literal = ipaddress.ip_address(hostname)
     except ValueError:
         literal = None
 
-    if literal is not None:
-        if not _is_public_ip(literal):
-            raise UnsafeUrlError("ip address is not publicly routable")
-        return
+    if literal is not None and not _is_public_ip(literal):
+        raise UnsafeUrlError("ip address is not publicly routable")
 
+    if resolve_dns and literal is None:
+        _assert_hostname_resolves_public(hostname)
+
+    return normalized
+
+
+def assert_public_http_url(url: str) -> str:
+    """Validate scheme/host and resolve DNS to reject private targets (local fetch)."""
+
+    return assert_safe_fetch_url(url, resolve_dns=True)
+
+
+def assert_remote_fetch_url(url: str) -> str:
+    """Validate URL shape for providers that fetch outside this host."""
+
+    return assert_safe_fetch_url(url, resolve_dns=False)
+
+
+def _assert_hostname_resolves_public(hostname: str) -> None:
     try:
         infos = socket.getaddrinfo(hostname, None)
     except socket.gaierror as exc:
@@ -69,6 +87,7 @@ def _assert_hostname_resolves_public(hostname: str) -> None:
     if not infos:
         raise UnsafeUrlError(f"unable to resolve hostname: {hostname}")
 
+    saw_address = False
     for info in infos:
         sockaddr = info[4]
         if not sockaddr:
@@ -78,8 +97,12 @@ def _assert_hostname_resolves_public(hostname: str) -> None:
             ip = ipaddress.ip_address(ip_text)
         except ValueError:
             continue
+        saw_address = True
         if not _is_public_ip(ip):
             raise UnsafeUrlError("hostname resolves to a non-public address")
+
+    if not saw_address:
+        raise UnsafeUrlError(f"unable to resolve hostname: {hostname}")
 
 
 def _is_public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
