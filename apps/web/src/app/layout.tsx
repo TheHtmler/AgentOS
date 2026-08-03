@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/space-grotesk";
 import "@fontsource-variable/ibm-plex-sans";
+
+import { ThemeProvider } from "@/components/theme/theme-provider";
+import { THEME_STORAGE_KEY } from "@/lib/theme";
+
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -21,14 +25,39 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+const themeBootScript = `
+(() => {
+  try {
+    const key = ${JSON.stringify(THEME_STORAGE_KEY)};
+    const stored = localStorage.getItem(key);
+    const theme =
+      stored === "light" || stored === "dark"
+        ? stored
+        : window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+  } catch (_) {
+    document.documentElement.dataset.theme = "light";
+    document.documentElement.style.colorScheme = "light";
+  }
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" className="h-full">
-      <body className="min-h-full font-sans antialiased">{children}</body>
+    <html lang="zh-CN" className="h-full" data-theme="light" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
+      <body className="min-h-full font-sans antialiased">
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }

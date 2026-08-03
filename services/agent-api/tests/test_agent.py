@@ -14,6 +14,7 @@ def test_default_settings() -> None:
     assert settings.ollama_base_url == "http://127.0.0.1:11434/v1"
     assert settings.ollama_model == "agentos-gemma4:8k"
     assert settings.model_temperature == 0.3
+    assert settings.model_max_concurrent_runs == 3
     assert settings.search_enabled is True
     assert settings.search_providers == ["tavily", "duckduckgo"]
 
@@ -25,6 +26,16 @@ def test_settings_reject_invalid_model_temperature(temperature: float) -> None:
             {
                 "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
                 "model_temperature": temperature,
+            },
+        )
+
+
+def test_settings_reject_invalid_model_max_concurrent_runs() -> None:
+    with pytest.raises(ValueError, match="model_max_concurrent_runs must be at least 1"):
+        Settings.model_validate(
+            {
+                "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
+                "model_max_concurrent_runs": 0,
             },
         )
 

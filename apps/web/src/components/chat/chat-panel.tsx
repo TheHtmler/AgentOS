@@ -35,6 +35,8 @@ type ThreadHistory = {
 
 type ChatPanelProps = {
   selectedThreadId: string | null | undefined;
+  /** When false, this panel stays mounted for background runs but must not own the URL/inspector. */
+  isActive?: boolean;
   onNewConversation: () => void;
   onRunStarted: (runId: string) => void;
   onStreamingChanged: (isStreaming: boolean) => void;
@@ -296,6 +298,7 @@ async function loadRunDurationLabel(runId: string): Promise<string | null> {
 
 export function ChatPanel({
   selectedThreadId,
+  isActive = true,
   onNewConversation,
   onRunStarted,
   onStreamingChanged,
@@ -318,10 +321,13 @@ export function ChatPanel({
   const agentRef = useRef<HttpAgent | null>(null);
   const cancellationRequestedRef = useRef(false);
   const autoScrollRef = useRef(true);
+  const isActiveRef = useRef(isActive);
   const initialThreadIdRef = useRef<string | null | undefined>(undefined);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  isActiveRef.current = isActive;
 
   if (agentRef.current === null) {
     agentRef.current = createAgent("new", []);
@@ -330,6 +336,23 @@ export function ChatPanel({
   useEffect(() => {
     onStreamingChanged(isStreaming);
   }, [isStreaming, onStreamingChanged]);
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
+    if (threadId !== null) {
+      updateThreadInUrl(threadId);
+      return;
+    }
+
+    if (selectedThreadId === null) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("thread");
+      window.history.replaceState(window.history.state, "", url);
+    }
+  }, [isActive, selectedThreadId, threadId]);
 
   useEffect(() => {
     if (autoScrollRef.current) {
@@ -410,7 +433,9 @@ export function ChatPanel({
           setHistoryToolCalls(history.toolCalls);
           setLiveUserMessageId(null);
           setError(null);
-          updateThreadInUrl(history.thread_id);
+          if (isActiveRef.current) {
+            updateThreadInUrl(history.thread_id);
+          }
           onThreadChanged(history.thread_id);
         }
       } catch (caughtError: unknown) {
@@ -539,7 +564,9 @@ export function ChatPanel({
             runningAgent.threadId = event.threadId;
             setThreadId(event.threadId);
             onThreadChanged(event.threadId);
-            updateThreadInUrl(event.threadId);
+            if (isActiveRef.current) {
+              updateThreadInUrl(event.threadId);
+            }
           }
         },
         onRunErrorEvent: ({ event }) => {

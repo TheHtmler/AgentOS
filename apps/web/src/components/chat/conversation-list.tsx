@@ -12,7 +12,7 @@ type Conversation = {
 type ConversationListProps = {
   activeThreadId: string | null;
   refreshKey: number;
-  isChatStreaming: boolean;
+  streamingThreadIds: ReadonlySet<string>;
   onNewConversation: () => void;
   onSelectThread: (threadId: string) => void;
   onThreadDeleted: (threadId: string) => void;
@@ -116,7 +116,7 @@ function groupConversations(conversations: Conversation[]): ConversationGroup[] 
 export function ConversationList({
   activeThreadId,
   refreshKey,
-  isChatStreaming,
+  streamingThreadIds,
   onNewConversation,
   onSelectThread,
   onThreadDeleted,
@@ -309,6 +309,7 @@ export function ConversationList({
                 const preview = conversation.latest_message_content ?? "暂无消息";
                 const isBusy = busyThreadId === conversation.id;
                 const isRenaming = renamingThreadId === conversation.id;
+                const isStreaming = streamingThreadIds.has(conversation.id);
 
                 return (
                   <div
@@ -359,6 +360,15 @@ export function ConversationList({
                           <div className="flex min-w-0 items-start justify-between gap-3">
                             <p className="min-w-0 truncate text-sm font-medium">
                               {conversationLabel(conversation)}
+                              {isStreaming ? (
+                                <span
+                                  className={`ml-2 text-[10px] font-semibold tracking-wide ${
+                                    active ? "text-teal-200" : "text-teal-700"
+                                  }`}
+                                >
+                                  生成中
+                                </span>
+                              ) : null}
                             </p>
                             <time
                               className={`shrink-0 text-xs ${active ? "text-zinc-300" : "text-zinc-400"}`}
@@ -377,7 +387,7 @@ export function ConversationList({
                         <button
                           type="button"
                           aria-label="会话操作"
-                          disabled={isChatStreaming || isBusy}
+                          disabled={isStreaming || isBusy}
                           onClick={() =>
                             setMenuThreadId((current) =>
                               current === conversation.id ? null : conversation.id,

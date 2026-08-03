@@ -50,9 +50,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     app.state.runtime = AgentRuntime(
         agent=agent,
-        # Start with one concurrent stream to keep model execution
-        # within the configured resource budget.
-        model_semaphore=asyncio.Semaphore(1),
+        # Allow multiple threads to generate concurrently within the configured budget.
+        model_semaphore=asyncio.Semaphore(settings.model_max_concurrent_runs),
         search_router=search_router if settings.search_enabled else None,
     )
 

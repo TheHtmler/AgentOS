@@ -2,6 +2,8 @@
 
 import { FormEvent, useState } from "react";
 
+import { ThemeToggle } from "@/components/theme/theme-toggle";
+
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -32,8 +34,11 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-zinc-100 px-4">
-      <form onSubmit={submit} className="w-full max-w-md border border-zinc-200 bg-white p-6">
+    <main className="agentos-auth-shell relative grid place-items-center overflow-auto px-4">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
+      <form onSubmit={submit} className="agentos-auth-card w-full max-w-md p-6">
         <p className="text-sm font-medium text-zinc-500">AgentOS</p>
         <h1 className="mt-2 text-xl font-semibold text-zinc-950">登录</h1>
 
@@ -44,7 +49,7 @@ export default function LoginPage() {
             name="email"
             type="email"
             autoComplete="email"
-            className="mt-2 w-full border border-zinc-300 px-3 py-2"
+            className="agentos-auth-input mt-2 w-full px-3 py-2"
           />
         </label>
 
@@ -55,7 +60,7 @@ export default function LoginPage() {
             name="password"
             type="password"
             autoComplete="current-password"
-            className="mt-2 w-full border border-zinc-300 px-3 py-2"
+            className="agentos-auth-input mt-2 w-full px-3 py-2"
           />
         </label>
 
@@ -63,7 +68,7 @@ export default function LoginPage() {
 
         <button
           disabled={submitting}
-          className="mt-6 w-full bg-zinc-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+          className="agentos-auth-submit mt-6 w-full px-4 py-2.5 text-sm disabled:opacity-60"
         >
           {submitting ? "正在登录" : "登录"}
         </button>
