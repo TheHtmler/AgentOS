@@ -1186,9 +1186,21 @@ body {
 }
 
 /* ── Composer & actions ── */
+.agentos-scroll-latest-bar {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  padding: 0.35rem 0.75rem 0.15rem;
+  pointer-events: none;
+}
+
+.agentos-scroll-latest-bar > .agentos-scroll-latest {
+  pointer-events: auto;
+}
+
 .agentos-scroll-latest {
   border: 1px solid var(--accent-border);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--surface-elevated);
   color: var(--accent-dim);
   box-shadow: 0 0 16px var(--accent-glow);

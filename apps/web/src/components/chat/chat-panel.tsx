@@ -848,7 +848,7 @@ export function ChatPanel({
       <div
         ref={messagesViewportRef}
         onScroll={handleMessageScroll}
-        className="agentos-message-viewport relative min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5"
+        className="agentos-message-viewport min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5"
       >
         <div className="mx-auto max-w-3xl space-y-5">
           {messages.length === 0 ? (
@@ -997,22 +997,24 @@ export function ChatPanel({
 
           <div ref={messagesEndRef} />
         </div>
-
-        {showScrollToLatest ? (
-          <button
-            type="button"
-            onClick={scrollToLatest}
-            className="agentos-scroll-latest absolute right-4 bottom-4 px-3 py-2 text-xs font-medium"
-          >
-            回到最新消息
-          </button>
-        ) : null}
       </div>
 
       {error ? (
         <p role="alert" className="agentos-chat-error border-t px-5 py-3 text-sm">
           {error}
         </p>
+      ) : null}
+
+      {showScrollToLatest ? (
+        <div className="agentos-scroll-latest-bar">
+          <button
+            type="button"
+            onClick={scrollToLatest}
+            className="agentos-scroll-latest px-3 py-2 text-xs font-medium"
+          >
+            回到最新消息
+          </button>
+        </div>
       ) : null}
 
       <form
