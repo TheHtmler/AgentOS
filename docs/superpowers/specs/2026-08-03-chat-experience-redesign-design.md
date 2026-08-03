@@ -1,7 +1,7 @@
 # 聊天体验改版（时间线 · Markdown · 会话管理 · 科技风视觉）
 
 日期：2026-08-03  
-状态：accepted（待实现）  
+状态：accepted（P0/P1/P2 已实现）  
 前置：
 
 - `2026-08-03-inline-tool-call-ui-design.md`（内联 ToolCard + 历史 `tool_calls`）

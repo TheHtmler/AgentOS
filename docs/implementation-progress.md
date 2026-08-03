@@ -59,6 +59,7 @@
 - `GET /v1/threads/{id}/messages` 增加 `tool_calls`（来自 `run_events` 摘要，按 Run↔user message 顺序锚定 `after_message_id`）；刷新后工具卡可恢复。
 - 聊天体验 P0：多段 Thinking 与 Tool 共用有序 `timelineSteps`；助手气泡 Markdown（GFM + sanitize）；消息时间戳与 Run 总耗时。
 - 聊天体验 P1：Thread 重命名（`PATCH /v1/threads/{id}`）与软删除（`deleted_at` + `DELETE`）；列表隐藏已删会话；Next.js 同域代理与侧栏操作菜单。
+- 聊天体验 P2：深色科技风 design tokens / 玻璃面板 / 霓虹薄荷绿强调；Space Grotesk + IBM Plex Sans；AgentOS 几何 Logo 与 favicon；桌面右侧 Run 检视默认收起可切换。
 
 ## 验证
 
