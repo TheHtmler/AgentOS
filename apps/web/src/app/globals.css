@@ -920,18 +920,35 @@ body {
 }
 
 .agentos-reasoning-content {
-  /* ~2 lines: signal activity without a tall thinking panel */
-  max-height: 2.5em;
+  /* ~3 lines of activity preview */
+  max-height: 3.9em;
   overflow: auto;
   overscroll-behavior: contain;
   margin: 0;
   border-top: 1px solid var(--border);
-  padding: 0.2rem 0.55rem 0.35rem;
+  padding: 0.25rem 0.55rem 0.4rem;
   color: var(--muted);
-  font-size: 0.72rem;
-  line-height: 1.25;
+  font-size: 0.75rem;
+  line-height: 1.3;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.agentos-process-note {
+  margin-top: 0.15rem;
+  border-top: 1px dashed var(--border);
+  padding: 0.45rem 0.35rem 0.15rem;
+}
+
+.agentos-process-note-label {
+  margin-bottom: 0.35rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.agentos-process-note .agentos-md {
+  font-size: 0.88rem;
 }
 
 .agentos-reasoning-running {
@@ -1308,7 +1325,8 @@ body {
   min-width: 6.4rem;
   border: 1px solid var(--accent-dim);
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--accent) 18%, transparent));
+  /* Solid fill so --send-fg (near-black) stays readable on dark theme. */
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
   color: var(--send-fg);
   font-weight: 600;
   box-shadow: 0 0 18px var(--accent-glow);
@@ -1409,6 +1427,13 @@ body {
 .agentos-mobile-menu-toggle {
   gap: 4px;
   padding: 0.65rem;
+}
+
+/* Desktop already has the conversation rail — hide hamburger at lg+. */
+@media (min-width: 1024px) {
+  .agentos-mobile-menu-toggle {
+    display: none;
+  }
 }
 
 .agentos-mobile-menu-toggle span {

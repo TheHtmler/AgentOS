@@ -14,8 +14,6 @@ import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 
-export const PAUSE_CHAT_AUTOSCROLL_EVENT = "agentos:pause-chat-autoscroll";
-
 function collectText(node: ReactNode): string {
   if (node === null || node === undefined || typeof node === "boolean") {
     return "";
@@ -40,13 +38,8 @@ function languageFromClassName(className: string | undefined): string | null {
   return match?.[1] ?? null;
 }
 
-function requestPauseChatAutoScroll() {
-  window.dispatchEvent(new Event(PAUSE_CHAT_AUTOSCROLL_EVENT));
-}
-
 function CodeBlock({ children }: { children: ReactNode }) {
   const [copied, setCopied] = useState(false);
-  // Dedicated scrollport — keep it stable across markdown child updates.
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const savedScrollTopRef = useRef(0);
@@ -72,7 +65,6 @@ function CodeBlock({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Default while streaming: keep the latest lines in view.
     stickToBottomRef.current = true;
     port.scrollTop = port.scrollHeight;
   }, [codeText]);
@@ -83,10 +75,7 @@ function CodeBlock({ children }: { children: ReactNode }) {
       return;
     }
 
-    // React's onWheel is passive in many browsers; native listener can preventDefault.
     const onWheel = (event: WheelEvent) => {
-      requestPauseChatAutoScroll();
-
       const atTop = port.scrollTop <= 0;
       const atBottom = port.scrollHeight - port.scrollTop - port.clientHeight <= 1;
       const scrollingUp = event.deltaY < 0;
@@ -95,13 +84,13 @@ function CodeBlock({ children }: { children: ReactNode }) {
       const canScrollInside =
         overflow && ((scrollingUp && !atTop) || (scrollingDown && !atBottom));
 
+      // Nested code scroll only — never toggle session "回到最新".
+      event.stopPropagation();
       if (!canScrollInside) {
-        event.stopPropagation();
         return;
       }
 
       event.preventDefault();
-      event.stopPropagation();
       if (scrollingUp) {
         userPinnedRef.current = true;
         stickToBottomRef.current = false;
@@ -143,7 +132,7 @@ function CodeBlock({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="agentos-code-block" onPointerDown={requestPauseChatAutoScroll}>
+    <div className="agentos-code-block">
       <div className="agentos-code-block-toolbar">
         <span className="agentos-code-block-lang">{language ?? "code"}</span>
         <button
@@ -160,7 +149,6 @@ function CodeBlock({ children }: { children: ReactNode }) {
         className="agentos-code-block-scroll"
         onScroll={handleScroll}
         onTouchStart={() => {
-          requestPauseChatAutoScroll();
           userPinnedRef.current = true;
           stickToBottomRef.current = false;
         }}

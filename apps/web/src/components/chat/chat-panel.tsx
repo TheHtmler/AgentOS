@@ -12,10 +12,7 @@ import {
   useState,
 } from "react";
 
-import {
-  AssistantMarkdown,
-  PAUSE_CHAT_AUTOSCROLL_EVENT,
-} from "@/components/chat/assistant-markdown";
+import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
 import { ProcessGroup } from "@/components/chat/process-group";
 import {
   ThinkingStepCard,
@@ -378,16 +375,6 @@ export function ChatPanel({
   }, [messages, timelineSteps]);
 
   useEffect(() => {
-    // Code blocks (and other nested panes) ask the chat to stop following the live edge.
-    const onPause = () => {
-      autoScrollRef.current = false;
-      setShowScrollToLatest(true);
-    };
-    window.addEventListener(PAUSE_CHAT_AUTOSCROLL_EVENT, onPause);
-    return () => window.removeEventListener(PAUSE_CHAT_AUTOSCROLL_EVENT, onPause);
-  }, []);
-
-  useEffect(() => {
     const textarea = textareaRef.current;
 
     if (textarea === null) {
@@ -521,11 +508,16 @@ export function ChatPanel({
     setShowScrollToLatest(true);
   }
 
+  function isNestedScrollTarget(target: EventTarget | null): boolean {
+    return (
+      target instanceof Element &&
+      Boolean(target.closest(".agentos-code-block-scroll, .agentos-reasoning-content"))
+    );
+  }
+
   function handleViewportWheel(event: WheelEvent<HTMLDivElement>) {
-    const target = event.target;
-    if (target instanceof Element && target.closest(".agentos-code-block")) {
-      // Nested code scroll owns the gesture; never yank the chat while reading code.
-      pauseAutoScroll();
+    // Nested panes own their wheel; "回到最新" is session-viewport only.
+    if (isNestedScrollTarget(event.target)) {
       return;
     }
 
@@ -536,14 +528,22 @@ export function ChatPanel({
   }
 
   function handleViewportTouchStart(event: TouchEvent<HTMLDivElement>) {
+    if (isNestedScrollTarget(event.target)) {
+      touchStartYRef.current = null;
+      return;
+    }
     touchStartYRef.current = event.touches[0]?.clientY ?? null;
   }
 
   function handleViewportTouchMove(event: TouchEvent<HTMLDivElement>) {
+    if (isNestedScrollTarget(event.target) || touchStartYRef.current === null) {
+      return;
+    }
+
     const startY = touchStartYRef.current;
     const currentY = event.touches[0]?.clientY;
     // Finger moved down → content scrolls up → user is leaving the live edge.
-    if (startY !== null && currentY !== undefined && currentY - startY > 10) {
+    if (currentY !== undefined && currentY - startY > 10) {
       pauseAutoScroll();
     }
   }
@@ -559,6 +559,7 @@ export function ChatPanel({
       return;
     }
 
+    // Only the conversation scroller controls follow / "回到最新".
     const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
     const nearBottom = distanceFromBottom < AUTO_SCROLL_THRESHOLD;
     autoScrollRef.current = nearBottom;
@@ -963,26 +964,32 @@ export function ChatPanel({
                 message.role === "user"
                   ? messages.slice(index + 1).find((item) => item.role === "assistant")
                   : undefined;
+              const hasProcessShell = liveSteps.length > 0 || historicalTools.length > 0;
+              // While tools/thinking are live, draft assistant text is analysis — keep it in
+              // the process fold. After the turn ends, the same text becomes the conclusion outside.
+              const foldAnalysisIntoProcess =
+                message.role === "user" &&
+                isStreaming &&
+                liveUserMessageId === message.id &&
+                hasProcessShell &&
+                Boolean(followingAssistant?.content);
               const processStepsActive =
                 message.role === "user" &&
                 isStreaming &&
                 liveUserMessageId === message.id &&
                 (liveSteps.length > 0 ||
-                  (followingAssistant !== undefined && !followingAssistant.content));
+                  (followingAssistant !== undefined && !followingAssistant.content) ||
+                  foldAnalysisIntoProcess);
 
-              let thinkingOrdinal = 0;
               const processChildren =
                 message.role === "user"
                   ? [
                       ...liveSteps.map((step) => {
                         if (step.kind === "thinking") {
-                          thinkingOrdinal += 1;
-                          const ordinal = thinkingOrdinal;
                           return (
                             <ThinkingStepCard
                               key={step.id}
                               step={step}
-                              index={ordinal}
                               onToggle={() => toggleTimelineStep(step.id)}
                             />
                           );
@@ -1003,61 +1010,77 @@ export function ChatPanel({
                           onToggle={() => toggleHistoryToolCall(toolCall.id)}
                         />
                       )),
+                      ...(foldAnalysisIntoProcess && followingAssistant
+                        ? [
+                            <div key={`${message.id}-process-note`} className="agentos-process-note">
+                              <p className="agentos-process-note-label">分析</p>
+                              <AssistantMarkdown content={followingAssistant.content} />
+                            </div>,
+                          ]
+                        : []),
                     ]
                   : [];
 
+              const suppressOutsideAssistant =
+                message.role === "assistant" &&
+                isStreaming &&
+                index === currentAssistantMessageIndex &&
+                timelineSteps.length > 0;
+
               return (
                 <Fragment key={message.id}>
-                  <article
-                    className={`agentos-message ${
-                      message.role === "user"
-                        ? "agentos-message-user ml-auto max-w-[88%] sm:max-w-[72%]"
-                        : `agentos-message-assistant max-w-full sm:max-w-[92%] ${
-                            isStreaming && index === currentAssistantMessageIndex
-                              ? "agentos-message-streaming"
-                              : ""
-                          }`
-                    }`}
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-3 text-xs">
-                      <p className="agentos-message-author">
-                        {message.role === "user" ? "你" : "AgentOS"}
-                        {message.createdAt ? (
-                          <span className="agentos-message-meta">
-                            {" "}
-                            · {formatMessageTimestamp(message.createdAt)}
-                          </span>
+                  {suppressOutsideAssistant ? null : (
+                    <article
+                      className={`agentos-message ${
+                        message.role === "user"
+                          ? "agentos-message-user ml-auto max-w-[88%] sm:max-w-[72%]"
+                          : `agentos-message-assistant max-w-full sm:max-w-[92%] ${
+                              isStreaming && index === currentAssistantMessageIndex
+                                ? "agentos-message-streaming"
+                                : ""
+                            }`
+                      }`}
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+                        <p className="agentos-message-author">
+                          {message.role === "user" ? "你" : "AgentOS"}
+                          {message.createdAt ? (
+                            <span className="agentos-message-meta">
+                              {" "}
+                              · {formatMessageTimestamp(message.createdAt)}
+                            </span>
+                          ) : null}
+                          {message.role === "assistant" && message.durationLabel ? (
+                            <span className="agentos-message-meta">
+                              {" "}
+                              · {message.durationLabel}
+                            </span>
+                          ) : null}
+                        </p>
+                        {message.role === "assistant" && message.content ? (
+                          <button
+                            type="button"
+                            onClick={() => void copyAssistantMessage(message)}
+                            className="agentos-copy-button"
+                          >
+                            {copiedMessageId === message.id ? "已复制" : "复制"}
+                          </button>
                         ) : null}
-                        {message.role === "assistant" && message.durationLabel ? (
-                          <span className="agentos-message-meta">
-                            {" "}
-                            · {message.durationLabel}
-                          </span>
-                        ) : null}
-                      </p>
-                      {message.role === "assistant" && message.content ? (
-                        <button
-                          type="button"
-                          onClick={() => void copyAssistantMessage(message)}
-                          className="agentos-copy-button"
-                        >
-                          {copiedMessageId === message.id ? "已复制" : "复制"}
-                        </button>
-                      ) : null}
-                    </div>
+                      </div>
 
-                    {message.content ? (
-                      message.role === "assistant" ? (
-                        <AssistantMarkdown content={message.content} />
-                      ) : (
-                        <p className="break-words whitespace-pre-wrap">{message.content}</p>
-                      )
-                    ) : message.role === "assistant" && isStreaming ? (
-                      <p aria-live="polite" className="agentos-chat-subheading">
-                        正在生成最终回答...
-                      </p>
-                    ) : null}
-                  </article>
+                      {message.content ? (
+                        message.role === "assistant" ? (
+                          <AssistantMarkdown content={message.content} />
+                        ) : (
+                          <p className="break-words whitespace-pre-wrap">{message.content}</p>
+                        )
+                      ) : message.role === "assistant" && isStreaming ? (
+                        <p aria-live="polite" className="agentos-chat-subheading">
+                          正在生成最终回答...
+                        </p>
+                      ) : null}
+                    </article>
+                  )}
 
                   {message.role === "user" && processChildren.length > 0 ? (
                     <ProcessGroup
