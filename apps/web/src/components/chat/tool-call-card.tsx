@@ -13,6 +13,16 @@ export type ToolCallState = {
   afterMessageId: string;
 };
 
+function stringField(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
 function queryFromArgsText(argsText: string): string | null {
   const trimmed = argsText.trim();
   if (!trimmed) {
@@ -21,15 +31,26 @@ function queryFromArgsText(argsText: string): string | null {
 
   try {
     const parsed = JSON.parse(trimmed) as unknown;
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      !Array.isArray(parsed) &&
-      "query" in parsed &&
-      typeof (parsed as { query: unknown }).query === "string"
-    ) {
-      const query = (parsed as { query: string }).query.trim();
-      return query || null;
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return stringField(parsed as Record<string, unknown>, "query");
+    }
+  } catch {
+    // Args may still be a partial JSON fragment while streaming.
+  }
+
+  return null;
+}
+
+function urlFromArgsText(argsText: string): string | null {
+  const trimmed = argsText.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return stringField(parsed as Record<string, unknown>, "url");
     }
   } catch {
     // Args may still be a partial JSON fragment while streaming.
@@ -52,10 +73,13 @@ function statusLabel(status: ToolCallStatus): string {
 
 function collapsedSummary(toolCall: ToolCallState): string {
   const query = queryFromArgsText(toolCall.argsText);
+  const url = urlFromArgsText(toolCall.argsText);
   const parts = [toolCall.toolName];
 
   if (query) {
     parts.push(query);
+  } else if (url) {
+    parts.push(url);
   }
 
   const status = statusLabel(toolCall.status);
@@ -76,6 +100,7 @@ export function ToolCallCard({
   onToggle: () => void;
 }) {
   const query = queryFromArgsText(toolCall.argsText);
+  const url = urlFromArgsText(toolCall.argsText);
 
   return (
     <section
@@ -104,6 +129,12 @@ export function ToolCallCard({
             <p>
               <span className="agentos-tool-call-label">query</span>
               {query}
+            </p>
+          ) : null}
+          {url ? (
+            <p>
+              <span className="agentos-tool-call-label">url</span>
+              {url}
             </p>
           ) : null}
           {toolCall.argsText.trim() ? (
@@ -140,13 +171,30 @@ export function summarizeToolResultContent(content: string): {
     const parsed = JSON.parse(trimmed) as unknown;
     if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
       const record = parsed as Record<string, unknown>;
-      const provider = typeof record.provider === "string" ? record.provider : undefined;
+      const provider = stringField(record, "provider") ?? undefined;
 
       if (typeof record.error === "string" && record.error.trim()) {
         return {
           summary: record.error.slice(0, 500),
           provider,
           status: "error",
+        };
+      }
+
+      // fetch_url success shape
+      if (typeof record.url === "string" && typeof record.text === "string") {
+        const title = stringField(record, "title") ?? record.url;
+        const truncated = record.truncated === true;
+        const totalChars =
+          typeof record.total_chars === "number" ? record.total_chars : record.text.length;
+        const flag = truncated ? "truncated" : "full";
+        return {
+          summary: `${provider ?? "fetch_url"}: ${title} (${flag}, ${totalChars} chars)`.slice(
+            0,
+            500,
+          ),
+          provider,
+          status: "done",
         };
       }
 
@@ -159,15 +207,7 @@ export function summarizeToolResultContent(content: string): {
             }
 
             const result = item as Record<string, unknown>;
-            if (typeof result.title === "string" && result.title.trim()) {
-              return result.title.trim();
-            }
-
-            if (typeof result.url === "string" && result.url.trim()) {
-              return result.url.trim();
-            }
-
-            return null;
+            return stringField(result, "title") ?? stringField(result, "url");
           })
           .filter((title): title is string => title !== null);
 
@@ -180,6 +220,15 @@ export function summarizeToolResultContent(content: string): {
           status: "done",
         };
       }
+
+      // Parsed JSON without a structured error field is treated as success.
+      if (provider) {
+        return {
+          summary: trimmed.slice(0, 500),
+          provider,
+          status: "done",
+        };
+      }
     }
   } catch {
     // Fall through to a truncated raw summary.
@@ -187,6 +236,7 @@ export function summarizeToolResultContent(content: string): {
 
   return {
     summary: trimmed.slice(0, 500),
-    status: trimmed.toLowerCase().includes("error") ? "error" : "done",
+    // Do not substring-match "error" in page bodies — READMEs often contain that word.
+    status: "done",
   };
 }
