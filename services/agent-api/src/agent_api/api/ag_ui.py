@@ -10,9 +10,11 @@ from pydantic import ValidationError
 from pydantic_ai import ModelMessagesTypeAdapter
 from pydantic_ai.messages import PartDeltaEvent, PartStartEvent, TextPart, TextPartDelta
 from pydantic_ai.run import AgentRunResult
+from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.ui import NativeEvent
 from pydantic_ai.ui.ag_ui import AGUIAdapter
 
+from agent_api.agent import AgentOutput
 from agent_api.api.auth import get_current_user
 from agent_api.api.chat import (
     load_thread_model_history,
@@ -27,6 +29,7 @@ from agent_api.config import get_settings
 from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_run
 from agent_api.db.models import User
 from agent_api.db.session import session_factory
+from agent_api.hitl_pause import persist_deferred_approvals
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import get_runtime
 from agent_api.thread_title import schedule_auto_thread_title
@@ -160,10 +163,28 @@ async def stream_ag_ui_run(
             await persist_failed_run(started.run_id)
             raise AGUIExecutionError("模型服务暂时不可用，请稍后重试。") from error
 
-    async def persist_completed(result: AgentRunResult[str]) -> None:
+    async def persist_completed(result: AgentRunResult[AgentOutput]) -> None:
         try:
             usage = result.usage
             new_messages = result.new_messages()
+            model_messages = strip_thinking_parts(
+                parse_model_messages_json(
+                    ModelMessagesTypeAdapter.dump_json(
+                        [*adapter.messages, *new_messages],
+                    ),
+                ),
+            )
+            if isinstance(result.output, DeferredToolRequests) and result.output.approvals:
+                await persist_deferred_approvals(
+                    run_id=started.run_id,
+                    output=result.output,
+                    model_messages=model_messages,
+                )
+                return
+
+            if not isinstance(result.output, str):
+                raise AGUIExecutionError("模型返回了无法处理的输出类型。")
+
             # Surface max_tokens cuts so users know to continue or raise the limit.
             assistant_content = with_truncation_notice_if_needed(
                 result.output,
@@ -172,13 +193,7 @@ async def stream_ag_ui_run(
             await persist_completed_run(
                 run_id=started.run_id,
                 assistant_content=assistant_content,
-                model_messages=strip_thinking_parts(
-                    parse_model_messages_json(
-                        ModelMessagesTypeAdapter.dump_json(
-                            [*adapter.messages, *new_messages],
-                        ),
-                    ),
-                ),
+                model_messages=model_messages,
                 input_tokens=usage.input_tokens or None,
                 output_tokens=usage.output_tokens or None,
                 model_request_count=usage.requests,
@@ -192,6 +207,8 @@ async def stream_ag_ui_run(
                     model_semaphore=runtime.model_semaphore,
                     http_client=runtime.ollama_http_client,
                 )
+        except AGUIExecutionError:
+            raise
         except Exception as error:
             logger.exception("Unable to complete AG-UI run %s", started.run_id)
             await persist_failed_run(started.run_id)
