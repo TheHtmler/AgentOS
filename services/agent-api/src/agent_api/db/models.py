@@ -165,14 +165,14 @@ class Run(Base):
     __tablename__ = "runs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'completed', 'failed', 'cancelled')",
+            "status IN ('queued', 'running', 'waiting_approval', 'completed', 'failed', 'cancelled')",
             name="ck_runs_status",
         ),
         Index(
             "uq_runs_one_running_per_thread",
             "thread_id",
             unique=True,
-            postgresql_where=text("status = 'running'"),
+            postgresql_where=text("status IN ('running', 'waiting_approval')"),
         ),
     )
 
@@ -198,7 +198,7 @@ class Run(Base):
 
 
 class RunMessageHistory(Base):
-    """The server-authored Pydantic AI message block for one completed Run."""
+    """Pydantic AI message snapshot for a Run (completed or paused for HITL resume)."""
 
     __tablename__ = "run_message_histories"
 
@@ -207,6 +207,44 @@ class RunMessageHistory(Base):
         primary_key=True,
     )
     messages: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+class Interrupt(Base):
+    """A deferred tool call waiting for (or resolved by) human approval."""
+
+    __tablename__ = "interrupts"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'denied', 'timed_out', 'cancelled')",
+            name="ck_interrupts_status",
+        ),
+        UniqueConstraint("run_id", "tool_call_id", name="uq_interrupts_run_tool_call"),
+        Index("ix_interrupts_run_id", "run_id"),
+        Index(
+            "ix_interrupts_pending_expires",
+            "expires_at",
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tool_call_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    tool_args: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    decision_message: Mapped[str | None] = mapped_column(Text)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
