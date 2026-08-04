@@ -8,7 +8,7 @@ import httpx
 from fastapi import FastAPI, Request
 from pydantic_ai import Agent
 
-from agent_api.agent import create_agent, create_ollama_http_client
+from agent_api.agent import AgentOutput, create_agent, create_ollama_http_client
 from agent_api.config import get_settings
 from agent_api.db.session import close_database
 from agent_api.tools.fetch.router import FetchRouter, build_fetch_router
@@ -21,7 +21,7 @@ class AgentRuntime:
 
     def __init__(
         self,
-        agent: Agent[AgentDeps, str] | Agent[object, str],
+        agent: Agent[AgentDeps, AgentOutput] | Agent[object, AgentOutput],
         model_semaphore: asyncio.Semaphore,
         search_router: SearchRouter | None = None,
         fetch_router: FetchRouter | None = None,

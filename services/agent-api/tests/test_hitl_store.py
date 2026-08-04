@@ -130,7 +130,7 @@ async def test_pause_writes_interrupts_and_checkpoint(
             user_content="pause me",
             model_name="gemma4:e4b",
         )
-        messages = [
+        messages: list[dict[str, object]] = [
             {
                 "kind": "model-request",
                 "parts": [{"part_kind": "user-prompt", "content": "hi"}],

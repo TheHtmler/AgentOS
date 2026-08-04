@@ -1,13 +1,9 @@
-import json
-
 import pytest
 
 from agent_api.agent import create_agent, create_ollama_http_client
 from agent_api.config import Settings
 from agent_api.tools.policy import PolicyAction, evaluate, gate_or_none
 from agent_api.tools.registry import should_mount_tool
-from agent_api.tools.search.tool import AgentDeps, run_web_search
-from agent_api.tools.search.types import SearchResponse
 
 
 def _settings(**overrides: object) -> Settings:
@@ -77,31 +73,53 @@ def test_ask_still_mounts_tool() -> None:
     )
 
 
-def test_gate_or_none_ask_payload() -> None:
+def test_gate_or_none_ask_returns_none() -> None:
+    # Ask is handled by Tool(requires_approval=True); the wrapper gate must not block.
     settings = _settings(tool_policy_ask="web_search")
-    raw = gate_or_none("web_search", settings=settings)
-    assert raw is not None
-    payload = json.loads(raw)
-    assert payload["status"] == "approval_required"
-    assert payload["tool"] == "web_search"
+    assert gate_or_none("web_search", settings=settings) is None
 
 
 @pytest.mark.anyio
-async def test_run_web_search_respects_ask_without_router_call(
+async def test_ask_tool_mounted_with_requires_approval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    settings = _settings(tool_policy_ask="web_search")
-    monkeypatch.setattr("agent_api.tools.policy.get_settings", lambda: settings)
+    settings = _settings(
+        tool_policy_ask="fetch_url",
+        search_enabled=True,
+        fetch_url_enabled=True,
+    )
+    monkeypatch.setattr("agent_api.agent.get_settings", lambda: settings)
     monkeypatch.setattr("agent_api.tools.registry.get_settings", lambda: settings)
-    monkeypatch.setattr("agent_api.tools.search.tool.get_settings", lambda: settings)
+    monkeypatch.setattr("agent_api.tools.policy.get_settings", lambda: settings)
 
-    class BoomRouter:
-        async def search(self, *args: object, **kwargs: object) -> SearchResponse:
-            raise AssertionError("search must not run when policy is ask")
+    class DummySearchRouter:
+        pass
 
-    result = await run_web_search(AgentDeps(search_router=BoomRouter()), "hello")  # type: ignore[arg-type]
-    payload = json.loads(result)
-    assert payload["status"] == "approval_required"
+    class DummyFetchRouter:
+        pass
+
+    async with create_ollama_http_client() as http_client:
+        agent = create_agent(
+            http_client,
+            search_router=DummySearchRouter(),  # type: ignore[arg-type]
+            fetch_router=DummyFetchRouter(),  # type: ignore[arg-type]
+        )
+
+    from typing import cast
+
+    from pydantic_ai import Tool
+
+    from agent_api.tools.search.tool import AgentDeps
+
+    fetch_tool: Tool[AgentDeps] | None = None
+    for toolset in getattr(agent, "toolsets", ()):
+        tools = getattr(toolset, "tools", None)
+        if isinstance(tools, dict):
+            for name, tool in cast(dict[str, object], tools).items():
+                if name == "fetch_url" and isinstance(tool, Tool):
+                    fetch_tool = cast(Tool[AgentDeps], tool)
+    assert fetch_tool is not None
+    assert fetch_tool.requires_approval is True
 
 
 @pytest.mark.anyio

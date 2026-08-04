@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     # Comma-separated tool names forced to deny/ask (deny wins if listed in both).
     tool_policy_deny: str = ""
     tool_policy_ask: str = ""
+    # How long a waiting_approval Run may sit before pending interrupts auto-deny.
+    hitl_approval_timeout_seconds: int = 1_800
     auto_thread_title_enabled: bool = True
     auto_thread_title_timeout_seconds: float = 30.0
 
@@ -150,6 +152,14 @@ class Settings(BaseSettings):
     def auto_thread_title_timeout_seconds_must_be_positive(cls, value: float) -> float:
         if value <= 0:
             raise ValueError("auto_thread_title_timeout_seconds must be greater than 0")
+
+        return value
+
+    @field_validator("hitl_approval_timeout_seconds")
+    @classmethod
+    def hitl_approval_timeout_seconds_must_be_positive(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("hitl_approval_timeout_seconds must be at least 1")
 
         return value
 

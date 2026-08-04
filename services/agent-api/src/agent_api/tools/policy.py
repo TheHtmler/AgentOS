@@ -66,16 +66,8 @@ def gate_or_none(tool_name: str, *, settings: Settings | None = None) -> str | N
         return None
 
     if action == PolicyAction.ASK:
-        # HITL resume is out of scope; surface a stable machine-readable placeholder.
-        logger.info("tool_policy blocked ask tool=%s", tool_name)
-        return json.dumps(
-            {
-                "status": "approval_required",
-                "tool": tool_name,
-                "message": "This tool requires user approval before it can run.",
-            },
-            ensure_ascii=False,
-        )
+        # Deferred tools (requires_approval) own the ask path; never fake a tool result.
+        return None
 
     logger.info("tool_policy blocked deny tool=%s", tool_name)
     return json.dumps(

@@ -263,6 +263,29 @@ async def event_stream(
                 return
 
             new_messages = result.new_messages()
+            # Classic SSE does not yet surface HITL cards; AG-UI owns approval UI.
+            # Still pause durably so the Thread is not left running / double-booked.
+            if not isinstance(result.output, str):
+                from agent_api.hitl_pause import persist_deferred_approvals
+
+                await persist_deferred_approvals(
+                    run_id=run_id,
+                    output=result.output,
+                    model_messages=strip_thinking_parts(
+                        parse_model_messages_json(result.new_messages_json()),
+                    ),
+                )
+                if not await request.is_disconnected():
+                    yield encode_sse_event(
+                        "error",
+                        {
+                            "message": (
+                                "此工具需要审批。请在主聊天界面（AG-UI）中批准或拒绝后继续。"
+                            ),
+                        },
+                    )
+                return
+
             output = with_truncation_notice_if_needed(result.output, new_messages)
             for delta in chunk_assistant_text(output):
                 if await request.is_disconnected():

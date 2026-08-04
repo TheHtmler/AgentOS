@@ -165,7 +165,10 @@ class Run(Base):
     __tablename__ = "runs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'waiting_approval', 'completed', 'failed', 'cancelled')",
+            (
+                "status IN ('queued', 'running', 'waiting_approval', "
+                "'completed', 'failed', 'cancelled')"
+            ),
             name="ck_runs_status",
         ),
         Index(

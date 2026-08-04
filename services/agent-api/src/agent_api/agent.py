@@ -1,15 +1,17 @@
-from collections.abc import Callable
-
 import httpx
 from pydantic_ai import Agent
 from pydantic_ai.models.ollama import OllamaModel
 from pydantic_ai.providers.ollama import OllamaProvider
+from pydantic_ai.tools import DeferredToolRequests
 
 from agent_api.config import get_settings
 from agent_api.tools.fetch.router import FetchRouter
-from agent_api.tools.registry import mounted_tool_handlers, mounted_tool_names
+from agent_api.tools.registry import mounted_tool_names, mounted_tools
 from agent_api.tools.search.router import SearchRouter
 from agent_api.tools.search.tool import AgentDeps
+
+# Runtime + typing: agent may finish with text or deferred tool approvals.
+AgentOutput = str | DeferredToolRequests
 
 SYSTEM_INSTRUCTIONS = """You are the AgentOS assistant: practical, accurate, and concise.
 
@@ -87,7 +89,7 @@ def create_agent(
     search_enabled: bool | None = None,
     fetch_router: FetchRouter | None = None,
     fetch_enabled: bool | None = None,
-) -> Agent[AgentDeps, str]:
+) -> Agent[AgentDeps, AgentOutput]:
     """Build a stateless agent; the caller owns and closes the HTTP client."""
 
     settings = get_settings()
@@ -114,7 +116,7 @@ def create_agent(
     if "fetch_url" in mounted_names:
         instructions = f"{instructions}\n{FETCH_INSTRUCTIONS}"
 
-    tools: list[Callable[..., object]] = mounted_tool_handlers(
+    tools = mounted_tools(
         search_router_present=search_present,
         fetch_router_present=fetch_present,
         settings=settings,
@@ -128,9 +130,12 @@ def create_agent(
         ),
     )
 
-    return Agent(
+    return Agent[AgentDeps, AgentOutput](
         model,
         deps_type=AgentDeps,
+        # Sequence form is the typed OutputSpec path; `str | DeferredToolRequests` alone
+        # is rejected by pyright even though it works at runtime.
+        output_type=[str, DeferredToolRequests],
         instructions=instructions,
         tools=tools,
         model_settings={

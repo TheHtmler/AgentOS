@@ -7,10 +7,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
+from pydantic_ai import Tool
+
 from agent_api.config import Settings, get_settings
 from agent_api.tools.fetch.tool import fetch_url
 from agent_api.tools.policy import PolicyAction, evaluate
-from agent_api.tools.search.tool import web_search
+from agent_api.tools.search.tool import AgentDeps, web_search
 
 RiskLevel = Literal["read", "write", "exec", "external"]
 
@@ -108,17 +110,45 @@ def mounted_tool_handlers(
     fetch_router_present: bool,
     settings: Settings | None = None,
 ) -> list[Callable[..., object]]:
-    cfg = settings or get_settings()
+    """Return raw handlers (tests / legacy). Prefer `mounted_tools` for agents."""
+
     return [
-        spec.handler
-        for spec in _BUILTIN_SPECS
-        if should_mount_tool(
+        tool.function
+        for tool in mounted_tools(
+            search_router_present=search_router_present,
+            fetch_router_present=fetch_router_present,
+            settings=settings,
+        )
+    ]
+
+
+def mounted_tools(
+    *,
+    search_router_present: bool,
+    fetch_router_present: bool,
+    settings: Settings | None = None,
+) -> list[Tool[AgentDeps]]:
+    """Build Pydantic AI Tool objects, marking ask-policy tools for deferred approval."""
+
+    cfg = settings or get_settings()
+    tools: list[Tool[AgentDeps]] = []
+    for spec in _BUILTIN_SPECS:
+        if not should_mount_tool(
             spec,
             search_router_present=search_router_present,
             fetch_router_present=fetch_router_present,
             settings=cfg,
+        ):
+            continue
+        action = evaluate(spec.name, settings=cfg)
+        tools.append(
+            Tool(
+                spec.handler,
+                name=spec.name,
+                requires_approval=(action == PolicyAction.ASK),
+            ),
         )
-    ]
+    return tools
 
 
 def mounted_tool_names(
