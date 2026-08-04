@@ -1,12 +1,14 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_api.db.models import Message, Run, RunEvent, RunMessageHistory, Thread
+from agent_api.db.models import Interrupt, Message, Run, RunEvent, RunMessageHistory, Thread
+from agent_api.hitl_types import ApprovalRequest, InterruptDecision
 
 
 class ThreadNotFoundError(LookupError):
@@ -23,6 +25,10 @@ class RunNotFoundError(LookupError):
 
 class InvalidRunStateError(ValueError):
     """Raised when a terminal update is attempted for a non-running Run."""
+
+
+class InterruptDecisionError(ValueError):
+    """Raised when resume decisions do not match the pending interrupt set."""
 
 
 @dataclass(frozen=True)
@@ -102,11 +108,12 @@ async def _ensure_thread_has_no_running_run(
     session: AsyncSession,
     thread_id: UUID,
 ) -> None:
+    # waiting_approval also occupies the thread until the user resolves or cancels.
     active_run_id = await session.scalar(
         select(Run.id)
         .where(
             Run.thread_id == thread_id,
-            Run.status == "running",
+            Run.status.in_(("running", "waiting_approval")),
         )
         .limit(1),
     )
@@ -588,11 +595,10 @@ async def complete_run(
         content=assistant_content,
     )
     if model_messages is not None:
-        session.add(
-            RunMessageHistory(
-                run_id=run.id,
-                messages=model_messages,
-            ),
+        await upsert_run_message_history(
+            session,
+            run_id=run.id,
+            messages=model_messages,
         )
 
     completed_at = datetime.now(UTC)
@@ -645,11 +651,14 @@ async def cancel_run(
     *,
     run_id: UUID,
 ) -> None:
-    """Persist cancellation so an unfinished Run is never left running."""
+    """Persist cancellation so an unfinished Run is never left running or waiting."""
 
     run = await _lock_run(session, run_id)
-    if run.status != "running":
+    if run.status not in {"running", "waiting_approval"}:
         return
+
+    if run.status == "waiting_approval":
+        await cancel_pending_interrupts(session, run_id=run.id)
 
     run.status = "cancelled"
     run.completed_at = datetime.now(UTC)
@@ -660,3 +669,287 @@ async def cancel_run(
         event_type="run_cancelled",
         payload={"status": "cancelled"},
     )
+
+
+async def upsert_run_message_history(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    messages: list[dict[str, object]],
+) -> None:
+    """Insert or replace the model-message checkpoint for one Run."""
+
+    statement = pg_insert(RunMessageHistory).values(
+        run_id=run_id,
+        messages=messages,
+    )
+    statement = statement.on_conflict_do_update(
+        index_elements=[RunMessageHistory.run_id],
+        set_={"messages": messages},
+    )
+    await session.execute(statement)
+
+
+async def get_run_message_history(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+) -> list[dict[str, object]] | None:
+    """Return the checkpoint snapshot for a Run, if any."""
+
+    row = await session.get(RunMessageHistory, run_id)
+    if row is None:
+        return None
+    return list(row.messages)
+
+
+async def list_pending_interrupts(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+) -> list[Interrupt]:
+    """List unresolved interrupts for one Run, oldest first."""
+
+    rows = await session.scalars(
+        select(Interrupt)
+        .where(
+            Interrupt.run_id == run_id,
+            Interrupt.status == "pending",
+        )
+        .order_by(Interrupt.created_at, Interrupt.tool_call_id),
+    )
+    return list(rows.all())
+
+
+async def pause_run_for_approval(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    approvals: list[ApprovalRequest],
+    model_messages: list[dict[str, object]],
+    expires_at: datetime,
+) -> list[Interrupt]:
+    """Freeze a running Run for HITL and persist pending interrupts + checkpoint."""
+
+    if not approvals:
+        raise InterruptDecisionError("pause_run_for_approval requires at least one approval")
+
+    run = await _lock_run(session, run_id)
+    if run.status != "running":
+        raise InvalidRunStateError(f"Run {run_id} is {run.status}, not running")
+
+    await upsert_run_message_history(
+        session,
+        run_id=run.id,
+        messages=model_messages,
+    )
+
+    interrupts: list[Interrupt] = []
+    for approval in approvals:
+        interrupt = Interrupt(
+            id=uuid4(),
+            run_id=run.id,
+            tool_call_id=approval.tool_call_id,
+            tool_name=approval.tool_name,
+            tool_args=approval.tool_args,
+            status="pending",
+            expires_at=expires_at,
+        )
+        session.add(interrupt)
+        interrupts.append(interrupt)
+
+    run.status = "waiting_approval"
+    await session.flush()
+
+    await append_run_event(
+        session,
+        run_id=run.id,
+        event_type="approval_required",
+        payload={
+            "interrupts": [
+                {
+                    "id": str(item.id),
+                    "tool_call_id": item.tool_call_id,
+                    "tool_name": item.tool_name,
+                    "tool_args": item.tool_args,
+                    "expires_at": item.expires_at.isoformat(),
+                }
+                for item in interrupts
+            ],
+        },
+    )
+    return interrupts
+
+
+async def apply_interrupt_decisions(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    decisions: list[InterruptDecision],
+    idempotency_key: str,
+) -> list[Interrupt]:
+    """Resolve every pending interrupt for a waiting Run and mark it running again.
+
+    Same idempotency_key replays return the previously resolved rows without changing
+    state. A different key after resolution raises InvalidRunStateError.
+    """
+
+    key = idempotency_key.strip()
+    if not key:
+        raise InterruptDecisionError("idempotency_key is required")
+
+    run = await _lock_run(session, run_id)
+
+    existing_resolved = list(
+        (
+            await session.scalars(
+                select(Interrupt).where(
+                    Interrupt.run_id == run_id,
+                    Interrupt.status.in_(("approved", "denied", "timed_out")),
+                    Interrupt.idempotency_key == key,
+                ),
+            )
+        ).all(),
+    )
+    if existing_resolved:
+        return list(
+            (
+                await session.scalars(
+                    select(Interrupt)
+                    .where(
+                        Interrupt.run_id == run_id,
+                        Interrupt.idempotency_key == key,
+                    )
+                    .order_by(Interrupt.created_at, Interrupt.tool_call_id),
+                )
+            ).all(),
+        )
+
+    if run.status != "waiting_approval":
+        raise InvalidRunStateError(f"Run {run_id} is {run.status}, not waiting_approval")
+
+    pending = await list_pending_interrupts(session, run_id=run_id)
+    if not pending:
+        raise InvalidRunStateError(f"Run {run_id} has no pending interrupts")
+
+    pending_ids = {item.tool_call_id for item in pending}
+    decision_ids = {item.tool_call_id for item in decisions}
+    if pending_ids != decision_ids:
+        raise InterruptDecisionError(
+            "decisions must cover exactly the pending tool_call_id set",
+        )
+
+    by_id = {item.tool_call_id: item for item in pending}
+    resolved_at = datetime.now(UTC)
+    resolved: list[Interrupt] = []
+    for decision in decisions:
+        interrupt = by_id[decision.tool_call_id]
+        if decision.decision == "approve":
+            interrupt.status = "approved"
+        else:
+            interrupt.status = "denied"
+            interrupt.decision_message = decision.message
+        interrupt.idempotency_key = key
+        interrupt.resolved_at = resolved_at
+        resolved.append(interrupt)
+
+    run.status = "running"
+    await session.flush()
+
+    await append_run_event(
+        session,
+        run_id=run.id,
+        event_type="approval_resolved",
+        payload={
+            "idempotency_key": key,
+            "decisions": [
+                {
+                    "tool_call_id": item.tool_call_id,
+                    "status": item.status,
+                    "message": item.decision_message,
+                }
+                for item in resolved
+            ],
+        },
+    )
+    return resolved
+
+
+async def cancel_pending_interrupts(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+) -> None:
+    """Mark all pending interrupts cancelled (used when the waiting Run is stopped)."""
+
+    pending = await list_pending_interrupts(session, run_id=run_id)
+    resolved_at = datetime.now(UTC)
+    for interrupt in pending:
+        interrupt.status = "cancelled"
+        interrupt.resolved_at = resolved_at
+    await session.flush()
+
+
+async def mark_interrupts_timed_out(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    idempotency_key: str,
+) -> list[Interrupt]:
+    """Expire all pending interrupts (status timed_out) and mark the Run running for resume."""
+
+    key = idempotency_key.strip()
+    if not key:
+        raise InterruptDecisionError("idempotency_key is required")
+
+    run = await _lock_run(session, run_id)
+
+    existing = list(
+        (
+            await session.scalars(
+                select(Interrupt).where(
+                    Interrupt.run_id == run_id,
+                    Interrupt.status == "timed_out",
+                    Interrupt.idempotency_key == key,
+                ),
+            )
+        ).all(),
+    )
+    if existing:
+        return existing
+
+    if run.status != "waiting_approval":
+        raise InvalidRunStateError(f"Run {run_id} is {run.status}, not waiting_approval")
+
+    pending = await list_pending_interrupts(session, run_id=run_id)
+    if not pending:
+        raise InvalidRunStateError(f"Run {run_id} has no pending interrupts")
+
+    resolved_at = datetime.now(UTC)
+    for interrupt in pending:
+        interrupt.status = "timed_out"
+        interrupt.decision_message = "Approval timed out."
+        interrupt.idempotency_key = key
+        interrupt.resolved_at = resolved_at
+
+    run.status = "running"
+    await session.flush()
+
+    await append_run_event(
+        session,
+        run_id=run.id,
+        event_type="approval_resolved",
+        payload={
+            "idempotency_key": key,
+            "decisions": [
+                {
+                    "tool_call_id": item.tool_call_id,
+                    "status": "timed_out",
+                    "message": "Approval timed out.",
+                }
+                for item in pending
+            ],
+        },
+    )
+    return pending
+
