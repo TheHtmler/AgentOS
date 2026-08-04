@@ -26,5 +26,6 @@
 | [superpowers/plans/2026-08-03-chat-experience-p2.md](superpowers/plans/2026-08-03-chat-experience-p2.md) | 聊天体验 P2 实现计划（科技风视觉/Logo） | 执行或调整该 P2 计划时 |
 | [superpowers/specs/2026-08-03-fetch-url-design.md](superpowers/specs/2026-08-03-fetch-url-design.md) | fetch_url 工具、Firecrawl/local 降级与 Artifact 后续规划 | 抓页工具或 Provider 策略变化时 |
 | [superpowers/plans/2026-08-03-fetch-url.md](superpowers/plans/2026-08-03-fetch-url.md) | fetch_url 实现计划（任务拆解） | 执行或调整该实现计划时 |
+| [superpowers/specs/2026-08-04-hitl-approval-resume-design.md](superpowers/specs/2026-08-04-hitl-approval-resume-design.md) | HITL 审批暂停、interrupt 落库与同一 Run resume | 审批/续跑契约或 Run 状态机变化时 |
 
 后续建议增加：`api-contracts.md`、`data-model.md`、`security-model.md`、`runbook.md` 和 `incident-log.md`。
