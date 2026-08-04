@@ -1,6 +1,7 @@
 from agent_api.db.base import Base
 from agent_api.db.models import (
     AuthToken,
+    Interrupt,
     Message,
     Run,
     RunEvent,
@@ -23,6 +24,7 @@ def test_core_model_tables_are_registered() -> None:
         "runs",
         "run_events",
         "run_message_histories",
+        "interrupts",
     }
 
     assert {
@@ -34,5 +36,6 @@ def test_core_model_tables_are_registered() -> None:
         Run.__tablename__,
         RunEvent.__tablename__,
         RunMessageHistory.__tablename__,
+        Interrupt.__tablename__,
     } == expected_tables
     assert set(Base.metadata.tables) == expected_tables

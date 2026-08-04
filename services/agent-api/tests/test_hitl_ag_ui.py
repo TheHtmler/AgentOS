@@ -26,7 +26,7 @@ async def dispose_database_pool() -> AsyncIterator[None]:
         await close_database()
 
 
-async def _need_approval(_ctx: RunContext[None], url: str) -> str:
+async def _need_approval(_ctx: RunContext[object], url: str) -> str:
     return f"fetched {url}"
 
 
@@ -34,8 +34,9 @@ async def _need_approval(_ctx: RunContext[None], url: str) -> str:
 async def test_ag_ui_pauses_when_tool_requires_approval(
     authenticated_api_user: UUID,
 ) -> None:
-    agent = Agent(
+    agent: Agent[object, str | DeferredToolRequests] = Agent(
         TestModel(),
+        deps_type=object,
         tools=[Tool(_need_approval, requires_approval=True)],
         output_type=[str, DeferredToolRequests],
     )

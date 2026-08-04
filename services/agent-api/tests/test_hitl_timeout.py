@@ -27,7 +27,7 @@ async def dispose_database_pool() -> AsyncIterator[None]:
         await close_database()
 
 
-async def _need_approval(_ctx: RunContext[None], url: str) -> str:
+async def _need_approval(_ctx: RunContext[object], url: str) -> str:
     return f"fetched {url}"
 
 
@@ -36,6 +36,7 @@ async def test_sweep_expired_approvals_auto_denies(authenticated_api_user: UUID)
     runtime = AgentRuntime(
         agent=Agent(
             TestModel(),
+            deps_type=object,
             tools=[Tool(_need_approval, requires_approval=True)],
             output_type=[str, DeferredToolRequests],
         ),

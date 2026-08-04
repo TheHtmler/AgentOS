@@ -24,13 +24,14 @@ async def dispose_database_pool() -> AsyncIterator[None]:
         await close_database()
 
 
-async def _need_approval(_ctx: RunContext[None], url: str) -> str:
+async def _need_approval(_ctx: RunContext[object], url: str) -> str:
     return f"fetched {url}"
 
 
-def _approval_agent() -> Agent[None, str | DeferredToolRequests]:
+def _approval_agent() -> Agent[object, str | DeferredToolRequests]:
     return Agent(
         TestModel(),
+        deps_type=object,
         tools=[Tool(_need_approval, requires_approval=True)],
         output_type=[str, DeferredToolRequests],
     )

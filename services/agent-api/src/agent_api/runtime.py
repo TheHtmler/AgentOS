@@ -13,7 +13,6 @@ from agent_api.config import get_settings
 from agent_api.db.session import close_database
 from agent_api.tools.fetch.router import FetchRouter, build_fetch_router
 from agent_api.tools.search.router import SearchRouter, build_search_router
-from agent_api.tools.search.tool import AgentDeps
 
 
 class AgentRuntime:
@@ -21,7 +20,8 @@ class AgentRuntime:
 
     def __init__(
         self,
-        agent: Agent[AgentDeps, AgentOutput] | Agent[object, AgentOutput],
+        # Tests may inject Agent[None, ...] / TestModel agents; production uses AgentDeps.
+        agent: Agent[Any, AgentOutput],
         model_semaphore: asyncio.Semaphore,
         search_router: SearchRouter | None = None,
         fetch_router: FetchRouter | None = None,

@@ -14,11 +14,11 @@
 
 - 先落地只读联网工具（`web_search`：Tavily + DuckDuckGo 降级），让本地模型具备时效信息能力。
 - 接入只读 `fetch_url`（Firecrawl + local 降级；正文截断 + 大纲；Artifact 按需再读见该 design 后续规划）。
-- 定义 Tool Registry 与 Tool Policy。（骨架已落地：allow/ask/deny + 环境覆盖；HITL 执行链未完）
+- 定义 Tool Registry 与 Tool Policy。（已落地：allow/ask/deny + 环境覆盖）
 - 自动会话标题（首轮成功后模型起名；已落地）。
+- 实现 `interrupts`、同一 Run `resume` 与幂等处理；超时自动 deny 续跑。（已落地）
+- 前端实现 Tool Call、审批和拒绝卡片。（已落地）
 - 接入只读 MCP，以及本地 Sandbox Tool。
-- 实现 `interrupts`、`approvals`、`resume` 与幂等处理。
-- 前端实现 Tool Call、审批和拒绝卡片。
 
 完成标准：高风险工具必须经过审批，刷新页面后审批状态和 Run 状态不丢失。只读搜索可自动执行。
 

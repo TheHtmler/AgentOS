@@ -1,7 +1,7 @@
 # HITL 审批暂停与 Resume
 
 日期：2026-08-04  
-状态：draft（设计已共识，待实现）  
+状态：accepted（已实现）  
 前置：`2026-08-03-auto-title-tool-policy-design.md`（Registry / Policy 骨架、`TOOL_POLICY_ASK` 占位）、AG-UI Run、只读 `web_search` / `fetch_url`
 
 ## 背景

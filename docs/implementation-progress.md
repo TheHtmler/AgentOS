@@ -1,6 +1,6 @@
 # 实施进度
 
-最后更新：2026-08-03
+最后更新：2026-08-04
 
 ## 当前状态
 
@@ -66,7 +66,8 @@
 - 模型上下文在 `run_message_histories` 缺失时回退到 `messages` 表成对历史。
 - 主题切换：`light` / `dark`（`html[data-theme]` + CSS 变量）；偏好写入 `localStorage`（`agentos-theme`），首屏脚本防闪烁；顶栏与登录/注册页可切换。
 - `fetch_url` 工具：Firecrawl → local（trafilatura）降级；SSRF 公网校验；正文截断+大纲；`run_events` 工具摘要；`FETCH_URL_*` / `FIRECRAWL_API_KEY` 配置。
-- Tool Registry + Policy 骨架：按能力域登记工具；裁决顺序 deny → ask → allow；`TOOL_POLICY_DENY` / `TOOL_POLICY_ASK`；现有 `web_search` / `fetch_url` 默认 allow；ask 返回 `approval_required` 占位（无 HITL UI）。
+- Tool Registry + Policy：按能力域登记工具；裁决顺序 deny → ask → allow；`TOOL_POLICY_DENY` / `TOOL_POLICY_ASK`；ask 工具以 `Tool(requires_approval=True)` 挂载（Pydantic AI Deferred Tools）。
+- HITL 闭环：`waiting_approval` Run 状态、`interrupts` 表、checkpoint 历史、`POST /v1/runs/{id}/resume`（幂等）、取消 waiting、超时自动 deny 续跑（`HITL_APPROVAL_TIMEOUT_SECONDS`，默认 1800）；前端审批卡 + 侧栏「待审批」。
 - 自动会话标题：首轮 Run 成功后后台用模型生成短标题；仅 `title IS NULL` 时写入；`AUTO_THREAD_TITLE_*` 配置；侧栏靠既有 run finalize 刷新拉取。
 - 聊天过程组 UI（Codex 风格）：Thinking + 工具收入「处理中 / 已处理」可折叠组；紧凑工具行；邀请弹窗移动端自适应；深色次要文字对比抬高。
 - Thinking UI 默认只显示紧凑状态，不实时展开模型 reasoning 文本。
@@ -78,12 +79,10 @@
 - `uv run --directory services/agent-api pyright` 通过，`0 errors, 0 warnings`。
 - `uv run --directory services/agent-api pytest` 通过（含搜索 Provider / Router / 工具注册测试）。
 - `uv run --directory services/agent-api pyright` 通过，`0 errors, 0 warnings`。
-- `uv run --directory services/agent-api alembic upgrade head` 已应用至含 password hash 的最新迁移。
-- `pnpm lint:web` 通过。
+- `uv run --directory services/agent-api alembic upgrade head` 已应用至含 `waiting_approval` / `interrupts` 的迁移 `c7d8e9f0a1b2`。
 - `pnpm --filter web exec tsc --noEmit` 通过。
-- `uv run --directory services/agent-api pytest tests/test_agent.py` 通过。
+- `uv run --directory services/agent-api pytest` 通过（含 HITL store / AG-UI pause / resume / timeout）。
 - `pnpm build:web` 通过；构建不再依赖 Google Fonts 网络访问。
-- `pnpm format:check` 通过。
 - `curl --noproxy '*' http://127.0.0.1:3000/api/health` 返回 `{ "status": "ok" }`。
 - 浏览器手动验证聊天页面可向本地 Agent API 发送消息并接收模型回复。
 
@@ -91,9 +90,9 @@
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
 - Artifact 落库 / `read_artifact`、完整 `messages.role=tool` 模型历史对齐。
-- HITL 审批卡片 / `interrupts` / `resume`；MCP 和 Sandbox；侧栏 Run 活动时间线与按工具类型的富展示。
+- MCP 和 Sandbox；侧栏 Run 活动时间线与按工具类型的富展示。
 - 参数级 Tool Policy（如按 URL/命令细规则）、审计表落库。
 
 ## 下一步
 
-Mac mini 同步新环境变量后重启 API；验证首轮对话后侧栏自动出标题，以及 `TOOL_POLICY_ASK=fetch_url` 时工具返回需审批占位。随后接 HITL UI 或 Artifact。
+Mac mini：pull → `alembic upgrade head` → 按需设 `TOOL_POLICY_ASK=fetch_url` 与 `HITL_APPROVAL_TIMEOUT_SECONDS` → 重启 Agent API（及 Web）。验证抓页前出现审批卡，批准后真正抓取。随后接 Artifact 或工具历史对齐。
