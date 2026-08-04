@@ -115,11 +115,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     app.state.runtime = runtime
 
+    from agent_api.hitl_timeout import hitl_timeout_loop
+
+    stop_hitl_timeout = asyncio.Event()
+    hitl_timeout_task = asyncio.create_task(
+        hitl_timeout_loop(runtime, stop_event=stop_hitl_timeout),
+        name="hitl-timeout-loop",
+    )
+
     try:
         async with agent:
             try:
                 yield
             finally:
+                stop_hitl_timeout.set()
+                hitl_timeout_task.cancel()
+                await asyncio.gather(hitl_timeout_task, return_exceptions=True)
                 await runtime.stop_background_runs()
     finally:
         try:
