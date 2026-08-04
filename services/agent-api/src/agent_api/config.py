@@ -176,9 +176,7 @@ class Settings(BaseSettings):
         """Return the configured search provider order without blank entries."""
 
         return [
-            name.strip().lower()
-            for name in self.search_provider_order.split(",")
-            if name.strip()
+            name.strip().lower() for name in self.search_provider_order.split(",") if name.strip()
         ]
 
     @property
@@ -186,9 +184,7 @@ class Settings(BaseSettings):
         """Return the configured fetch provider order without blank entries."""
 
         return [
-            name.strip().lower()
-            for name in self.fetch_provider_order.split(",")
-            if name.strip()
+            name.strip().lower() for name in self.fetch_provider_order.split(",") if name.strip()
         ]
 
 

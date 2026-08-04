@@ -952,4 +952,3 @@ async def mark_interrupts_timed_out(
         },
     )
     return pending
-

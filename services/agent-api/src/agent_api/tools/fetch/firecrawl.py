@@ -120,9 +120,7 @@ class FirecrawlProvider:
         markdown_obj = data.get("markdown")
         text = markdown_obj if isinstance(markdown_obj, str) else ""
         metadata_obj = data.get("metadata")
-        metadata = (
-            cast(dict[str, Any], metadata_obj) if isinstance(metadata_obj, dict) else {}
-        )
+        metadata = cast(dict[str, Any], metadata_obj) if isinstance(metadata_obj, dict) else {}
         title_obj = metadata.get("title")
         title = title_obj.strip() if isinstance(title_obj, str) else ""
         if not title:

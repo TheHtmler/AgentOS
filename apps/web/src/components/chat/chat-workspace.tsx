@@ -69,9 +69,7 @@ function pruneIdleSlots(
   const keep = slots.filter(
     (slot) => slot.key === visibleSlotKey || Boolean(streamingBySlotKey[slot.key]),
   );
-  const idle = slots.filter(
-    (slot) => slot.key !== visibleSlotKey && !streamingBySlotKey[slot.key],
-  );
+  const idle = slots.filter((slot) => slot.key !== visibleSlotKey && !streamingBySlotKey[slot.key]);
 
   if (idle.length <= MAX_IDLE_SLOTS) {
     return slots;
@@ -105,10 +103,12 @@ export function ChatWorkspace({
   const slotsRef = useRef(slots);
   const visibleSlotKeyRef = useRef(visibleSlotKey);
 
-  streamingBySlotKeyRef.current = streamingBySlotKey;
-  runIdBySlotKeyRef.current = runIdBySlotKey;
-  slotsRef.current = slots;
-  visibleSlotKeyRef.current = visibleSlotKey;
+  useEffect(() => {
+    streamingBySlotKeyRef.current = streamingBySlotKey;
+    runIdBySlotKeyRef.current = runIdBySlotKey;
+    slotsRef.current = slots;
+    visibleSlotKeyRef.current = visibleSlotKey;
+  }, [runIdBySlotKey, slots, streamingBySlotKey, visibleSlotKey]);
 
   const streamingThreadIds = useMemo(() => {
     const ids = new Set<string>();
@@ -141,6 +141,7 @@ export function ChatWorkspace({
 
     const threadFromUrl = new URL(window.location.href).searchParams.get("thread");
 
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (threadFromUrl !== null && isUuid(threadFromUrl)) {
       setSlots([{ key: threadFromUrl, threadId: threadFromUrl }]);
       setVisibleSlotKey(threadFromUrl);
@@ -153,6 +154,7 @@ export function ChatWorkspace({
     }
 
     setHasHydratedFromUrl(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [hasHydratedFromUrl]);
 
   useEffect(() => {
@@ -206,11 +208,7 @@ export function ChatWorkspace({
 
       const nextSlot: ChatSlot = { key: threadId, threadId };
       setSlots(
-        pruneIdleSlots(
-          [...currentSlots, nextSlot],
-          nextSlot.key,
-          streamingBySlotKeyRef.current,
-        ),
+        pruneIdleSlots([...currentSlots, nextSlot], nextSlot.key, streamingBySlotKeyRef.current),
       );
       focusSlot(nextSlot.key, threadId);
     },
@@ -276,18 +274,15 @@ export function ChatWorkspace({
     });
   }, []);
 
-  const handleSlotAwaitingApprovalChanged = useCallback(
-    (slotKey: string, isAwaiting: boolean) => {
-      setAwaitingApprovalBySlotKey((current) => {
-        if (Boolean(current[slotKey]) === isAwaiting) {
-          return current;
-        }
+  const handleSlotAwaitingApprovalChanged = useCallback((slotKey: string, isAwaiting: boolean) => {
+    setAwaitingApprovalBySlotKey((current) => {
+      if (Boolean(current[slotKey]) === isAwaiting) {
+        return current;
+      }
 
-        return { ...current, [slotKey]: isAwaiting };
-      });
-    },
-    [],
-  );
+      return { ...current, [slotKey]: isAwaiting };
+    });
+  }, []);
 
   const handleRunFinalized = useCallback(() => {
     setThreadListVersion((current) => current + 1);
@@ -329,9 +324,7 @@ export function ChatWorkspace({
       });
 
       if (!deletedVisible) {
-        setSlots(
-          remaining.length > 0 ? remaining : [{ key: createSlotKey(), threadId: null }],
-        );
+        setSlots(remaining.length > 0 ? remaining : [{ key: createSlotKey(), threadId: null }]);
         return;
       }
 
@@ -442,9 +435,7 @@ export function ChatWorkspace({
                       onAwaitingApprovalChanged={(isAwaiting) =>
                         handleSlotAwaitingApprovalChanged(slot.key, isAwaiting)
                       }
-                      onThreadChanged={(threadId) =>
-                        handleSlotThreadChanged(slot.key, threadId)
-                      }
+                      onThreadChanged={(threadId) => handleSlotThreadChanged(slot.key, threadId)}
                       onRunFinalized={handleRunFinalized}
                     />
                   </div>
@@ -509,7 +500,7 @@ export function ChatWorkspace({
                 activeThreadId={activeThreadId}
                 refreshKey={threadListVersion}
                 streamingThreadIds={streamingThreadIds}
-            awaitingApprovalThreadIds={awaitingApprovalThreadIds}
+                awaitingApprovalThreadIds={awaitingApprovalThreadIds}
                 onNewConversation={handleNewConversation}
                 onSelectThread={handleSelectThread}
                 onThreadDeleted={handleThreadDeleted}

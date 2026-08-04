@@ -2,9 +2,11 @@
 
 ## 目标
 
-构建一个类似 ChatGPT 的 Agent 平台，支持多 Agent、多模型、MCP、Skills、受控 Tools、用户级 Sandbox 与 Human-in-the-Loop (HITL)。
+构建一个类似 ChatGPT 的 Agent 平台，支持多 Agent、多模型、领域知识包、患者级上下文、MCP、Skills、受控 Tools、用户级 Sandbox 与 Human-in-the-Loop (HITL)。
 
 当前优先级是可运行、可恢复、可审计的低并发 MVP，而不是提前拆分微服务。
+
+领域 Agent 采用“通用 Runtime + 领域 Agent Profile + 用户/患者私有上下文”的分层模型。MMA/PA 是第一个领域 Agent，不将疾病逻辑硬编码进通用 Runtime；详见[领域 Agent 与患者上下文架构](12-domain-agents-and-patient-context.md)。
 
 ## 当前部署边界
 
@@ -68,15 +70,39 @@ SSE 负责 Agent 事件输出；普通 HTTP POST 负责创建、恢复和取消�
 
 ## 数据模型最小集合
 
-| 领域       | 表                                                              |
-| ---------- | --------------------------------------------------------------- |
-| 身份与租户 | `tenants`、`users`、`memberships`                               |
-| Agent 配置 | `agents`、`agent_versions`、`model_configs`                     |
-| 对话与运行 | `threads`、`messages`、`runs`、`run_events`                     |
-| 工具与审批 | `mcp_servers`、`tools`、`tool_calls`、`interrupts`、`approvals` |
-| Runtime    | `sandboxes`、`artifacts`、`usage_records`、`audit_logs`         |
+| 领域       | 表                                                                    |
+| ---------- | --------------------------------------------------------------------- |
+| 身份与租户 | `tenants`、`users`、`memberships`                                     |
+| Agent 配置 | `agents`、`agent_versions`、`model_configs`、`knowledge_bases`        |
+| 领域上下文 | `patient_cases`、`patient_memberships`、`patient_facts`、`care_plans` |
+| 对话与运行 | `threads`、`messages`、`runs`、`run_events`                           |
+| 工具与审批 | `mcp_servers`、`tools`、`tool_calls`、`interrupts`、`approvals`       |
+| 知识与文件 | `knowledge_documents`、`knowledge_chunks`、`artifacts`                |
+| Runtime    | `sandboxes`、`usage_records`、`audit_logs`                            |
 
 `run_events` 采用 append-only 设计，并使用 `(run_id, seq)` 唯一约束。前端断线重连时传入最后一个 `seq`，后端补发缺失事件。审批、恢复、取消和工具调用都必须带 `idempotency_key`。
+
+`users` 是登录账户，`patient_cases` 是被咨询的患者主体，不能用 `user_id` 代替 `patient_case_id`。新 Thread 和 Run 应同时记录 `agent_id`、`patient_case_id` 和所有者范围；公共知识库只读共享，患者 Artifact、事实、计划和历史消息必须按患者授权隔离。
+
+## 领域 Agent 与患者上下文
+
+Agent Profile 是共享的领域 Agent 定义，包含系统规则、知识库范围、工具集合、HITL 策略和模型配置。患者不会复制出一个新的模型，而是在运行时注入自己的 Patient Case 上下文。
+
+一次运行的上下文顺序为：
+
+```text
+Authenticated User
+  -> Patient Case authorization
+  -> Agent Profile / Agent Version
+  -> filtered public Knowledge Base
+  -> private Patient Facts / CarePlan / Artifacts
+  -> current Thread history
+  -> cited answer and escalation boundary
+```
+
+患者聊天内容不能自动成为医学事实。需要保留来源、确认状态、生效时间和替代关系；未确认内容只能作为待核对上下文。每个 Run 应保存 Agent、知识库和患者上下文快照，保证答案可以复现和审计。
+
+患者级数据边界必须覆盖 Thread、Message、Run、RunEvent、Artifact、检索缓存和审计记录。跨患者访问统一返回资源不存在，不能依赖前端隐藏或 UUID 保密。
 
 ## 模型策略
 

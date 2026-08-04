@@ -7,6 +7,7 @@ import {
   KeyboardEvent,
   TouchEvent,
   WheelEvent,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -414,23 +415,26 @@ export function ChatPanel({
     onAwaitingApprovalChanged?.(pendingInterrupts.length > 0);
   }, [pendingInterrupts, onAwaitingApprovalChanged]);
 
-  function clearApprovalState() {
+  const clearApprovalState = useCallback(() => {
     setApprovalRunId(null);
     setPendingInterrupts([]);
-  }
+  }, []);
 
-  async function applyApprovalStateFromRun(runId: string) {
-    const state = await loadRunApprovalState(runId);
-    if (state === null) {
-      return;
-    }
-    if (state.status === "waiting_approval" && state.pending.length > 0) {
-      setApprovalRunId(runId);
-      setPendingInterrupts(state.pending);
-      return;
-    }
-    clearApprovalState();
-  }
+  const applyApprovalStateFromRun = useCallback(
+    async (runId: string) => {
+      const state = await loadRunApprovalState(runId);
+      if (state === null) {
+        return;
+      }
+      if (state.status === "waiting_approval" && state.pending.length > 0) {
+        setApprovalRunId(runId);
+        setPendingInterrupts(state.pending);
+        return;
+      }
+      clearApprovalState();
+    },
+    [clearApprovalState],
+  );
 
   async function handleApprovalResolved() {
     const runId = approvalRunId;
@@ -452,7 +456,11 @@ export function ChatPanel({
         setIsStreaming(false);
         return;
       }
-      if (state.status === "completed" || state.status === "failed" || state.status === "cancelled") {
+      if (
+        state.status === "completed" ||
+        state.status === "failed" ||
+        state.status === "cancelled"
+      ) {
         break;
       }
       await new Promise<void>((resolve) => window.setTimeout(resolve, 500));
@@ -576,7 +584,7 @@ export function ChatPanel({
       cancelled = true;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [isStreaming, threadId]);
+  }, [applyApprovalStateFromRun, clearApprovalState, isStreaming, threadId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1332,10 +1340,7 @@ export function ChatPanel({
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={handleKeyDown}
           disabled={
-            isStreaming ||
-            isLoadingHistory ||
-            historyLoadFailed ||
-            pendingInterrupts.length > 0
+            isStreaming || isLoadingHistory || historyLoadFailed || pendingInterrupts.length > 0
           }
           maxLength={4_000}
           placeholder={

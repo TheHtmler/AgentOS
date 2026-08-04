@@ -1,10 +1,10 @@
 # 实施进度
 
-最后更新：2026-08-04
+最后更新：2026-08-05
 
 ## 当前状态
 
-前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。
+前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。领域 Agent 与患者上下文的分层架构已形成设计，尚未进入实现。
 
 已完成：
 
@@ -90,9 +90,10 @@
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
 - Artifact 落库 / `read_artifact`、完整 `messages.role=tool` 模型历史对齐。
+- 通用 `AgentProfile` / `AgentVersion`、MMA/PA 公共知识库、`PatientCase` 和患者私有上下文隔离。
 - MCP 和 Sandbox；侧栏 Run 活动时间线与按工具类型的富展示。
 - 参数级 Tool Policy（如按 URL/命令细规则）、审计表落库。
 
 ## 下一步
 
-Mac mini：pull → `alembic upgrade head` → 按需设 `TOOL_POLICY_ASK=fetch_url` 与 `HITL_APPROVAL_TIMEOUT_SECONDS` → 重启 Agent API（及 Web）。验证抓页前出现审批卡，批准后真正抓取。随后接 Artifact 或工具历史对齐。
+下一开发增量：先实现 Artifact、AgentProfile/AgentVersion 和 PatientCase 的数据边界，再建立 MMA/PA 公共知识库与患者私有上下文的分离检索。随后接入带引用的 `knowledge_search` 和 `read_artifact`，最后再进入 MCP 与 Sandbox。

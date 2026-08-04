@@ -10,7 +10,11 @@ from agent_api.tools.fetch.url_guard import (
 
 
 def test_assert_public_http_url_accepts_example() -> None:
-    assert assert_public_http_url("https://example.com/path") == "https://example.com/path"
+    with patch(
+        "agent_api.tools.fetch.url_guard.socket.getaddrinfo",
+        return_value=[(None, None, None, None, ("93.184.216.34", 0))],
+    ):
+        assert assert_public_http_url("https://example.com/path") == "https://example.com/path"
 
 
 @pytest.mark.parametrize(

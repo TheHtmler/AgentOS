@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import httpx
 import pytest
 
@@ -26,7 +28,11 @@ async def test_router_skips_firecrawl_without_key_and_uses_local() -> None:
             firecrawl_api_key="",
             http_client=client,
         )
-        result = await router.fetch("https://example.com/x", max_chars=5000, timeout=5.0)
+        with patch(
+            "agent_api.tools.fetch.url_guard.socket.getaddrinfo",
+            return_value=[(None, None, None, None, ("93.184.216.34", 0))],
+        ):
+            result = await router.fetch("https://example.com/x", max_chars=5000, timeout=5.0)
 
     assert result.provider == "local"
     assert "Hello world" in result.text
@@ -61,7 +67,11 @@ async def test_router_failsover_on_firecrawl_429() -> None:
                 LocalFetchProvider(http_client=local_client),
             ]
         )
-        result = await router.fetch("https://example.com/x", max_chars=5000, timeout=5.0)
+        with patch(
+            "agent_api.tools.fetch.url_guard.socket.getaddrinfo",
+            return_value=[(None, None, None, None, ("93.184.216.34", 0))],
+        ):
+            result = await router.fetch("https://example.com/x", max_chars=5000, timeout=5.0)
 
     assert calls["firecrawl"] == 1
     assert calls["local"] == 1

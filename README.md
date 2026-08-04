@@ -7,7 +7,7 @@ AgentOS is a work-in-progress runtime platform for building controllable, durabl
 The project is being built in public from a small, verifiable core toward tool execution, human approval, isolated sandboxes, and multi-tenant operation.
 
 > [!WARNING]
-> AgentOS is under active development and is not production-ready. Authentication, tenant isolation, MCP tools, Human-in-the-Loop (HITL), and sandbox execution are not implemented yet.
+> AgentOS is under active development and is not production-ready. Invite-only authentication, per-user Thread isolation, and the core Human-in-the-Loop (HITL) approval flow are implemented; organization tenancy, MCP tools, and sandbox execution are not implemented yet.
 
 ## Available Today
 
@@ -19,6 +19,13 @@ The project is being built in public from a small, verifiable core toward tool e
 - Bounded model context restored from recent completed runs.
 - One active run per thread, with completed, failed, and cancelled terminal states.
 - Model token usage and request count recorded for completed runs.
+- Invite-only authentication with revocable HttpOnly sessions and per-user Thread, Run, and history isolation.
+- Admin invitation-link management, plus a controlled CLI for creating the first invitation.
+- Read-only `web_search` with Tavily-first and DuckDuckGo fallback routing.
+- Read-only `fetch_url` with Firecrawl/local fallback, SSRF checks, truncation, and outlines.
+- Tool Registry with `allow`, `ask`, and `deny` policy decisions.
+- Persistent HITL interrupts with approval, denial, idempotent resume, cancellation, and timeout auto-denial.
+- Tool-call timeline cards, approval cards, thread rename/delete, and automatic thread titles.
 - Typed backend checks with pytest, Ruff, and Pyright, plus ESLint and Prettier for the web app.
 
 ## Architecture
@@ -103,6 +110,16 @@ pnpm dev:web
 
 Open `http://127.0.0.1:3000`.
 
+### 6. Create the first administrator invitation
+
+Set `AUTH_ADMIN_EMAILS` to the first administrator email in `services/agent-api/.env`, and set `WEB_APP_ORIGIN` to the actual Web origin. Then run the controlled development CLI:
+
+```bash
+uv run --directory services/agent-api python scripts/create_invitation.py admin@example.com
+```
+
+Open the generated link to complete the first registration. See [authentication](docs/11-authentication.md) for the full identity boundary.
+
 ## Verification
 
 Run the repository checks before opening a pull request:
@@ -134,11 +151,10 @@ Start with the [documentation index](docs/README.md) for the architecture baseli
 
 ## Roadmap
 
-- Tool registry and policy enforcement.
 - Read-only MCP integration and controlled local tools.
-- Persistent HITL interrupts, approvals, rejection, and idempotent resume.
 - Per-user Docker sandboxes with resource limits, timeouts, and network isolation.
-- Authentication and tenant isolation.
+- Artifact persistence and audit records.
+- Organization-level tenancy, invitation delivery, user disablement, and administrator audit.
 - Multiple model providers, durable workflows, and observability.
 
 See the [MVP roadmap](docs/02-mvp-roadmap.md) for phase boundaries and acceptance criteria.

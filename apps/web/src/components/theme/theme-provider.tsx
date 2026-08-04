@@ -10,12 +10,7 @@ import {
   type ReactNode,
 } from "react";
 
-import {
-  applyTheme,
-  persistTheme,
-  resolveInitialTheme,
-  type Theme,
-} from "@/lib/theme";
+import { applyTheme, persistTheme, resolveInitialTheme, type Theme } from "@/lib/theme";
 
 type ThemeContextValue = {
   theme: Theme;
@@ -26,14 +21,11 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // Server and first client paint share "light"; boot script already paints the real theme on <html>.
-  const [theme, setThemeState] = useState<Theme>("light");
+  const [theme, setThemeState] = useState<Theme>(() => resolveInitialTheme());
 
   useEffect(() => {
-    const initial = resolveInitialTheme();
-    setThemeState(initial);
-    applyTheme(initial);
-  }, []);
+    applyTheme(theme);
+  }, [theme]);
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);

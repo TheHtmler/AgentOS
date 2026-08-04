@@ -22,11 +22,24 @@
 
 完成标准：高风险工具必须经过审批，刷新页面后审批状态和 Run 状态不丢失。只读搜索可自动执行。
 
+## Phase 2.5：领域 Agent 与患者上下文
+
+- 建立 `AgentProfile`、`AgentVersion` 和领域知识库边界。
+- 将 `agent_id` 纳入 Thread、Run 和运行快照。
+- 建立 `PatientCase`、患者授权关系和患者私有上下文。
+- 实现公共 MMA/PA 知识库与患者私有资料的分离检索。
+- Artifact 支持用户、患者、Thread 和 Run 作用域。
+- 实现带疾病亚型过滤、来源引用和版本信息的 `knowledge_search`。
+- 增加 `patient_context_read`、`read_artifact` 等只读工具。
+- 建立跨用户、跨患者和未确认事实的安全测试。
+
+完成标准：多个用户可以共享同一个 MMA/PA Agent 和公共知识库，但不能互相读取患者资料；同一用户的多个患者 Case 之间也不能串联上下文。
+
 ## Phase 3：受控 Runtime
 
 - 实现 Sandbox Manager。
 - Docker Sandbox 使用非 root、资源限制、超时回收和默认禁网。
-- 实现 Artifact 上传、下载和审计记录。
+- 实现 Sandbox 输出 Artifact、下载和审计记录；知识文档 Artifact 在 Phase 2.5 完成基础能力。
 
 完成标准：不同用户的运行目录和容器资源互相隔离。
 

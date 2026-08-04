@@ -90,6 +90,7 @@ class CreateInvitationRequest(EmailAddressRequest):
 class LoginRequest(EmailAddressRequest):
     password: Annotated[str, Field(min_length=1, max_length=128)]
 
+
 def session_token_from_request(request: Request) -> str:
     """Read the opaque cookie without ever accepting a browser-provided user ID."""
 

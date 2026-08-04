@@ -6,6 +6,7 @@ from agent_api.config import Settings
 def _base(**overrides: object) -> Settings:
     payload: dict[str, object] = {
         "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
+        "tavily_api_key": "",
     }
     payload.update(overrides)
     return Settings.model_validate(payload)

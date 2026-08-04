@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import httpx
 import pytest
 
@@ -65,7 +67,11 @@ async def test_local_provider_extracts_html() -> None:
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as client:
         provider = LocalFetchProvider(http_client=client)
-        result = await provider.fetch("https://example.com/post", max_chars=10_000, timeout=5.0)
+        with patch(
+            "agent_api.tools.fetch.url_guard.socket.getaddrinfo",
+            return_value=[(None, None, None, None, ("93.184.216.34", 0))],
+        ):
+            result = await provider.fetch("https://example.com/post", max_chars=10_000, timeout=5.0)
 
     assert result.provider == "local"
     assert result.title == "Local Title"

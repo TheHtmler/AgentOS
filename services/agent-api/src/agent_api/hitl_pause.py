@@ -18,16 +18,10 @@ def _tool_args(call: Any) -> dict[str, object]:
     if hasattr(call, "args_as_dict"):
         raw = call.args_as_dict()
         if isinstance(raw, dict):
-            return {
-                str(key): value
-                for key, value in cast(dict[object, object], raw).items()
-            }
+            return {str(key): value for key, value in cast(dict[object, object], raw).items()}
     args = getattr(call, "args", None)
     if isinstance(args, dict):
-        return {
-            str(key): value
-            for key, value in cast(dict[object, object], args).items()
-        }
+        return {str(key): value for key, value in cast(dict[object, object], args).items()}
     if isinstance(args, str) and args.strip():
         return {"raw": args}
     return {}
