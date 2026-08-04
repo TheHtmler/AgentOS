@@ -94,6 +94,9 @@ export function ChatWorkspace({
   const [slots, setSlots] = useState<ChatSlot[]>([{ key: "boot", threadId: null }]);
   const [visibleSlotKey, setVisibleSlotKey] = useState("boot");
   const [streamingBySlotKey, setStreamingBySlotKey] = useState<Record<string, boolean>>({});
+  const [awaitingApprovalBySlotKey, setAwaitingApprovalBySlotKey] = useState<
+    Record<string, boolean>
+  >({});
   const [runIdBySlotKey, setRunIdBySlotKey] = useState<Record<string, string | null>>({});
   const [hasHydratedFromUrl, setHasHydratedFromUrl] = useState(false);
 
@@ -118,6 +121,18 @@ export function ChatWorkspace({
 
     return ids;
   }, [slots, streamingBySlotKey]);
+
+  const awaitingApprovalThreadIds = useMemo(() => {
+    const ids = new Set<string>();
+
+    for (const slot of slots) {
+      if (awaitingApprovalBySlotKey[slot.key] && typeof slot.threadId === "string") {
+        ids.add(slot.threadId);
+      }
+    }
+
+    return ids;
+  }, [slots, awaitingApprovalBySlotKey]);
 
   useEffect(() => {
     if (hasHydratedFromUrl) {
@@ -261,6 +276,19 @@ export function ChatWorkspace({
     });
   }, []);
 
+  const handleSlotAwaitingApprovalChanged = useCallback(
+    (slotKey: string, isAwaiting: boolean) => {
+      setAwaitingApprovalBySlotKey((current) => {
+        if (Boolean(current[slotKey]) === isAwaiting) {
+          return current;
+        }
+
+        return { ...current, [slotKey]: isAwaiting };
+      });
+    },
+    [],
+  );
+
   const handleRunFinalized = useCallback(() => {
     setThreadListVersion((current) => current + 1);
   }, []);
@@ -277,6 +305,14 @@ export function ChatWorkspace({
       const deletedVisible = deletedKeys.includes(visibleSlotKeyRef.current);
 
       setStreamingBySlotKey((current) => {
+        const next = { ...current };
+        for (const key of deletedKeys) {
+          delete next[key];
+        }
+        return next;
+      });
+
+      setAwaitingApprovalBySlotKey((current) => {
         const next = { ...current };
         for (const key of deletedKeys) {
           delete next[key];
@@ -377,6 +413,7 @@ export function ChatWorkspace({
             activeThreadId={activeThreadId}
             refreshKey={threadListVersion}
             streamingThreadIds={streamingThreadIds}
+            awaitingApprovalThreadIds={awaitingApprovalThreadIds}
             onNewConversation={handleNewConversation}
             onSelectThread={handleSelectThread}
             onThreadDeleted={handleThreadDeleted}
@@ -401,6 +438,9 @@ export function ChatWorkspace({
                       onRunStarted={(runId) => handleSlotRunStarted(slot.key, runId)}
                       onStreamingChanged={(isStreaming) =>
                         handleSlotStreamingChanged(slot.key, isStreaming)
+                      }
+                      onAwaitingApprovalChanged={(isAwaiting) =>
+                        handleSlotAwaitingApprovalChanged(slot.key, isAwaiting)
                       }
                       onThreadChanged={(threadId) =>
                         handleSlotThreadChanged(slot.key, threadId)
@@ -469,6 +509,7 @@ export function ChatWorkspace({
                 activeThreadId={activeThreadId}
                 refreshKey={threadListVersion}
                 streamingThreadIds={streamingThreadIds}
+            awaitingApprovalThreadIds={awaitingApprovalThreadIds}
                 onNewConversation={handleNewConversation}
                 onSelectThread={handleSelectThread}
                 onThreadDeleted={handleThreadDeleted}

@@ -1031,6 +1031,111 @@ body {
   color: var(--danger);
 }
 
+.agentos-approval-panel {
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--panel-solid);
+  padding: 0.85rem 1rem;
+}
+
+.agentos-approval-panel-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.agentos-approval-panel-subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.agentos-approval-list {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.agentos-approval-item {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: 0.8rem;
+}
+
+.agentos-approval-tool {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.agentos-approval-args {
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.agentos-approval-expires {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.agentos-approval-reason {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.agentos-approval-reason input {
+  min-height: 2.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 0.4rem 0.65rem;
+  color: var(--text);
+}
+
+.agentos-approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.agentos-approval-approve,
+.agentos-approval-deny {
+  min-width: 4.5rem;
+  min-height: 2.25rem;
+  border-radius: 8px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.agentos-approval-approve {
+  border: 1px solid var(--accent-border);
+  background: var(--accent);
+  color: var(--accent-contrast, #04120f);
+}
+
+.agentos-approval-deny {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+}
+
+.agentos-approval-approve:disabled,
+.agentos-approval-deny:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* ── Invite dialog (portaled to body; never inherit drawer flex quirks) ── */
 .agentos-invite-trigger {
   width: 100%;

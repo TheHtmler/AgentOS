@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 type RunDetail = {
   id: string;
   thread_id: string;
-  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  status: "queued" | "running" | "waiting_approval" | "completed" | "failed" | "cancelled";
   model_name: string;
   input_tokens: number | null;
   output_tokens: number | null;
@@ -22,6 +22,7 @@ type RunInspectorProps = {
 const statusLabel: Record<RunDetail["status"], string> = {
   queued: "等待中",
   running: "运行中",
+  waiting_approval: "待审批",
   completed: "已完成",
   failed: "失败",
   cancelled: "已停止",
@@ -36,7 +37,7 @@ function isRunDetail(value: unknown): value is RunDetail {
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.thread_id === "string" &&
-    ["queued", "running", "completed", "failed", "cancelled"].includes(
+    ["queued", "running", "waiting_approval", "completed", "failed", "cancelled"].includes(
       typeof value.status === "string" ? value.status : "",
     ) &&
     typeof value.model_name === "string" &&
@@ -50,7 +51,12 @@ function isRunDetail(value: unknown): value is RunDetail {
 }
 
 function isTerminalStatus(status: RunDetail["status"]): boolean {
-  return status === "completed" || status === "failed" || status === "cancelled";
+  return (
+    status === "completed" ||
+    status === "failed" ||
+    status === "cancelled" ||
+    status === "waiting_approval"
+  );
 }
 
 function formatDuration(run: RunDetail): string {

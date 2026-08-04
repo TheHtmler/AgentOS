@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 
+import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval-panel";
 import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
 import { ProcessGroup } from "@/components/chat/process-group";
 import { ThinkingStepCard, type ThinkingStepState } from "@/components/chat/thinking-step-card";
@@ -40,6 +41,58 @@ type ThreadHistory = {
   toolCalls: ToolCallState[];
 };
 
+function parsePendingInterrupts(value: unknown): PendingInterrupt[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const items: PendingInterrupt[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+    if (
+      typeof entry.id !== "string" ||
+      typeof entry.tool_call_id !== "string" ||
+      typeof entry.tool_name !== "string" ||
+      typeof entry.expires_at !== "string" ||
+      !isRecord(entry.tool_args)
+    ) {
+      continue;
+    }
+    items.push({
+      id: entry.id,
+      tool_call_id: entry.tool_call_id,
+      tool_name: entry.tool_name,
+      tool_args: entry.tool_args,
+      expires_at: entry.expires_at,
+    });
+  }
+  return items;
+}
+
+async function loadRunApprovalState(runId: string): Promise<{
+  status: string;
+  pending: PendingInterrupt[];
+} | null> {
+  try {
+    const response = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+    const payload: unknown = await response.json();
+    if (!isRecord(payload) || typeof payload.status !== "string") {
+      return null;
+    }
+    return {
+      status: payload.status,
+      pending: parsePendingInterrupts(payload.pending_interrupts),
+    };
+  } catch {
+    return null;
+  }
+}
+
 type ChatPanelProps = {
   selectedThreadId: string | null | undefined;
   /** When false, this panel stays mounted for background runs but must not own the URL/inspector. */
@@ -47,6 +100,7 @@ type ChatPanelProps = {
   onNewConversation: () => void;
   onRunStarted: (runId: string) => void;
   onStreamingChanged: (isStreaming: boolean) => void;
+  onAwaitingApprovalChanged?: (isAwaiting: boolean) => void;
   onThreadChanged: (threadId: string | null) => void;
   onRunFinalized: () => void;
 };
@@ -310,6 +364,7 @@ export function ChatPanel({
   onNewConversation,
   onRunStarted,
   onStreamingChanged,
+  onAwaitingApprovalChanged,
   onThreadChanged,
   onRunFinalized,
 }: ChatPanelProps) {
@@ -326,6 +381,8 @@ export function ChatPanel({
   const [historyToolCalls, setHistoryToolCalls] = useState<ToolCallState[]>([]);
   const [liveUserMessageId, setLiveUserMessageId] = useState<string | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [approvalRunId, setApprovalRunId] = useState<string | null>(null);
+  const [pendingInterrupts, setPendingInterrupts] = useState<PendingInterrupt[]>([]);
 
   const agentRef = useRef<HttpAgent | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
@@ -352,6 +409,58 @@ export function ChatPanel({
   useEffect(() => {
     onStreamingChanged(isStreaming);
   }, [isStreaming, onStreamingChanged]);
+
+  useEffect(() => {
+    onAwaitingApprovalChanged?.(pendingInterrupts.length > 0);
+  }, [pendingInterrupts, onAwaitingApprovalChanged]);
+
+  function clearApprovalState() {
+    setApprovalRunId(null);
+    setPendingInterrupts([]);
+  }
+
+  async function applyApprovalStateFromRun(runId: string) {
+    const state = await loadRunApprovalState(runId);
+    if (state === null) {
+      return;
+    }
+    if (state.status === "waiting_approval" && state.pending.length > 0) {
+      setApprovalRunId(runId);
+      setPendingInterrupts(state.pending);
+      return;
+    }
+    clearApprovalState();
+  }
+
+  async function handleApprovalResolved() {
+    const runId = approvalRunId;
+    clearApprovalState();
+    if (runId === null) {
+      return;
+    }
+
+    setIsStreaming(true);
+    setError(null);
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const state = await loadRunApprovalState(runId);
+      if (state === null) {
+        break;
+      }
+      if (state.status === "waiting_approval" && state.pending.length > 0) {
+        setApprovalRunId(runId);
+        setPendingInterrupts(state.pending);
+        setIsStreaming(false);
+        return;
+      }
+      if (state.status === "completed" || state.status === "failed" || state.status === "cancelled") {
+        break;
+      }
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 500));
+    }
+    setIsStreaming(false);
+    setHistoryRefreshKey((current) => current + 1);
+    onRunFinalized();
+  }
 
   useEffect(() => {
     if (!isActive) {
@@ -429,8 +538,17 @@ export function ChatPanel({
             return;
           }
 
+          if (payload.status === "waiting_approval") {
+            if (!cancelled) {
+              await applyApprovalStateFromRun(runId);
+              setHistoryRefreshKey((current) => current + 1);
+            }
+            return;
+          }
+
           if (payload.status !== "running" && payload.status !== "queued") {
             if (!cancelled) {
+              clearApprovalState();
               setHistoryRefreshKey((current) => current + 1);
             }
             return;
@@ -900,9 +1018,16 @@ export function ChatPanel({
         }
       }
     } finally {
+      const finishedRunId = activeRunId;
+      const wasCancelled = cancellationRequestedRef.current;
       activeRunIdRef.current = null;
       cancellationRequestedRef.current = false;
       setIsStreaming(false);
+      if (finishedRunId !== null && !wasCancelled) {
+        await applyApprovalStateFromRun(finishedRunId);
+      } else {
+        clearApprovalState();
+      }
       onRunFinalized();
     }
   }
@@ -956,9 +1081,11 @@ export function ChatPanel({
 
   const statusLabel = isLoadingHistory
     ? "读取会话中"
-    : isStreaming
-      ? "Agent 正在执行"
-      : "Runtime ready";
+    : pendingInterrupts.length > 0
+      ? "等待审批"
+      : isStreaming
+        ? "Agent 正在执行"
+        : "Runtime ready";
 
   return (
     <section
@@ -1171,6 +1298,17 @@ export function ChatPanel({
         </p>
       ) : null}
 
+      {approvalRunId !== null && pendingInterrupts.length > 0 ? (
+        <div className="border-t px-3 py-3 sm:px-5">
+          <ApprovalPanel
+            runId={approvalRunId}
+            interrupts={pendingInterrupts}
+            onResolved={() => void handleApprovalResolved()}
+            onError={(message) => setError(message)}
+          />
+        </div>
+      ) : null}
+
       {showScrollToLatest ? (
         <div className="agentos-scroll-latest-bar">
           <button
@@ -1193,9 +1331,18 @@ export function ChatPanel({
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={isStreaming || isLoadingHistory || historyLoadFailed}
+          disabled={
+            isStreaming ||
+            isLoadingHistory ||
+            historyLoadFailed ||
+            pendingInterrupts.length > 0
+          }
           maxLength={4_000}
-          placeholder="输入任务、问题或需要 Agent 执行的操作"
+          placeholder={
+            pendingInterrupts.length > 0
+              ? "请先批准或拒绝上方的工具调用"
+              : "输入任务、问题或需要 Agent 执行的操作"
+          }
           rows={1}
           className="agentos-composer-input block max-h-50 w-full resize-none overflow-y-hidden px-3 py-2 text-sm leading-6 outline-none disabled:cursor-not-allowed"
         />
@@ -1207,7 +1354,12 @@ export function ChatPanel({
 
           <button
             type="submit"
-            disabled={isLoadingHistory || historyLoadFailed || (!isStreaming && !draft.trim())}
+            disabled={
+              isLoadingHistory ||
+              historyLoadFailed ||
+              pendingInterrupts.length > 0 ||
+              (!isStreaming && !draft.trim())
+            }
             className={`agentos-send-button min-w-18 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-45 ${
               isStreaming ? "agentos-stop-button" : ""
             }`}

@@ -13,6 +13,7 @@ type ConversationListProps = {
   activeThreadId: string | null;
   refreshKey: number;
   streamingThreadIds: ReadonlySet<string>;
+  awaitingApprovalThreadIds?: ReadonlySet<string>;
   onNewConversation: () => void;
   onSelectThread: (threadId: string) => void;
   onThreadDeleted: (threadId: string) => void;
@@ -117,6 +118,7 @@ export function ConversationList({
   activeThreadId,
   refreshKey,
   streamingThreadIds,
+  awaitingApprovalThreadIds = new Set<string>(),
   onNewConversation,
   onSelectThread,
   onThreadDeleted,
@@ -310,6 +312,7 @@ export function ConversationList({
                 const isBusy = busyThreadId === conversation.id;
                 const isRenaming = renamingThreadId === conversation.id;
                 const isStreaming = streamingThreadIds.has(conversation.id);
+                const isAwaitingApproval = awaitingApprovalThreadIds.has(conversation.id);
 
                 return (
                   <div
@@ -367,6 +370,15 @@ export function ConversationList({
                                   }`}
                                 >
                                   生成中
+                                </span>
+                              ) : null}
+                              {!isStreaming && isAwaitingApproval ? (
+                                <span
+                                  className={`ml-2 text-[10px] font-semibold tracking-wide ${
+                                    active ? "text-amber-200" : "text-amber-700"
+                                  }`}
+                                >
+                                  待审批
                                 </span>
                               ) : null}
                             </p>

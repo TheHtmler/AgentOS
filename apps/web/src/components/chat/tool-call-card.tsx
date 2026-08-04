@@ -1,6 +1,6 @@
 "use client";
 
-export type ToolCallStatus = "running" | "done" | "error";
+export type ToolCallStatus = "running" | "done" | "error" | "awaiting_approval";
 
 export type ToolCallState = {
   id: string;
@@ -100,6 +100,9 @@ export function toolCallHeadline(toolCall: ToolCallState): string {
     if (toolCall.status === "running") {
       return query ? `正在搜索网页：${truncate(query)}` : "正在搜索网页…";
     }
+    if (toolCall.status === "awaiting_approval") {
+      return query ? `等待审批搜索：${truncate(query)}` : "等待审批搜索…";
+    }
     if (toolCall.status === "error") {
       return query ? `搜索网页失败：${truncate(query)}` : "搜索网页失败";
     }
@@ -111,6 +114,9 @@ export function toolCallHeadline(toolCall: ToolCallState): string {
     if (toolCall.status === "running") {
       return target ? `正在读取：${target}` : "正在读取网页…";
     }
+    if (toolCall.status === "awaiting_approval") {
+      return target ? `等待审批读取：${target}` : "等待审批读取…";
+    }
     if (toolCall.status === "error") {
       return target ? `读取失败：${target}` : "读取网页失败";
     }
@@ -120,6 +126,9 @@ export function toolCallHeadline(toolCall: ToolCallState): string {
   // Future tools (file/edit/shell) can plug verb maps here.
   if (toolCall.status === "running") {
     return `正在调用 ${toolCall.toolName}…`;
+  }
+  if (toolCall.status === "awaiting_approval") {
+    return `等待审批 ${toolCall.toolName}…`;
   }
   if (toolCall.status === "error") {
     return `${toolCall.toolName} 失败`;
@@ -224,7 +233,7 @@ export function summarizeToolResultContent(content: string): {
         return {
           summary: "需要审批后才能执行",
           provider,
-          status: "error",
+          status: "awaiting_approval",
         };
       }
 
