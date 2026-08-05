@@ -131,3 +131,31 @@ async def test_chat_binds_requested_agent_for_new_thread(
         thread = await session.get(Thread, thread_id)
     assert thread is not None
     assert thread.agent_id == parenting_id
+
+
+@pytest.mark.anyio
+async def test_existing_chat_ignores_malformed_agent_header(
+    authenticated_api_user: UUID,
+) -> None:
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel(custom_output_text="ok")),
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        created = await client.post("/v1/chat/stream", json={"message": "第一轮"})
+        assert created.status_code == 200
+        thread_id = UUID(created.headers["x-agentos-thread-id"])
+
+        continued = await client.post(
+            "/v1/chat/stream",
+            headers={"X-AgentOS-Agent-Id": "not-a-uuid"},
+            json={"message": "第二轮", "thread_id": str(thread_id)},
+        )
+
+    assert continued.status_code == 200
+    async with session_factory() as session:
+        thread = await session.get(Thread, thread_id)
+    assert thread is not None
+    assert thread.agent_id == UUID("00000000-0000-0000-0000-000000000001")

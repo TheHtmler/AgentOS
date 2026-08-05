@@ -108,16 +108,18 @@ async def stream_ag_ui_run(
         raise HTTPException(status_code=422, detail="Invalid AG-UI request") from error
 
     user_message, prompt = current_user_message(client_input)
+    thread_id = requested_thread_id(client_input.thread_id)
 
     try:
         async with session_factory() as session, session.begin():
+            agent_id = requested_agent_id(request) if thread_id is None else None
             started = await start_run(
                 session,
-                thread_id=requested_thread_id(client_input.thread_id),
+                thread_id=thread_id,
                 user_content=prompt,
                 model_name=get_settings().ollama_model,
                 user_id=user.id,
-                agent_id=requested_agent_id(request),
+                agent_id=agent_id,
             )
     except ThreadNotFoundError as error:
         raise HTTPException(status_code=404, detail="Thread not found") from error

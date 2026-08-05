@@ -388,13 +388,14 @@ async def stream_chat(
 
     try:
         async with session_factory() as session, session.begin():
+            agent_id = requested_agent_id(request) if payload.thread_id is None else None
             started = await start_run(
                 session,
                 thread_id=payload.thread_id,
                 user_content=payload.message,
                 model_name=get_settings().ollama_model,
                 user_id=user.id,
-                agent_id=requested_agent_id(request),
+                agent_id=agent_id,
             )
     except ThreadNotFoundError as error:
         raise HTTPException(status_code=404, detail="Thread not found") from error
