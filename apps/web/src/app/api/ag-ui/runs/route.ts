@@ -43,12 +43,14 @@ export async function POST(request: Request) {
   }
 
   try {
+    const agentId = request.headers.get("x-agentos-agent-id");
     const upstream = await fetch(`${agentApiBaseUrl()}/v1/ag-ui/runs`, {
       method: "POST",
       headers: {
         Accept: "text/event-stream",
         "Content-Type": "application/json",
         ...(await agentApiSessionHeaders()),
+        ...(agentId === null ? {} : { "X-AgentOS-Agent-Id": agentId }),
       },
       body,
       cache: "no-store",

@@ -96,6 +96,7 @@ async function loadRunApprovalState(runId: string): Promise<{
 
 type ChatPanelProps = {
   selectedThreadId: string | null | undefined;
+  agentId: string | null;
   /** When false, this panel stays mounted for background runs but must not own the URL/inspector. */
   isActive?: boolean;
   onNewConversation: () => void;
@@ -308,11 +309,12 @@ function mergeHistoryToolCalls(
   return merged;
 }
 
-function createAgent(threadId: string, messages: ChatMessage[]): HttpAgent {
+function createAgent(threadId: string, messages: ChatMessage[], agentId: string | null): HttpAgent {
   return new HttpAgent({
     url: "/api/ag-ui/runs",
     threadId,
     initialMessages: toAgentMessages(messages),
+    headers: agentId === null ? {} : { "X-AgentOS-Agent-Id": agentId },
   });
 }
 
@@ -361,6 +363,7 @@ async function loadRunDurationLabel(runId: string): Promise<string | null> {
 
 export function ChatPanel({
   selectedThreadId,
+  agentId,
   isActive = true,
   onNewConversation,
   onRunStarted,
@@ -404,7 +407,7 @@ export function ChatPanel({
   isActiveRef.current = isActive;
 
   if (agentRef.current === null) {
-    agentRef.current = createAgent("new", []);
+    agentRef.current = createAgent("new", [], agentId);
   }
 
   useEffect(() => {
@@ -512,6 +515,12 @@ export function ChatPanel({
       agentRef.current?.abortRun();
     };
   }, []);
+
+  useEffect(() => {
+    if (threadId === null && !isStreaming) {
+      agentRef.current = createAgent("new", messages, agentId);
+    }
+  }, [agentId, isStreaming, messages, threadId]);
 
   useEffect(() => {
     if (
@@ -632,7 +641,7 @@ export function ChatPanel({
         }
 
         if (isCurrent) {
-          agentRef.current = createAgent(history.thread_id, history.messages);
+          agentRef.current = createAgent(history.thread_id, history.messages, agentId);
           setMessages(history.messages);
           setThreadId(history.thread_id);
           setTimelineSteps([]);
@@ -661,7 +670,7 @@ export function ChatPanel({
       isCurrent = false;
       controller.abort();
     };
-  }, [historyRefreshKey, onThreadChanged, selectedThreadId, threadId]);
+  }, [agentId, historyRefreshKey, onThreadChanged, selectedThreadId, threadId]);
 
   function scrollMessagesToBottom(behavior: ScrollBehavior = "auto") {
     const viewport = messagesViewportRef.current;
@@ -796,7 +805,7 @@ export function ChatPanel({
   async function sendMessage() {
     const content = draft.trim();
 
-    if (!content || isStreaming || isLoadingHistory || historyLoadFailed) {
+    if (!content || isStreaming || isLoadingHistory || historyLoadFailed || agentId === null) {
       return;
     }
 
@@ -1340,13 +1349,19 @@ export function ChatPanel({
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={handleKeyDown}
           disabled={
-            isStreaming || isLoadingHistory || historyLoadFailed || pendingInterrupts.length > 0
+            isStreaming ||
+            isLoadingHistory ||
+            historyLoadFailed ||
+            pendingInterrupts.length > 0 ||
+            agentId === null
           }
           maxLength={4_000}
           placeholder={
             pendingInterrupts.length > 0
               ? "请先批准或拒绝上方的工具调用"
-              : "输入任务、问题或需要 Agent 执行的操作"
+              : agentId === null
+                ? "正在加载 Agent"
+                : "输入任务、问题或需要 Agent 执行的操作"
           }
           rows={1}
           className="agentos-composer-input block max-h-50 w-full resize-none overflow-y-hidden px-3 py-2 text-sm leading-6 outline-none disabled:cursor-not-allowed"
@@ -1363,6 +1378,7 @@ export function ChatPanel({
               isLoadingHistory ||
               historyLoadFailed ||
               pendingInterrupts.length > 0 ||
+              agentId === null ||
               (!isStreaming && !draft.trim())
             }
             className={`agentos-send-button min-w-18 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-45 ${

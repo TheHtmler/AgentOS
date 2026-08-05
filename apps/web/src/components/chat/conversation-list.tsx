@@ -2,8 +2,11 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-type Conversation = {
+import type { AgentSummary } from "@/lib/agents";
+
+export type Conversation = {
   id: string;
+  agent_id: string;
   title: string | null;
   latest_message_content: string | null;
   updated_at: string;
@@ -11,11 +14,14 @@ type Conversation = {
 
 type ConversationListProps = {
   activeThreadId: string | null;
+  agents: AgentSummary[];
+  selectedAgentId: string | null;
   refreshKey: number;
   streamingThreadIds: ReadonlySet<string>;
   awaitingApprovalThreadIds?: ReadonlySet<string>;
   onNewConversation: () => void;
-  onSelectThread: (threadId: string) => void;
+  onSelectAgent: (agentId: string) => void;
+  onSelectThread: (conversation: Conversation) => void;
   onThreadDeleted: (threadId: string) => void;
 };
 
@@ -32,6 +38,7 @@ function isConversation(value: unknown): value is Conversation {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
+    typeof value.agent_id === "string" &&
     (typeof value.title === "string" || value.title === null) &&
     (typeof value.latest_message_content === "string" || value.latest_message_content === null) &&
     typeof value.updated_at === "string"
@@ -116,14 +123,18 @@ function groupConversations(conversations: Conversation[]): ConversationGroup[] 
 
 export function ConversationList({
   activeThreadId,
+  agents,
+  selectedAgentId,
   refreshKey,
   streamingThreadIds,
   awaitingApprovalThreadIds = new Set<string>(),
   onNewConversation,
+  onSelectAgent,
   onSelectThread,
   onThreadDeleted,
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [menuThreadId, setMenuThreadId] = useState<string | null>(null);
@@ -135,9 +146,21 @@ export function ConversationList({
     const controller = new AbortController();
     let isCurrent = true;
 
+    setConversations([]);
+    setError(null);
+    setIsLoading(true);
+
+    if (selectedAgentId === null) {
+      return () => {
+        isCurrent = false;
+        controller.abort();
+      };
+    }
+
     void (async () => {
       try {
-        const response = await fetch("/api/threads?limit=20", {
+        const query = new URLSearchParams({ limit: "20", agent_id: selectedAgentId });
+        const response = await fetch(`/api/threads?${query}`, {
           cache: "no-store",
           signal: controller.signal,
         });
@@ -162,6 +185,10 @@ export function ConversationList({
         }
 
         setError(caughtError instanceof Error ? caughtError.message : "无法读取最近会话。");
+      } finally {
+        if (isCurrent) {
+          setIsLoading(false);
+        }
       }
     })();
 
@@ -169,7 +196,7 @@ export function ConversationList({
       isCurrent = false;
       controller.abort();
     };
-  }, [refreshKey]);
+  }, [refreshKey, selectedAgentId]);
 
   const groups = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -269,12 +296,30 @@ export function ConversationList({
   return (
     <section className="agentos-conversation-list flex h-full min-h-0 min-w-0 flex-col overflow-hidden border border-zinc-200 bg-white">
       <header className="border-b border-zinc-200 p-3">
+        <label className="block">
+          <span className="text-xs font-medium tracking-wide text-zinc-500">当前 Agent</span>
+          <select
+            aria-label="选择 Agent"
+            value={selectedAgentId ?? ""}
+            disabled={agents.length === 0}
+            onChange={(event) => onSelectAgent(event.target.value)}
+            className="mt-2 block w-full border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-medium text-zinc-900 outline-none focus:border-zinc-500 focus:bg-white disabled:cursor-wait disabled:opacity-60"
+          >
+            {agents.length === 0 ? <option value="">正在加载 Agent…</option> : null}
+            {agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-zinc-950">会话</p>
+          <p className="mt-4 text-sm font-semibold text-zinc-950">会话</p>
           <button
             type="button"
             onClick={onNewConversation}
-            className="border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-zinc-500 hover:text-zinc-950"
+            disabled={selectedAgentId === null}
+            className="mt-4 border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-zinc-500 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
           >
             新建
           </button>
@@ -292,10 +337,22 @@ export function ConversationList({
         <p role="alert" className="px-4 py-4 text-sm text-rose-700">
           {error}
         </p>
+      ) : isLoading ? (
+        <p className="px-4 py-5 text-sm text-zinc-500">读取会话中…</p>
       ) : groups.length === 0 ? (
-        <p className="px-4 py-5 text-sm text-zinc-500">
-          {query.trim() ? "没有匹配的已加载会话。" : "暂无已保存的会话。"}
-        </p>
+        <div className="px-4 py-5 text-sm text-zinc-500">
+          <p>{query.trim() ? "没有匹配的已加载会话。" : "暂无会话。"}</p>
+          {!query.trim() ? (
+            <button
+              type="button"
+              onClick={onNewConversation}
+              disabled={selectedAgentId === null}
+              className="mt-3 text-xs font-medium text-teal-700 hover:text-teal-900 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              新建会话
+            </button>
+          ) : null}
+        </div>
       ) : (
         <nav
           aria-label="最近会话"
@@ -353,7 +410,7 @@ export function ConversationList({
                       <div className="flex min-w-0 items-stretch gap-1">
                         <button
                           type="button"
-                          onClick={() => onSelectThread(conversation.id)}
+                          onClick={() => onSelectThread(conversation)}
                           disabled={isBusy}
                           aria-current={active ? "page" : undefined}
                           className={`min-w-0 flex-1 px-1 py-2 text-left transition disabled:cursor-not-allowed ${

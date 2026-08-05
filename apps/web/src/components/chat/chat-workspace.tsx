@@ -9,6 +9,8 @@ import { ConversationList } from "@/components/chat/conversation-list";
 import { RunInspector } from "@/components/run/run-inspector";
 import { HealthStatus } from "@/components/system/health-status";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { parseAgentSummaries, type AgentSummary } from "@/lib/agents";
+import type { Conversation } from "@/components/chat/conversation-list";
 
 type ChatWorkspaceProps = {
   userEmail: string;
@@ -85,6 +87,8 @@ export function ChatWorkspace({
   onLogout,
 }: ChatWorkspaceProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadListVersion, setThreadListVersion] = useState(0);
@@ -109,6 +113,43 @@ export function ChatWorkspace({
     slotsRef.current = slots;
     visibleSlotKeyRef.current = visibleSlotKey;
   }, [runIdBySlotKey, slots, streamingBySlotKey, visibleSlotKey]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let isCurrent = true;
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/agents", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          return;
+        }
+
+        const nextAgents = parseAgentSummaries((await response.json()) as unknown);
+        if (nextAgents === null || !isCurrent) {
+          return;
+        }
+
+        setAgents(nextAgents);
+        setSelectedAgentId((current) => {
+          if (current !== null && nextAgents.some((agent) => agent.id === current)) {
+            return current;
+          }
+          return nextAgents.find((agent) => agent.is_default)?.id ?? nextAgents[0]?.id ?? null;
+        });
+      } catch {
+        // The conversation rail remains unavailable until the Agent API is reachable.
+      }
+    })();
+
+    return () => {
+      isCurrent = false;
+      controller.abort();
+    };
+  }, []);
 
   const streamingThreadIds = useMemo(() => {
     const ids = new Set<string>();
@@ -146,6 +187,38 @@ export function ChatWorkspace({
       setSlots([{ key: threadFromUrl, threadId: threadFromUrl }]);
       setVisibleSlotKey(threadFromUrl);
       setActiveThreadId(threadFromUrl);
+
+      void (async () => {
+        try {
+          const response = await fetch("/api/threads?limit=50", { cache: "no-store" });
+          if (!response.ok) {
+            return;
+          }
+          const payload: unknown = await response.json();
+          if (
+            typeof payload !== "object" ||
+            payload === null ||
+            !("threads" in payload) ||
+            !Array.isArray(payload.threads)
+          ) {
+            return;
+          }
+          const thread = payload.threads.find(
+            (item) =>
+              typeof item === "object" &&
+              item !== null &&
+              "id" in item &&
+              "agent_id" in item &&
+              item.id === threadFromUrl &&
+              typeof item.agent_id === "string",
+          );
+          if (thread !== undefined && typeof thread.agent_id === "string") {
+            setSelectedAgentId(thread.agent_id);
+          }
+        } catch {
+          // The opened thread remains usable even if its sidebar Agent cannot be resolved.
+        }
+      })();
     } else {
       const key = createSlotKey();
       setSlots([{ key, threadId: null }]);
@@ -197,7 +270,9 @@ export function ChatWorkspace({
   }, []);
 
   const handleSelectThread = useCallback(
-    (threadId: string) => {
+    (conversation: Conversation) => {
+      const { id: threadId, agent_id: agentId } = conversation;
+      setSelectedAgentId(agentId);
       const currentSlots = slotsRef.current;
       const existing = currentSlots.find((slot) => slot.threadId === threadId);
 
@@ -236,6 +311,17 @@ export function ChatWorkspace({
     );
     focusSlot(key, null);
   }, [focusSlot]);
+
+  const handleSelectAgent = useCallback(
+    (agentId: string) => {
+      if (agentId === selectedAgentId) {
+        return;
+      }
+      setSelectedAgentId(agentId);
+      handleNewConversation();
+    },
+    [handleNewConversation, selectedAgentId],
+  );
 
   const handleSlotThreadChanged = useCallback((slotKey: string, threadId: string | null) => {
     setSlots((current) =>
@@ -404,10 +490,13 @@ export function ChatWorkspace({
         <aside className="agentos-conversation-rail hidden min-h-0 lg:flex lg:flex-col">
           <ConversationList
             activeThreadId={activeThreadId}
+            agents={agents}
+            selectedAgentId={selectedAgentId}
             refreshKey={threadListVersion}
             streamingThreadIds={streamingThreadIds}
             awaitingApprovalThreadIds={awaitingApprovalThreadIds}
             onNewConversation={handleNewConversation}
+            onSelectAgent={handleSelectAgent}
             onSelectThread={handleSelectThread}
             onThreadDeleted={handleThreadDeleted}
           />
@@ -426,6 +515,7 @@ export function ChatWorkspace({
                   >
                     <ChatPanel
                       selectedThreadId={slot.threadId}
+                      agentId={selectedAgentId}
                       isActive={isActive}
                       onNewConversation={handleNewConversation}
                       onRunStarted={(runId) => handleSlotRunStarted(slot.key, runId)}
@@ -498,10 +588,13 @@ export function ChatWorkspace({
             <div className="min-h-0 flex-1 overflow-hidden">
               <ConversationList
                 activeThreadId={activeThreadId}
+                agents={agents}
+                selectedAgentId={selectedAgentId}
                 refreshKey={threadListVersion}
                 streamingThreadIds={streamingThreadIds}
                 awaitingApprovalThreadIds={awaitingApprovalThreadIds}
                 onNewConversation={handleNewConversation}
+                onSelectAgent={handleSelectAgent}
                 onSelectThread={handleSelectThread}
                 onThreadDeleted={handleThreadDeleted}
               />
