@@ -13,6 +13,7 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, Text
 
 from agent_api.api.auth import get_current_user
 from agent_api.config import get_settings
+from agent_api.db.agent_store import AgentNotFoundError
 from agent_api.db.chat_store import (
     ThreadBusyError,
     ThreadNotFoundError,
@@ -50,6 +51,21 @@ class ChatStreamRequest(BaseModel):
             raise ValueError("message must not be blank")
 
         return message
+
+
+def requested_agent_id(request: Request) -> UUID | None:
+    """Parse the Agent header used only when creating a new Thread."""
+
+    raw = request.headers.get("X-AgentOS-Agent-Id")
+    if not raw:
+        return None
+    try:
+        return UUID(raw)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
+            detail="X-AgentOS-Agent-Id must be a UUID",
+        ) from error
 
 
 def encode_sse_event(event: str, data: dict[str, str]) -> str:
@@ -378,9 +394,12 @@ async def stream_chat(
                 user_content=payload.message,
                 model_name=get_settings().ollama_model,
                 user_id=user.id,
+                agent_id=requested_agent_id(request),
             )
     except ThreadNotFoundError as error:
         raise HTTPException(status_code=404, detail="Thread not found") from error
+    except AgentNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Agent not found") from error
     except ThreadBusyError as error:
         raise HTTPException(status_code=409, detail="Thread is already running") from error
 

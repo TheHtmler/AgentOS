@@ -105,3 +105,29 @@ async def test_soft_delete_hides_thread_from_list_store(
         thread = await session.get(Thread, thread_id)
         assert thread is not None
         assert thread.deleted_at is not None
+
+
+@pytest.mark.anyio
+async def test_chat_binds_requested_agent_for_new_thread(
+    authenticated_api_user: UUID,
+) -> None:
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel(custom_output_text="ok")),
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+    parenting_id = UUID("00000000-0000-0000-0000-000000000002")
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/v1/chat/stream",
+            headers={"X-AgentOS-Agent-Id": str(parenting_id)},
+            json={"message": "育儿问题"},
+        )
+
+    assert response.status_code == 200
+    thread_id = UUID(response.headers["x-agentos-thread-id"])
+    async with session_factory() as session:
+        thread = await session.get(Thread, thread_id)
+    assert thread is not None
+    assert thread.agent_id == parenting_id

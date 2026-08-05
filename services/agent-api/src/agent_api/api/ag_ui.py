@@ -26,6 +26,7 @@ from agent_api.api.chat import (
     strip_thinking_parts,
 )
 from agent_api.config import get_settings
+from agent_api.db.agent_store import AgentNotFoundError
 from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_run
 from agent_api.db.models import User
 from agent_api.db.session import session_factory
@@ -69,6 +70,21 @@ def requested_thread_id(thread_id: str) -> UUID | None:
         raise HTTPException(status_code=422, detail="threadId must be a UUID or 'new'") from error
 
 
+def requested_agent_id(request: Request) -> UUID | None:
+    """Parse the Agent header used only when creating a new Thread."""
+
+    raw = request.headers.get("X-AgentOS-Agent-Id")
+    if not raw:
+        return None
+    try:
+        return UUID(raw)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
+            detail="X-AgentOS-Agent-Id must be a UUID",
+        ) from error
+
+
 def text_from_native_event(event: NativeEvent) -> str | None:
     if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
         return event.part.content or None
@@ -101,9 +117,12 @@ async def stream_ag_ui_run(
                 user_content=prompt,
                 model_name=get_settings().ollama_model,
                 user_id=user.id,
+                agent_id=requested_agent_id(request),
             )
     except ThreadNotFoundError as error:
         raise HTTPException(status_code=404, detail="Thread not found") from error
+    except AgentNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Agent not found") from error
     except ThreadBusyError as error:
         raise HTTPException(status_code=409, detail="Thread is already running") from error
 

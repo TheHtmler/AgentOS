@@ -13,9 +13,10 @@ from agent_api.db.chat_store import (
     list_completed_run_message_histories,
     list_thread_messages,
     list_thread_tool_calls,
+    list_threads,
     start_run,
 )
-from agent_api.db.models import Run, RunEvent, RunMessageHistory, Thread
+from agent_api.db.models import Agent, Run, RunEvent, RunMessageHistory, Thread, User
 
 
 @pytest.mark.anyio
@@ -341,5 +342,107 @@ async def test_existing_thread_does_not_create_an_orphan_thread(
         assert thread_count_after_first == (thread_count_before or 0) + 1
         assert continued.thread_id == first.thread_id
         assert thread_count_after_second == thread_count_after_first
+    finally:
+        await transaction.rollback()
+
+
+@pytest.mark.anyio
+async def test_start_run_binds_requested_agent_id(database_session: AsyncSession) -> None:
+    session = database_session
+    transaction = await session.begin()
+
+    try:
+        parenting_id = await session.scalar(select(Agent.id).where(Agent.slug == "parenting"))
+        assert parenting_id is not None
+
+        started = await start_run(
+            session,
+            thread_id=None,
+            user_content="育儿问题",
+            model_name="gemma4:e4b",
+            agent_id=parenting_id,
+        )
+        thread = await session.get(Thread, started.thread_id)
+
+        assert thread is not None
+        assert thread.agent_id == parenting_id
+    finally:
+        await transaction.rollback()
+
+
+@pytest.mark.anyio
+async def test_list_threads_filters_by_agent(database_session: AsyncSession) -> None:
+    session = database_session
+    transaction = await session.begin()
+
+    try:
+        user = User(email="agent-filter@example.com", status="active")
+        session.add(user)
+        await session.flush()
+        general_id = await session.scalar(select(Agent.id).where(Agent.slug == "general"))
+        parenting_id = await session.scalar(select(Agent.id).where(Agent.slug == "parenting"))
+        assert general_id is not None
+        assert parenting_id is not None
+
+        general = await start_run(
+            session,
+            thread_id=None,
+            user_content="通用问题",
+            model_name="gemma4:e4b",
+            user_id=user.id,
+            agent_id=general_id,
+        )
+        parenting = await start_run(
+            session,
+            thread_id=None,
+            user_content="育儿问题",
+            model_name="gemma4:e4b",
+            user_id=user.id,
+            agent_id=parenting_id,
+        )
+
+        threads = await list_threads(
+            session,
+            limit=20,
+            user_id=user.id,
+            agent_id=parenting_id,
+        )
+
+        assert [thread.id for thread in threads] == [parenting.thread_id]
+        assert general.thread_id not in {thread.id for thread in threads}
+    finally:
+        await transaction.rollback()
+
+
+@pytest.mark.anyio
+async def test_existing_thread_ignores_requested_agent_id(database_session: AsyncSession) -> None:
+    session = database_session
+    transaction = await session.begin()
+
+    try:
+        general_id = await session.scalar(select(Agent.id).where(Agent.slug == "general"))
+        parenting_id = await session.scalar(select(Agent.id).where(Agent.slug == "parenting"))
+        assert general_id is not None
+        assert parenting_id is not None
+        first = await start_run(
+            session,
+            thread_id=None,
+            user_content="第一轮",
+            model_name="gemma4:e4b",
+            agent_id=general_id,
+        )
+        await complete_run(session, run_id=first.run_id, assistant_content="第一轮回答")
+
+        await start_run(
+            session,
+            thread_id=first.thread_id,
+            user_content="第二轮",
+            model_name="gemma4:e4b",
+            agent_id=parenting_id,
+        )
+        thread = await session.get(Thread, first.thread_id)
+
+        assert thread is not None
+        assert thread.agent_id == general_id
     finally:
         await transaction.rollback()

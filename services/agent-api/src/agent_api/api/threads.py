@@ -24,6 +24,7 @@ class ThreadSummaryResponse(BaseModel):
     """A lightweight recent-conversation item for navigation."""
 
     id: UUID
+    agent_id: UUID
     title: str | None
     latest_message_content: str | None
     updated_at: datetime
@@ -97,16 +98,23 @@ class ThreadUpdateResponse(BaseModel):
 async def get_threads(
     user: Annotated[User, Depends(get_current_user)],
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
+    agent_id: Annotated[UUID | None, Query()] = None,
 ) -> ThreadListResponse:
     """List recent durable conversations without exposing model history."""
 
     async with session_factory() as session:
-        threads = await list_threads(session, limit=limit, user_id=user.id)
+        threads = await list_threads(
+            session,
+            limit=limit,
+            user_id=user.id,
+            agent_id=agent_id,
+        )
 
     return ThreadListResponse(
         threads=[
             ThreadSummaryResponse(
                 id=thread.id,
+                agent_id=thread.agent_id,
                 title=thread.title,
                 latest_message_content=thread.latest_message_content,
                 updated_at=thread.updated_at,
