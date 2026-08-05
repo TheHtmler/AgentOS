@@ -2,18 +2,19 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
-from pydantic_ai import ModelMessagesTypeAdapter
+from pydantic_ai import Agent, ModelMessagesTypeAdapter
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 
+from agent_api.agent import AgentOutput
 from agent_api.api.auth import get_current_user
 from agent_api.config import get_settings
-from agent_api.db.agent_store import AgentNotFoundError
+from agent_api.db.agent_store import AgentNotFoundError, get_published_version
 from agent_api.db.chat_store import (
     ThreadBusyError,
     ThreadNotFoundError,
@@ -25,7 +26,7 @@ from agent_api.db.chat_store import (
     list_thread_messages,
     start_run,
 )
-from agent_api.db.models import Message, User
+from agent_api.db.models import Message, Thread, User
 from agent_api.db.session import session_factory
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import AgentRuntime, get_runtime
@@ -240,6 +241,7 @@ async def event_stream(
     run_id: UUID,
     message_history: list[ModelMessage],
     runtime: AgentRuntime,
+    agent: Agent[Any, AgentOutput],
 ) -> AsyncIterator[str]:
     """Run the full agent graph (including tools), then emit the final answer over SSE.
 
@@ -262,7 +264,7 @@ async def event_stream(
 
             # Prefer run() over run_stream() so web_search and other tools finish
             # before any assistant text is treated as the final answer.
-            result = await runtime.agent.run(
+            result = await agent.run(
                 message,
                 message_history=message_history or None,
                 conversation_id=str(thread_id),
@@ -413,6 +415,17 @@ async def stream_chat(
             detail="Conversation history is unavailable",
         ) from error
 
+    async with session_factory() as session:
+        thread = await session.get(Thread, started.thread_id)
+        if thread is None:
+            raise RuntimeError(f"Thread {started.thread_id} disappeared after starting its run")
+        version = await get_published_version(session, thread.agent_id)
+    runtime = get_runtime(request)
+    agent = runtime.build_run_agent(
+        system_prompt_overlay=version.system_prompt_overlay,
+        tool_policy_overrides=version.tool_policy_overrides,
+    )
+
     return StreamingResponse(
         event_stream(
             request,
@@ -420,7 +433,8 @@ async def stream_chat(
             started.thread_id,
             started.run_id,
             message_history,
-            get_runtime(request),
+            runtime,
+            agent,
         ),
         media_type="text/event-stream",
         headers={

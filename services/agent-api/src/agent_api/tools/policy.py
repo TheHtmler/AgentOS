@@ -21,10 +21,15 @@ def _parse_name_set(raw: str) -> frozenset[str]:
     return frozenset(part.strip() for part in raw.split(",") if part.strip())
 
 
-def evaluate(tool_name: str, *, settings: Settings | None = None) -> PolicyAction:
+def evaluate(
+    tool_name: str,
+    *,
+    settings: Settings | None = None,
+    overrides: dict[str, PolicyAction] | None = None,
+) -> PolicyAction:
     """Return the effective action for a tool name.
 
-    Precedence matches mainstream agents: deny beats ask beats allow.
+    Precedence is env deny > env ask > agent overrides > spec.default_action.
     Unknown (unregistered) names are denied so private/ad-hoc tools cannot slip through.
     """
 
@@ -46,7 +51,7 @@ def evaluate(tool_name: str, *, settings: Settings | None = None) -> PolicyActio
     deny_names = _parse_name_set(cfg.tool_policy_deny)
     ask_names = _parse_name_set(cfg.tool_policy_ask)
 
-    # Env deny always wins over ask and default_action.
+    # Env deny > env ask > agent overrides > spec.default_action.
     if name in deny_names:
         logger.info("tool_policy deny env tool=%s", name)
         return PolicyAction.DENY
@@ -54,6 +59,9 @@ def evaluate(tool_name: str, *, settings: Settings | None = None) -> PolicyActio
     if name in ask_names:
         logger.info("tool_policy ask env tool=%s", name)
         return PolicyAction.ASK
+
+    if overrides is not None and name in overrides:
+        return overrides[name]
 
     return spec.default_action
 

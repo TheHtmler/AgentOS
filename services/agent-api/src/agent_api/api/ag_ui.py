@@ -26,9 +26,9 @@ from agent_api.api.chat import (
     strip_thinking_parts,
 )
 from agent_api.config import get_settings
-from agent_api.db.agent_store import AgentNotFoundError
+from agent_api.db.agent_store import AgentNotFoundError, get_published_version
 from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_run
-from agent_api.db.models import User
+from agent_api.db.models import Thread, User
 from agent_api.db.session import session_factory
 from agent_api.hitl_pause import persist_deferred_approvals
 from agent_api.output_limits import with_truncation_notice_if_needed
@@ -136,6 +136,18 @@ async def stream_ag_ui_run(
             status_code=500, detail="Conversation history is unavailable"
         ) from error
 
+    async with session_factory() as session:
+        thread = await session.get(Thread, started.thread_id)
+        if thread is None:
+            raise RuntimeError(f"Thread {started.thread_id} disappeared after starting its run")
+        version = await get_published_version(session, thread.agent_id)
+
+    runtime = get_runtime(request)
+    agent = runtime.build_run_agent(
+        system_prompt_overlay=version.system_prompt_overlay,
+        tool_policy_overrides=version.tool_policy_overrides,
+    )
+
     # Ignore browser-supplied history, state, tools, and run identity.
     server_input = client_input.model_copy(
         update={
@@ -149,11 +161,10 @@ async def stream_ag_ui_run(
         },
     )
     adapter = AGUIAdapter(
-        agent=get_runtime(request).agent,
+        agent=agent,
         run_input=server_input,
         accept=request.headers.get("accept"),
     )
-    runtime = get_runtime(request)
     event_queue: asyncio.Queue[BaseEvent | BaseException | None] = asyncio.Queue()
     client_disconnected = asyncio.Event()
 

@@ -20,8 +20,9 @@ from agent_api.api.chat import (
     persist_failed_run,
     strip_thinking_parts,
 )
+from agent_api.db.agent_store import get_published_version
 from agent_api.db.chat_store import get_run, get_run_message_history
-from agent_api.db.models import Interrupt
+from agent_api.db.models import Interrupt, Thread
 from agent_api.db.session import session_factory
 from agent_api.hitl_pause import persist_deferred_approvals
 from agent_api.output_limits import with_truncation_notice_if_needed
@@ -57,6 +58,15 @@ async def continue_run_after_approval(
     async with session_factory() as session:
         run = await get_run(session, run_id=run_id, user_id=user_id)
         history_raw = await get_run_message_history(session, run_id=run_id)
+        thread = await session.get(Thread, run.thread_id)
+        version = (
+            await get_published_version(session, thread.agent_id) if thread is not None else None
+        )
+
+    if thread is None or version is None:
+        logger.error("Missing thread for resume run_id=%s", run_id)
+        await persist_failed_run(run_id)
+        return
 
     if history_raw is None:
         logger.error("Missing message history checkpoint for resume run_id=%s", run_id)
@@ -71,12 +81,16 @@ async def continue_run_after_approval(
         return
 
     deferred = deferred_results_from_interrupts(interrupts)
+    agent = runtime.build_run_agent(
+        system_prompt_overlay=version.system_prompt_overlay,
+        tool_policy_overrides=version.tool_policy_overrides,
+    )
 
     try:
         async with runtime.model_semaphore:
             # Omit pydantic-ai run_id: the checkpoint already contains the interrupted
             # attempt's id; reusing it raises UserError. Our DB run_id stays the same.
-            result = await runtime.agent.run(
+            result = await agent.run(
                 message_history=message_history,
                 deferred_tool_results=deferred,
                 conversation_id=str(run.thread_id),
