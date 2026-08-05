@@ -124,9 +124,12 @@ async def test_chat_binds_requested_agent_for_new_thread(
             headers={"X-AgentOS-Agent-Id": str(parenting_id)},
             json={"message": "育儿问题"},
         )
+        assert response.status_code == 200
+        thread_id = UUID(response.headers["x-agentos-thread-id"])
+        history_response = await client.get(f"/v1/threads/{thread_id}/messages")
 
-    assert response.status_code == 200
-    thread_id = UUID(response.headers["x-agentos-thread-id"])
+    assert history_response.status_code == 200
+    assert history_response.json()["agent_id"] == str(parenting_id)
     async with session_factory() as session:
         thread = await session.get(Thread, thread_id)
     assert thread is not None

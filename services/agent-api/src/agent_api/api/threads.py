@@ -14,7 +14,7 @@ from agent_api.db.chat_store import (
     rename_thread,
     soft_delete_thread,
 )
-from agent_api.db.models import User
+from agent_api.db.models import Thread, User
 from agent_api.db.session import session_factory
 
 router = APIRouter(prefix="/v1/threads", tags=["threads"])
@@ -61,6 +61,7 @@ class ThreadMessagesResponse(BaseModel):
     """Ordered durable messages belonging to one existing Thread."""
 
     thread_id: UUID
+    agent_id: UUID
     messages: list[ThreadMessageResponse]
     tool_calls: list[ThreadToolCallResponse] = []
 
@@ -180,11 +181,16 @@ async def get_thread_messages(
                 thread_id=thread_id,
                 user_id=user.id,
             )
+            thread = await session.get(Thread, thread_id)
     except ThreadNotFoundError as error:
         raise HTTPException(status_code=404, detail="Thread not found") from error
 
+    if thread is None:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
     return ThreadMessagesResponse(
         thread_id=thread_id,
+        agent_id=thread.agent_id,
         messages=[
             ThreadMessageResponse(
                 id=message.id,

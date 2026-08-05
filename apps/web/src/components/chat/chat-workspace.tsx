@@ -187,38 +187,6 @@ export function ChatWorkspace({
       setSlots([{ key: threadFromUrl, threadId: threadFromUrl }]);
       setVisibleSlotKey(threadFromUrl);
       setActiveThreadId(threadFromUrl);
-
-      void (async () => {
-        try {
-          const response = await fetch("/api/threads?limit=50", { cache: "no-store" });
-          if (!response.ok) {
-            return;
-          }
-          const payload: unknown = await response.json();
-          if (
-            typeof payload !== "object" ||
-            payload === null ||
-            !("threads" in payload) ||
-            !Array.isArray(payload.threads)
-          ) {
-            return;
-          }
-          const thread = payload.threads.find(
-            (item) =>
-              typeof item === "object" &&
-              item !== null &&
-              "id" in item &&
-              "agent_id" in item &&
-              item.id === threadFromUrl &&
-              typeof item.agent_id === "string",
-          );
-          if (thread !== undefined && typeof thread.agent_id === "string") {
-            setSelectedAgentId(thread.agent_id);
-          }
-        } catch {
-          // The opened thread remains usable even if its sidebar Agent cannot be resolved.
-        }
-      })();
     } else {
       const key = createSlotKey();
       setSlots([{ key, threadId: null }]);
@@ -323,24 +291,31 @@ export function ChatWorkspace({
     [handleNewConversation, selectedAgentId],
   );
 
-  const handleSlotThreadChanged = useCallback((slotKey: string, threadId: string | null) => {
-    setSlots((current) =>
-      current.map((slot) => (slot.key === slotKey ? { ...slot, threadId } : slot)),
-    );
+  const handleSlotThreadChanged = useCallback(
+    (slotKey: string, threadId: string | null, agentId?: string) => {
+      setSlots((current) =>
+        current.map((slot) => (slot.key === slotKey ? { ...slot, threadId } : slot)),
+      );
 
-    if (slotKey === visibleSlotKeyRef.current) {
-      setActiveThreadId(threadId);
-
-      if (threadId === null) {
-        setActiveRunId(null);
-        clearThreadFromUrl();
-      } else {
-        setThreadInUrl(threadId);
+      if (agentId !== undefined) {
+        setSelectedAgentId(agentId);
       }
-    }
 
-    setThreadListVersion((current) => current + 1);
-  }, []);
+      if (slotKey === visibleSlotKeyRef.current) {
+        setActiveThreadId(threadId);
+
+        if (threadId === null) {
+          setActiveRunId(null);
+          clearThreadFromUrl();
+        } else {
+          setThreadInUrl(threadId);
+        }
+      }
+
+      setThreadListVersion((current) => current + 1);
+    },
+    [],
+  );
 
   const handleSlotRunStarted = useCallback((slotKey: string, runId: string) => {
     setRunIdBySlotKey((current) => ({ ...current, [slotKey]: runId }));

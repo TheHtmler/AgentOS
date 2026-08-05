@@ -38,6 +38,7 @@ type TimelineStep = ThinkingStepState | ToolTimelineStep;
 
 type ThreadHistory = {
   thread_id: string;
+  agent_id: string;
   messages: ChatMessage[];
   toolCalls: ToolCallState[];
 };
@@ -103,7 +104,7 @@ type ChatPanelProps = {
   onRunStarted: (runId: string) => void;
   onStreamingChanged: (isStreaming: boolean) => void;
   onAwaitingApprovalChanged?: (isAwaiting: boolean) => void;
-  onThreadChanged: (threadId: string | null) => void;
+  onThreadChanged: (threadId: string | null, agentId?: string) => void;
   onRunFinalized: () => void;
 };
 
@@ -182,6 +183,8 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
     !isRecord(value) ||
     typeof value.thread_id !== "string" ||
     !isUuid(value.thread_id) ||
+    typeof value.agent_id !== "string" ||
+    !isUuid(value.agent_id) ||
     !Array.isArray(value.messages)
   ) {
     return null;
@@ -213,7 +216,7 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
     return null;
   }
 
-  return { thread_id: value.thread_id, messages, toolCalls };
+  return { thread_id: value.thread_id, agent_id: value.agent_id, messages, toolCalls };
 }
 
 function toAgentMessages(messages: ChatMessage[]): Message[] {
@@ -652,7 +655,7 @@ export function ChatPanel({
           if (isActiveRef.current) {
             updateThreadInUrl(history.thread_id);
           }
-          onThreadChanged(history.thread_id);
+          onThreadChanged(history.thread_id, history.agent_id);
         }
       } catch (caughtError: unknown) {
         if (isCurrent && !controller.signal.aborted) {
