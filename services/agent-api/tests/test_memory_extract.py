@@ -1,12 +1,17 @@
+import asyncio
+from types import SimpleNamespace
+from typing import cast
 from uuid import uuid4
 
+import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.db.memory_store import list_active_memories
 from agent_api.db.models import Agent, User
-from agent_api.memory.extract import upsert_extracted_facts
+from agent_api.memory import extract
+from agent_api.memory.extract import schedule_memory_extract, upsert_extracted_facts
 
 
 @pytest.mark.anyio
@@ -41,3 +46,57 @@ async def test_upsert_archives_previous_same_primary_tag(database_session: Async
 
     assert len([memory for memory in active if "身高" in memory.tags]) == 1
     assert "78" in active[0].content
+
+
+@pytest.mark.anyio
+async def test_extract_schedule_does_not_call_extractor_when_memory_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A memory-disabled Agent exits before invoking extraction or writing rows."""
+
+    class EmptySession:
+        async def __aenter__(self) -> "EmptySession":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    extractor_called = False
+
+    async def fake_extract(
+        user_message: str,
+        assistant_content: str,
+        http_client: httpx.AsyncClient,
+    ) -> list[dict[str, object]]:
+        nonlocal extractor_called
+        extractor_called = True
+        return [{"content": "宝宝身高 75cm", "tags": ["身高"], "op": "upsert"}]
+
+    async def disabled_version(
+        session: EmptySession,
+        agent_id: object,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(memory_enabled=False)
+
+    monkeypatch.setattr(
+        extract,
+        "get_settings",
+        lambda: SimpleNamespace(memory_extract_enabled=True, memory_extract_timeout_seconds=1),
+    )
+    monkeypatch.setattr(extract, "session_factory", EmptySession)
+    monkeypatch.setattr(extract, "get_published_version", disabled_version)
+
+    schedule_memory_extract(
+        user_id=uuid4(),
+        agent_id=uuid4(),
+        thread_id=uuid4(),
+        run_id=uuid4(),
+        user_message="宝宝身高多少了",
+        assistant_content="上次记录是 75cm。",
+        model_semaphore=asyncio.Semaphore(1),
+        http_client=cast(httpx.AsyncClient, object()),
+        extract_facts=fake_extract,
+    )
+    await asyncio.sleep(0)
+
+    assert extractor_called is False
