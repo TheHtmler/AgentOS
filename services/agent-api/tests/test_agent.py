@@ -17,6 +17,14 @@ def test_build_instructions_appends_overlay_and_memory() -> None:
     assert "75cm" in text
 
 
+def test_platform_instructions_require_tools_before_refusal() -> None:
+    from agent_api.agent import SEARCH_INSTRUCTIONS, SYSTEM_INSTRUCTIONS
+
+    assert "paste that data" in SYSTEM_INSTRUCTIONS
+    assert "Do not refuse with a long disclaimer" in SYSTEM_INSTRUCTIONS
+    assert "reference standards/charts/guidelines" in SEARCH_INSTRUCTIONS
+
+
 def test_default_settings() -> None:
     settings = Settings.model_validate(
         {

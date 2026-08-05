@@ -79,6 +79,8 @@
 - 前端侧栏 Agent 切换、按 Agent 过滤会话列表、新建对话转发 `X-AgentOS-Agent-Id`；打开 Thread 同步选中 Agent；深链 `?thread=` 从消息 API 恢复 `agent_id`。
 - 运维：`scripts/seed_agents.py` 可重复 upsert 内置 Agent 配置。
 - Runtime Context Pack：每次 Run 注入当前本地时间、时区、`RUNTIME_LOCALE` 与能力边界（不以模型内建「现在」为准）。
+- 工具纪律强化：缺公开标准/图表/指南时先 `web_search`/`fetch_url`，禁止让用户代查或用长免责声明代替作答；育儿 Agent overlay 要求主动对照权威生长标准并附来源。
+- 调研笔记：`docs/13-mma-knowledge-and-mcp-inventory.md`（MMA/PA 知识分层 + 候选 MCP/Skills）。
 
 ## 验证
 

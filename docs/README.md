@@ -16,6 +16,7 @@
 | [10-thread-history.md](10-thread-history.md)                                                                                       | Thread 历史读取、页面恢复与模型上下文边界                | 历史 API 或恢复行为变化时              |
 | [11-authentication.md](11-authentication.md)                                                                                       | 邀请认证、Cookie、Thread 所有权与运行边界                | 身份、权限或会话边界变化时             |
 | [12-domain-agents-and-patient-context.md](12-domain-agents-and-patient-context.md)                                                 | 领域 Agent、公共知识库与患者私有上下文隔离               | Agent 类型、知识库或患者数据边界变化时 |
+| [13-mma-knowledge-and-mcp-inventory.md](13-mma-knowledge-and-mcp-inventory.md)                                                     | MMA/PA 知识分层与候选 MCP/Skills 调研                    | 领域知识入库或接入医学 MCP 前          |
 | [implementation-progress.md](implementation-progress.md)                                                                           | 已实现行为、验证结果、未完成项与下一步                   | 每次完成一组开发任务后                 |
 | [adr/README.md](adr/README.md)                                                                                                     | 架构决策记录                                             | 发生不可逆或高影响取舍时               |
 | [superpowers/specs/2026-08-03-web-search-tool-design.md](superpowers/specs/2026-08-03-web-search-tool-design.md)                   | Web Search 工具、多 Provider 降级与集成边界              | 搜索工具或 Provider 策略变化时         |
