@@ -384,7 +384,6 @@ async def event_stream(
             assistant_content=assistant_content,
             model_semaphore=runtime.model_semaphore,
             http_client=runtime.ollama_http_client,
-            memory_enabled=memory_enabled,
         )
         schedule_memory_extract(
             user_id=user_id,
@@ -395,6 +394,7 @@ async def event_stream(
             assistant_content=assistant_content,
             model_semaphore=runtime.model_semaphore,
             http_client=runtime.ollama_http_client,
+            memory_enabled=memory_enabled,
         )
 
     yield encode_sse_event("done", {})

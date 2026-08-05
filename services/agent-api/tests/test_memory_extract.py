@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from typing import cast
 from uuid import uuid4
 
@@ -10,6 +11,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent_api.db.memory_store import list_active_memories
 from agent_api.db.models import Agent, User
 from agent_api.memory.extract import schedule_memory_extract, upsert_extracted_facts
+from agent_api.thread_title import schedule_auto_thread_title
+
+
+def test_post_complete_scheduler_signatures_match_call_sites() -> None:
+    """Title jobs omit memory_enabled; extract jobs require it (avoids TypeError on done)."""
+
+    title_params = inspect.signature(schedule_auto_thread_title).parameters
+    extract_params = inspect.signature(schedule_memory_extract).parameters
+    assert "memory_enabled" not in title_params
+    assert "memory_enabled" in extract_params
+    assert extract_params["memory_enabled"].default is inspect.Parameter.empty
 
 
 @pytest.mark.anyio

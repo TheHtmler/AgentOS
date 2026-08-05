@@ -274,7 +274,6 @@ async def stream_ag_ui_run(
                     assistant_content=assistant_content,
                     model_semaphore=runtime.model_semaphore,
                     http_client=runtime.ollama_http_client,
-                    memory_enabled=version.memory_enabled,
                 )
                 schedule_memory_extract(
                     user_id=user.id,
@@ -285,6 +284,7 @@ async def stream_ag_ui_run(
                     assistant_content=assistant_content,
                     model_semaphore=runtime.model_semaphore,
                     http_client=runtime.ollama_http_client,
+                    memory_enabled=version.memory_enabled,
                 )
         except AGUIExecutionError:
             raise
