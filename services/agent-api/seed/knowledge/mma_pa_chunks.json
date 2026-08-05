@@ -1,0 +1,76 @@
+{
+  "knowledge_base": {
+    "slug": "mma-pa",
+    "name": "MMA/PA educational base",
+    "description": "Curated Chinese educational summaries for methylmalonic and propionic acidemias. Original wording; cites GeneReviews and JIMD 2021 as pointers only."
+  },
+  "document": {
+    "slug": "mma-pa-core-v1",
+    "title": "MMA/PA 核心教育摘要 v1",
+    "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK1231/",
+    "source_label": "GeneReviews / JIMD 2021 (pointers)",
+    "version_label": "2026-08-05-curated-v1"
+  },
+  "chunks": [
+    {
+      "chunk_index": 0,
+      "title": "孤立型 MMA 是什么",
+      "tags": ["isolated_mma", "overview", "age_band:neonate", "age_band:infant"],
+      "content": "孤立型甲基丙二酸血症（isolated MMA）是一类有机酸代谢病，核心是甲基丙二酰辅酶A变位酶通路障碍，导致甲基丙二酸及相关代谢物蓄积。新生儿筛查或婴儿期喂养不耐受、嗜睡、酸中毒时可被发现。回答时必须标注亚型，不可与伴同型半胱氨酸升高的钴胺素缺陷混为一谈。权威综述入口：GeneReviews Isolated Methylmalonic Acidemia（NBK1231）。教育向说明，非诊断。"
+    },
+    {
+      "chunk_index": 1,
+      "title": "丙酸血症（PA）是什么",
+      "tags": ["pa", "overview", "gene:PCCA", "gene:PCCB"],
+      "content": "丙酸血症（propionic acidemia, PA）多与 PCCA/PCCB 相关的丙酰辅酶A羧化酶缺陷有关，可出现高氨、代谢性酸中毒、喂养困难与发育问题。管理框架与 MMA 有重叠但仍有差异，尤其是并发症谱与长期随访重点。权威综述入口：GeneReviews Propionic Acidemia（NBK92946）。回答需标明 PA，避免直接套用孤立型 MMA 结论。"
+    },
+    {
+      "chunk_index": 2,
+      "title": "钴胺素相关障碍与孤立型 MMA 的区分",
+      "tags": ["cobalamin_disorder", "isolated_mma", "differential", "homocysteine"],
+      "content": "细胞内钴胺素代谢缺陷（如 cblA/B/C 等）可表现为甲基丙二酸升高，但部分亚型同时伴同型半胱氨酸异常，治疗与随访叙事不同于经典 mut 型孤立型 MMA。家庭教育中应先问清：是否做过基因分型、同型半胱氨酸是否升高、是否被判定为 B12 反应型。不确定时写明「取决于亚型」，不要默认同一套饮食或用药表述。"
+    },
+    {
+      "chunk_index": 3,
+      "title": "常见相关基因标签",
+      "tags": ["gene:MMUT", "gene:MMAA", "gene:MMAB", "gene:PCCA", "gene:PCCB", "overview"],
+      "content": "常见标签：MMUT（mut0/mut−）多对应孤立型 MMA；MMAA/MMAB 等与 cblA/cblB 相关；PCCA/PCCB 对应 PA。基因标签用于检索与回答边界，不等于已确认患者诊断。引用基因结论时注明来源与是否为个体检测结果；公共知识库不存放具体患者报告。"
+    },
+    {
+      "chunk_index": 4,
+      "title": "C3 升高与鉴别要点",
+      "tags": ["nbs", "C3", "differential", "isolated_mma", "pa", "cobalamin_disorder"],
+      "content": "新生儿筛查中丙酰肉碱（C3）升高提示有机酸代谢异常可能，鉴别方向包括 PA、MMA 及部分钴胺素相关障碍。后续常需血氨、血气、氨基酸/酰基肉碱谱、尿有机酸，并视情况完善同型半胱氨酸与基因检测。C3 升高本身不是确诊；解释筛查阳性时应建议尽快联系代谢专科，避免家庭自行解读为「一定是某病」。"
+    },
+    {
+      "chunk_index": 5,
+      "title": "急性失代偿：家庭识别与就医升级",
+      "tags": ["acute", "emergency", "isolated_mma", "pa", "age_band:infant", "age_band:child"],
+      "content": "发热、呕吐、拒食、嗜睡、呼吸深快或精神明显变差时，有机酸血症患儿有急性失代偿风险。家庭侧原则：不要长时间禁食；按代谢团队既定应急方案联系医院；出现意识改变、抽搐、难以纠正的呕吐应急诊。本摘要不给剂量或具体输液处方。管理框架可参考 JIMD 2021 MMA/PA 诊断与管理指南修订版，具体以主管医生方案为准。"
+    },
+    {
+      "chunk_index": 6,
+      "title": "日常饮食原则（教育向）",
+      "tags": ["diet", "nutrition", "isolated_mma", "pa"],
+      "content": "长期管理常涉及天然蛋白控制、医学配方/特殊医学食品，以及患病或食欲差时的应急能量支持。目标是在专科营养指导下维持生长并降低代谢压力，而不是家庭自行大幅加严限蛋白。改饮食、停配方或添加保健品前应联系代谢/营养团队。公共知识只讲原则，不开个体化克数处方。"
+    },
+    {
+      "chunk_index": 7,
+      "title": "常用监测指标（教育向）",
+      "tags": ["labs", "monitoring", "isolated_mma", "pa", "growth"],
+      "content": "随访中常见关注：血氨、血气/阴离子间隙、酰基肉碱与有机酸趋势、肾功能、生长发育，以及亚型相关的并发症筛查。数值解读必须结合患儿基线与主管医生目标区间；单次波动不等于失代偿。公共知识库不保存具体患者化验时间线。"
+    },
+    {
+      "chunk_index": 8,
+      "title": "权威来源指针：GeneReviews 与 JIMD 2021",
+      "tags": ["sources", "genereviews", "jimd", "overview"],
+      "content": "优先引用并引导查阅：1) GeneReviews Isolated Methylmalonic Acidemia https://www.ncbi.nlm.nih.gov/books/NBK1231/ ；2) GeneReviews Propionic Acidemia https://www.ncbi.nlm.nih.gov/books/NBK92946/ ；3) Forny et al., JIMD 2021《Guidelines for the diagnosis and management of methylmalonic acidaemia and propionic acidaemia: First revision》。回答应带来源链接，并说明本库条目为教育摘要而非指南全文。"
+    },
+    {
+      "chunk_index": 9,
+      "title": "生长随访与代谢病叠加",
+      "tags": ["growth", "monitoring", "isolated_mma", "pa", "age_band:infant", "age_band:child"],
+      "content": "MMA/PA 儿童需常规追踪身长/身高、体重与营养是否跟上限蛋白/配方方案。生长偏离可能来自能量不足、感染后消耗、慢性并发症或多因素叠加。教育回答可结合公开生长标准（如 WHO）做对照解读，但疾病特异性目标仍以代谢团队为准；急性症状时优先就医而非只谈百分位。"
+    }
+  ]
+}

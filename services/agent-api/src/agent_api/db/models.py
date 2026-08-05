@@ -172,6 +172,115 @@ class AgentVersion(Base):
     )
 
 
+class KnowledgeBase(Base):
+    """A curated public knowledge collection (not patient-private data)."""
+
+    __tablename__ = "knowledge_bases"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'disabled')",
+            name="ck_knowledge_bases_status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        server_default=text("'active'"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class KnowledgeDocument(Base):
+    """A source document inside one knowledge base."""
+
+    __tablename__ = "knowledge_documents"
+    __table_args__ = (
+        UniqueConstraint(
+            "knowledge_base_id",
+            "slug",
+            name="uq_knowledge_documents_base_slug",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    knowledge_base_id: Mapped[UUID] = mapped_column(
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    slug: Mapped[str] = mapped_column(String(128), nullable=False)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(Text)
+    source_label: Mapped[str | None] = mapped_column(String(256))
+    version_label: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class KnowledgeChunk(Base):
+    """A tagged, searchable slice of a knowledge document."""
+
+    __tablename__ = "knowledge_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_id",
+            "chunk_index",
+            name="uq_knowledge_chunks_document_index",
+        ),
+        Index("ix_knowledge_chunks_tags", "tags", postgresql_using="gin"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("knowledge_documents.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        server_default=text("'{}'"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class UserMemory(Base):
     """A user fact scoped to one Agent's memory policy."""
 

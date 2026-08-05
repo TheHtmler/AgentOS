@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     firecrawl_api_key: str = ""
     fetch_url_timeout_seconds: float = 20.0
     fetch_url_max_chars: int = 10_000
+    # Built-in WHO growth assessment (anthro); no external router required.
+    growth_assess_enabled: bool = True
+    # Built-in keyword search over curated knowledge_chunks.
+    knowledge_search_enabled: bool = True
     # Comma-separated tool names forced to deny/ask (deny wins if listed in both).
     tool_policy_deny: str = ""
     tool_policy_ask: str = ""

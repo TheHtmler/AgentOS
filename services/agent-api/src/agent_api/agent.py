@@ -88,6 +88,22 @@ Base claims on the returned text/outline and cite the URL. Never pretend you
 opened a link if you did not.
 """
 
+GROWTH_INSTRUCTIONS = """
+When the user provides child sex plus height and/or weight, and age_months or a
+date of birth (with measurement date if needed), call growth_assess first for a
+WHO 2006 z-score/percentile assessment. Prefer it over web_search for the numeric
+comparison. Explain results with the tool's source_url; ask at most one focused
+question if a required field is missing.
+"""
+
+KNOWLEDGE_INSTRUCTIONS = """
+For methylmalonic acidemia, propionic acidemia, C3 newborn-screening education,
+acute decompensation family guidance, or related diet/monitoring education, call
+knowledge_search first (optionally with disease_tags such as isolated_mma, pa,
+cobalamin_disorder). Cite returned source_url values. Use web_search only when
+the curated base is insufficient or the user needs a newer external page.
+"""
+
 MEMORY_HEADER = "## Known user facts (for this agent only; use when relevant)"
 
 
@@ -119,6 +135,10 @@ def build_instructions(
         sections.append(SEARCH_INSTRUCTIONS.strip())
     if "fetch_url" in mounted_names:
         sections.append(FETCH_INSTRUCTIONS.strip())
+    if "growth_assess" in mounted_names:
+        sections.append(GROWTH_INSTRUCTIONS.strip())
+    if "knowledge_search" in mounted_names:
+        sections.append(KNOWLEDGE_INSTRUCTIONS.strip())
     return "\n\n".join(sections)
 
 
@@ -153,6 +173,8 @@ def create_agent(
     search_enabled: bool | None = None,
     fetch_router: FetchRouter | None = None,
     fetch_enabled: bool | None = None,
+    growth_enabled: bool | None = None,
+    knowledge_enabled: bool | None = None,
     system_prompt_overlay: str | None = None,
     memory_block: str | None = None,
     tool_policy_overrides: dict[str, str] | None = None,
@@ -161,13 +183,17 @@ def create_agent(
 
     settings = get_settings()
     # Optional overrides keep unit tests able to force tools on/off without env mutation.
-    if search_enabled is not None or fetch_enabled is not None:
-        settings = settings.model_copy(
-            update={
-                **({"search_enabled": search_enabled} if search_enabled is not None else {}),
-                **({"fetch_url_enabled": fetch_enabled} if fetch_enabled is not None else {}),
-            },
-        )
+    updates: dict[str, bool] = {}
+    if search_enabled is not None:
+        updates["search_enabled"] = search_enabled
+    if fetch_enabled is not None:
+        updates["fetch_url_enabled"] = fetch_enabled
+    if growth_enabled is not None:
+        updates["growth_assess_enabled"] = growth_enabled
+    if knowledge_enabled is not None:
+        updates["knowledge_search_enabled"] = knowledge_enabled
+    if updates:
+        settings = settings.model_copy(update=updates)
 
     search_present = search_router is not None
     fetch_present = fetch_router is not None

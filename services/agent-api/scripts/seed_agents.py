@@ -1,4 +1,4 @@
-"""Idempotently upsert the built-in general and parenting Agents."""
+"""Idempotently upsert the built-in general, parenting, and MMA/PA Agents."""
 
 import asyncio
 from dataclasses import dataclass
@@ -14,17 +14,27 @@ GENERAL_AGENT_ID = UUID("00000000-0000-0000-0000-000000000001")
 PARENTING_AGENT_ID = UUID("00000000-0000-0000-0000-000000000002")
 GENERAL_AGENT_VERSION_ID = UUID("00000000-0000-0000-0000-000000000003")
 PARENTING_AGENT_VERSION_ID = UUID("00000000-0000-0000-0000-000000000004")
+MMA_PA_AGENT_ID = UUID("00000000-0000-0000-0000-000000000005")
+MMA_PA_AGENT_VERSION_ID = UUID("00000000-0000-0000-0000-000000000006")
 
 PARENTING_OVERLAY = (
     "你是 AgentOS 育儿顾问：帮助家长理解孩子档案、生长指标与常见养育问题。\n"
-    "当用户给出身高/体重/头围等测量并要求对照标准曲线或生长情况时：\n"
-    "1) 先用工具检索权威公开标准（如 WHO 儿童生长标准、中国卫健委相关标准），"
-    "必要时 fetch_url 打开具体页面；\n"
-    "2) 用检索到的标准对照用户数据，给出区间/百分位/趋势解读，并附上来源 URL；\n"
-    "3) 缺性别、月龄/生日等无法对照的关键字段时，只问一个问题；\n"
-    "4) 不要让用户自己去找或粘贴标准曲线表；不要用长篇「我不是医生」替代作答。\n"
+    "当用户给出身高/体重等测量并要求对照标准曲线或生长情况时：\n"
+    "1) 优先调用 growth_assess（WHO 2006）做 z 分数/百分位评估；"
+    "缺性别、月龄或生日时只问一个问题；\n"
+    "2) 若还需中国卫健委等其他公开标准，再用 web_search / fetch_url 补充，并附来源；\n"
+    "3) 不要让用户自己去找或粘贴标准曲线表；不要用长篇「我不是医生」替代作答。\n"
     "区分已记录事实与推断。免责声明最多一句。仅在急性危险症状、明显异常且资料不足、"
     "或需要个体化诊疗决策时，建议尽快就医。"
+)
+
+MMA_PA_OVERLAY = (
+    "你是 AgentOS MMA/PA 教育顾问：帮助家庭理解甲基丙二酸血症与丙酸血症的公共知识。\n"
+    "回答前先区分亚型标签（isolated_mma / cobalamin_disorder / pa 及基因标签），"
+    "禁止把不同亚型结论默认同化。\n"
+    "优先调用 knowledge_search（可带 disease_tags）；需要生长对照时用 growth_assess；"
+    "库内不足再用 web_search / fetch_url，并引用 source_url。\n"
+    "不给个体化处方剂量；急性症状、擅自改饮食/药物时升级就医。免责声明最多一句。"
 )
 
 
@@ -73,6 +83,20 @@ SEED_AGENTS: tuple[SeedAgent, ...] = (
             id=PARENTING_AGENT_VERSION_ID,
             version=1,
             system_prompt_overlay=PARENTING_OVERLAY,
+            memory_enabled=True,
+        ),
+    ),
+    SeedAgent(
+        id=MMA_PA_AGENT_ID,
+        slug="mma-pa",
+        name="MMA/PA",
+        description="Educational assistant for methylmalonic and propionic acidemias.",
+        kind="vertical",
+        is_default=False,
+        published_version=SeedAgentVersion(
+            id=MMA_PA_AGENT_VERSION_ID,
+            version=1,
+            system_prompt_overlay=MMA_PA_OVERLAY,
             memory_enabled=True,
         ),
     ),

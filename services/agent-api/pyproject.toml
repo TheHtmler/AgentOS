@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "anthro>=1.1.1",
     "asyncpg>=0.31.0",
     "ddgs>=9.14.4",
     "email-validator>=2.2",

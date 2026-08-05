@@ -1,10 +1,10 @@
 # 实施进度
 
-最后更新：2026-08-05（多 Agent + 用户记忆竖切）
+最后更新：2026-08-05（growth_assess + knowledge_search MVP）
 
 ## 当前状态
 
-前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地；`PatientCase` 与知识库 RAG 仍属后续增量。
+前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro）与关键词 `knowledge_search`（MMA/PA 策展切片）已接入；向量 RAG 与 `PatientCase` 仍属后续增量。
 
 已完成：
 
@@ -81,6 +81,9 @@
 - Runtime Context Pack：每次 Run 注入当前本地时间、时区、`RUNTIME_LOCALE` 与能力边界（不以模型内建「现在」为准）。
 - 工具纪律强化：缺公开标准/图表/指南时先 `web_search`/`fetch_url`，禁止让用户代查或用长免责声明代替作答；育儿 Agent overlay 要求主动对照权威生长标准并附来源。
 - 调研笔记：`docs/13-mma-knowledge-and-mcp-inventory.md`（MMA/PA 知识分层 + 候选 MCP/Skills）。
+- 内建 `growth_assess`：WHO 2006（`anthro`）z 分数/百分位；`GROWTH_ASSESS_ENABLED`；育儿 overlay 优先调用；无需 search/fetch router。
+- 知识库表：`knowledge_bases` / `knowledge_documents` / `knowledge_chunks`（迁移 `e9f0a1b2c3d4`）；`scripts/seed_knowledge.py` 写入 MMA/PA 中文教育摘要（带亚型 tags + 来源指针）。
+- 内建 `knowledge_search`：关键词 + tags overlap；`KNOWLEDGE_SEARCH_ENABLED`；种子 Agent `mma-pa`（记忆开）。
 
 ## 验证
 
@@ -89,8 +92,8 @@
 - `uv run --directory services/agent-api pyright` 通过，`0 errors, 0 warnings`。
 - `uv run --directory services/agent-api pytest` 通过（含搜索 Provider / Router / 工具注册测试）。
 - `uv run --directory services/agent-api pyright` 通过，`0 errors, 0 warnings`。
-- `uv run --directory services/agent-api alembic upgrade head` 已应用至含 `agents` / `user_memories` 的迁移 `d8e9f0a1b2c3`。
-- `uv run --directory services/agent-api pytest` 通过（含 agent / memory / thread 隔离测试）。
+- `uv run --directory services/agent-api alembic upgrade head` 已应用至含知识库表的迁移 `e9f0a1b2c3d4`。
+- `uv run --directory services/agent-api pytest` 通过（含 agent / memory / growth_assess / knowledge_search 测试）。
 - `pnpm --filter web exec tsc --noEmit` 通过（含 Agent 侧栏与 filtered threads）。
 - `uv run --directory services/agent-api ruff check .` 通过。
 - `uv run --directory services/agent-api pyright` 通过，`0 errors, 0 warnings`。
@@ -102,10 +105,10 @@
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
 - Artifact 落库 / `read_artifact`、完整 `messages.role=tool` 模型历史对齐。
-- 通用 `AgentProfile` / `AgentVersion`、MMA/PA 公共知识库、`PatientCase` 和患者私有上下文隔离。（首个竖切已落地 spec 命名 `agents` / `agent_versions` + `user_memories`，非完整 PatientCase 域。）
-- MCP 和 Sandbox；侧栏 Run 活动时间线与按工具类型的富展示。
+- `PatientCase` 与患者私有上下文隔离；知识库向量检索 / 嵌入召回（当前为关键词 MVP）。
+- 生长标准中国卫健委（NHC）对照；MCP 和 Sandbox；侧栏按工具类型的富展示。
 - 参数级 Tool Policy（如按 URL/命令细规则）、审计表落库。
 
 ## 下一步
 
-平台基础能力：通用基础工具（时间差/计算）与基础能力评测集；模型/Provider 档位。领域侧仍按 `docs/12-domain-agents-and-patient-context.md` 推进 PatientCase / 知识库 RAG。
+平台基础能力：通用基础工具（时间差/计算）与基础能力评测集；模型/Provider 档位。领域侧按 `docs/12` / `docs/13` 推进 PatientCase、知识库扩充与可选只读医学 MCP。

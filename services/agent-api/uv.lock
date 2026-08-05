@@ -23,6 +23,7 @@ name = "agent-api"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anthro" },
     { name = "asyncpg" },
     { name = "ddgs" },
     { name = "email-validator" },
@@ -46,6 +47,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthro", specifier = ">=1.1.1" },
     { name = "asyncpg", specifier = ">=0.31.0" },
     { name = "ddgs", specifier = ">=9.14.4" },
     { name = "email-validator", specifier = ">=2.2" },
@@ -109,6 +111,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5f/56/a8120250d128bed162cd73c76d45f6ef9991f3e068f62a8ee060afa3104a/annotated_types-0.8.0.tar.gz", hash = "sha256:13b2beaad985e05e2d6407ee4c4f35590b11f8d693a258a561055cac8f64cab7", size = 15893, upload-time = "2026-07-23T20:16:13.995Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/99/91/8acff4f5e50511b911bbccb72b8628a49c68ce14148cd9f6431094859a90/annotated_types-0.8.0-py3-none-any.whl", hash = "sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0", size = 13427, upload-time = "2026-07-23T20:16:12.938Z" },
+]
+
+[[package]]
+name = "anthro"
+version = "1.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/1e/dd53ecac48f096a883f2ab78b103e92d1f33fe078014d708e8b7fea99a8e/anthro-1.1.1.tar.gz", hash = "sha256:74f6212d069815d30f16f5e42343154736da1ea9e34e5c67a66fd5edfd428752", size = 301250, upload-time = "2026-05-14T16:46:18.238Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a6/67/bf3a807b650b0404b2420ae0cf8c4a6b40522ac1249004bd95eae34c0f6b/anthro-1.1.1-py3-none-any.whl", hash = "sha256:388e49566f344157a95b57075d067485b75df6fb9e7cd38711bbf47b53668b57", size = 152732, upload-time = "2026-05-14T16:46:16.452Z" },
 ]
 
 [[package]]

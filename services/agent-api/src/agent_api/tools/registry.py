@@ -11,6 +11,8 @@ from pydantic_ai import Tool
 
 from agent_api.config import Settings, get_settings
 from agent_api.tools.fetch.tool import fetch_url
+from agent_api.tools.growth.tool import growth_assess
+from agent_api.tools.knowledge.tool import knowledge_search
 from agent_api.tools.policy import PolicyAction, evaluate
 from agent_api.tools.search.tool import AgentDeps, web_search
 
@@ -20,6 +22,8 @@ RiskLevel = Literal["read", "write", "exec", "external"]
 class ToolDomain(StrEnum):
     SEARCH = "search"
     FETCH = "fetch"
+    GROWTH = "growth"
+    KNOWLEDGE = "knowledge"
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +57,22 @@ _BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         description="Read-only public URL fetch",
         handler=fetch_url,
     ),
+    ToolSpec(
+        name="growth_assess",
+        domain=ToolDomain.GROWTH,
+        risk="read",
+        default_action=PolicyAction.ALLOW,
+        description="WHO 2006 child growth z-score / percentile assessment",
+        handler=growth_assess,
+    ),
+    ToolSpec(
+        name="knowledge_search",
+        domain=ToolDomain.KNOWLEDGE,
+        risk="read",
+        default_action=PolicyAction.ALLOW,
+        description="Keyword search over curated disease knowledge chunks",
+        handler=knowledge_search,
+    ),
 )
 
 
@@ -68,13 +88,17 @@ def get_tool_spec(name: str) -> ToolSpec | None:
 
 
 def is_tool_enabled(spec: ToolSpec, settings: Settings | None = None) -> bool:
-    """Map domain enable flags onto registry rows (SEARCH_ENABLED / FETCH_URL_ENABLED)."""
+    """Map domain enable flags onto registry rows."""
 
     cfg = settings or get_settings()
     if spec.domain == ToolDomain.SEARCH:
         return cfg.search_enabled
     if spec.domain == ToolDomain.FETCH:
         return cfg.fetch_url_enabled
+    if spec.domain == ToolDomain.GROWTH:
+        return cfg.growth_assess_enabled
+    if spec.domain == ToolDomain.KNOWLEDGE:
+        return cfg.knowledge_search_enabled
     return False
 
 
@@ -90,6 +114,7 @@ def should_mount_tool(
 
     Deny (default or env override) keeps the tool out of the model context entirely.
     Ask still mounts so the model can request it; execution is blocked in the wrapper.
+    Built-in local tools (growth / knowledge) do not require search/fetch routers.
     """
 
     cfg = settings or get_settings()
