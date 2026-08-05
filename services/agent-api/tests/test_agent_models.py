@@ -1,9 +1,9 @@
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pytest
 
-from agent_api.db.models import Agent, AgentVersion, Thread
+from agent_api.db.models import Agent, AgentVersion, Thread, UserMemory
 
 
 @pytest.mark.anyio
@@ -71,3 +71,36 @@ async def test_existing_threads_have_an_agent(database_session: AsyncSession) ->
     finally:
         # The test may observe developer records but must not modify them.
         await transaction.rollback()
+
+
+@pytest.mark.anyio
+async def test_user_memory_has_nullable_thread_and_run_provenance(
+    database_session: AsyncSession,
+) -> None:
+    """Memory provenance may point to its source Thread and Run when available."""
+
+    source_thread_id = UserMemory.__table__.c.source_thread_id
+    source_run_id = UserMemory.__table__.c.source_run_id
+
+    assert source_thread_id.nullable is True
+    assert source_run_id.nullable is True
+
+    columns = (
+        await database_session.execute(
+            text(
+                """
+                SELECT column_name, is_nullable
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'user_memories'
+                  AND column_name IN ('source_thread_id', 'source_run_id')
+                ORDER BY column_name
+                """,
+            ),
+        )
+    ).all()
+
+    assert columns == [
+        ("source_run_id", "YES"),
+        ("source_thread_id", "YES"),
+    ]

@@ -107,6 +107,8 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("agent_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("source_thread_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("source_run_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column(
             "tags",
@@ -142,6 +144,16 @@ def upgrade() -> None:
             name="ck_user_memories_status",
         ),
         sa.ForeignKeyConstraint(["agent_id"], ["agents.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["source_thread_id"],
+            ["threads.id"],
+            ondelete="SET NULL",
+        ),
+        sa.ForeignKeyConstraint(
+            ["source_run_id"],
+            ["runs.id"],
+            ondelete="SET NULL",
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )

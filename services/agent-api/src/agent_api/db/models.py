@@ -195,6 +195,12 @@ class UserMemory(Base):
         index=True,
         nullable=False,
     )
+    source_thread_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("threads.id", ondelete="SET NULL"),
+    )
+    source_run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("runs.id", ondelete="SET NULL"),
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     tags: Mapped[list[str]] = mapped_column(
         ARRAY(Text),
