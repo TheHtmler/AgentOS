@@ -24,12 +24,62 @@ logger = logging.getLogger(__name__)
 _inflight: set[UUID] = set()
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
+# Deterministic fallback when the local model skips anthropometric facts.
+_HEIGHT_RE = re.compile(
+    r"(?:身高|身长)\s*[：:是为]?\s*(\d+(?:\.\d+)?)\s*(?:cm|厘米)?",
+    re.IGNORECASE,
+)
+_WEIGHT_RE = re.compile(
+    r"(?:体重)\s*[：:是为]?\s*(\d+(?:\.\d+)?)\s*(?:kg|公斤|千克)?",
+    re.IGNORECASE,
+)
 
 ExtractFactsFn = Callable[[str, str, httpx.AsyncClient], Awaitable[list[dict[str, object]]]]
 
 
 def _normalize_content(content: str) -> str:
     return _WHITESPACE_RE.sub(" ", content).strip().casefold()
+
+
+def extract_measurement_facts(user_message: str) -> list[dict[str, object]]:
+    """Pull explicit height/weight statements without depending on the LLM."""
+
+    facts: list[dict[str, object]] = []
+    height = _HEIGHT_RE.search(user_message)
+    if height is not None:
+        facts.append(
+            {
+                "content": f"身高 {height.group(1)}cm",
+                "tags": ["身高"],
+            },
+        )
+    weight = _WEIGHT_RE.search(user_message)
+    if weight is not None:
+        facts.append(
+            {
+                "content": f"体重 {weight.group(1)}kg",
+                "tags": ["体重"],
+            },
+        )
+    return facts
+
+
+def merge_fact_lists(
+    *groups: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Keep the first fact per primary tag across deterministic + model extracts."""
+
+    merged: list[dict[str, object]] = []
+    seen_tags: set[str] = set()
+    for group in groups:
+        for fact in _valid_facts(group):
+            tags = cast(list[str], fact["tags"])
+            primary = tags[0]
+            if primary in seen_tags:
+                continue
+            seen_tags.add(primary)
+            merged.append(fact)
+    return merged
 
 
 def _valid_facts(facts: object) -> list[dict[str, object]]:
@@ -74,6 +124,8 @@ async def extract_facts_via_ollama(
     settings = get_settings()
     prompt = (
         "Extract only stable user facts that may help future conversations. "
+        "Always capture durable anthropometrics when present "
+        '(height/length/体重 with numbers), using tags like ["身高"] or ["体重"]. '
         "Do not extract temporary requests, assistant opinions, or sensitive guesses. "
         'Reply with JSON only: [{"content":"fact","tags":["topic"],"op":"upsert"}]. '
         "Use an empty JSON array when there are no stable facts.\n\n"
@@ -197,9 +249,11 @@ def schedule_memory_extract(
                 logger.info("memory extraction skipped; model semaphore busy run=%s", run_id)
                 return
             try:
-                facts = await extractor(user_message, assistant_content, http_client)
+                model_facts = await extractor(user_message, assistant_content, http_client)
             finally:
                 model_semaphore.release()
+            # Regex catches height/weight even when the local model returns [].
+            facts = merge_fact_lists(extract_measurement_facts(user_message), model_facts)
             async with session_factory() as session, session.begin():
                 count = await upsert_extracted_facts(
                     session,

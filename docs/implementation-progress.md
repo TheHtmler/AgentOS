@@ -75,7 +75,7 @@
 - `GET /v1/agents` 与 Web BFF `/api/agents`：返回可选 Agent 列表及 published 版本的 `memory_enabled`。
 - Thread 绑定与过滤：新建 Thread 经 `start_run` + `X-AgentOS-Agent-Id` 绑定当前 Agent（非 `POST /v1/threads`）；`GET /v1/threads?agent_id=` 按 Agent 过滤；既有 Thread 忽略客户端 agent 头。
 - Run 时按 Agent published 版本拼装 `system_prompt_overlay`、工具策略覆盖；`memory_enabled` 时关键词/标签 Top-K 召回注入 instructions。
-- Run `completed` 后异步抽取用户事实（`agent_api/memory/extract.py`，同 auto-title 模式）；作用域 `user_id × agent_id`；`MEMORY_*` 环境变量可配置。
+- Run `completed` 后异步抽取用户事实（`agent_api/memory/extract.py`，同 auto-title 模式）；作用域 `user_id × agent_id`；`MEMORY_*` 环境变量可配置；身高/体重支持正则兜底抽取；召回在关键词未命中时回退注入近期事实（避免新会话失忆）。
 - 前端侧栏 Agent 切换、按 Agent 过滤会话列表、新建对话转发 `X-AgentOS-Agent-Id`；打开 Thread 同步选中 Agent；深链 `?thread=` 从消息 API 恢复 `agent_id`。
 - 运维：`scripts/seed_agents.py` 可重复 upsert 内置 Agent 配置。
 - Runtime Context Pack：每次 Run 注入当前本地时间、时区、`RUNTIME_LOCALE` 与能力边界（不以模型内建「现在」为准）。

@@ -1,4 +1,4 @@
-"""Keyword-only recall for Agent-scoped user facts."""
+"""Keyword recall for Agent-scoped user facts, with recent-fact fallback."""
 
 from __future__ import annotations
 
@@ -12,7 +12,9 @@ from agent_api.db.memory_store import list_active_memories
 from agent_api.db.models import UserMemory
 
 SYNONYM_GROUPS: tuple[frozenset[str], ...] = (
-    frozenset(("身高", "身长")),
+    # Growth assessment wording often says 生长/发育 without repeating 身高.
+    frozenset(("身高", "身长", "生长", "发育")),
+    frozenset(("体重", "公斤", "千克", "kg")),
     frozenset(("报告", "体检", "化验")),
 )
 _TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+")
@@ -69,6 +71,12 @@ def score_memories(message: str, memories: list[UserMemory]) -> list[UserMemory]
     return [memory for memory, _, _ in scored]
 
 
+def _recent_memories(memories: list[UserMemory]) -> list[UserMemory]:
+    """Freshest-first ordering used when the new message has no keyword hits."""
+
+    return sorted(memories, key=lambda memory: memory.updated_at, reverse=True)
+
+
 def format_memory_block(memories: list[UserMemory]) -> str | None:
     """Render recalled facts as a compact instruction block."""
 
@@ -76,6 +84,32 @@ def format_memory_block(memories: list[UserMemory]) -> str | None:
         return None
     facts = "\n".join(f"- [{', '.join(memory.tags)}] {memory.content}" for memory in memories)
     return f"{MEMORY_HEADER}\n{facts}"
+
+
+def select_memories_for_message(
+    message: str,
+    memories: list[UserMemory],
+    *,
+    top_k: int = 8,
+    max_chars: int = 2_000,
+) -> list[UserMemory]:
+    """Prefer keyword hits; if none, still inject recent facts (new-thread soft profile)."""
+
+    ranked = score_memories(message, memories)
+    if not ranked:
+        ranked = _recent_memories(memories)
+
+    selected: list[UserMemory] = []
+    used_chars = 0
+    for memory in ranked[:top_k]:
+        rendered_length = len(memory.content) + sum(len(tag) for tag in memory.tags) + 8
+        if selected and used_chars + rendered_length > max_chars:
+            break
+        if not selected and rendered_length > max_chars:
+            continue
+        selected.append(memory)
+        used_chars += rendered_length
+    return selected
 
 
 async def load_relevant_memories(
@@ -89,18 +123,9 @@ async def load_relevant_memories(
 ) -> list[UserMemory]:
     """Load and size-bound ranked facts for one user/Agent conversation."""
 
-    ranked = score_memories(
+    return select_memories_for_message(
         message,
         await list_active_memories(session, user_id=user_id, agent_id=agent_id),
+        top_k=top_k,
+        max_chars=max_chars,
     )
-    selected: list[UserMemory] = []
-    used_chars = 0
-    for memory in ranked[:top_k]:
-        rendered_length = len(memory.content) + sum(len(tag) for tag in memory.tags) + 8
-        if selected and used_chars + rendered_length > max_chars:
-            break
-        if not selected and rendered_length > max_chars:
-            continue
-        selected.append(memory)
-        used_chars += rendered_length
-    return selected
