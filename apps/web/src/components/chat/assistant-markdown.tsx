@@ -172,6 +172,12 @@ export function AssistantMarkdown({ content }: { content: string }) {
             </a>
           ),
           pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+          // Wide GFM tables scroll horizontally instead of crushing the bubble.
+          table: ({ children }) => (
+            <div className="agentos-md-table-wrap">
+              <table>{children}</table>
+            </div>
+          ),
         }}
       >
         {content}
