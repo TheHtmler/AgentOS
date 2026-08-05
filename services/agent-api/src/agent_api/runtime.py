@@ -66,6 +66,7 @@ class AgentRuntime:
         *,
         system_prompt_overlay: str | None,
         tool_policy_overrides: dict[str, object] | None,
+        memory_block: str | None = None,
     ) -> Agent[Any, AgentOutput]:
         """Build a fresh agent with the published configuration for one run."""
 
@@ -87,7 +88,7 @@ class AgentRuntime:
             search_router=self.search_router,
             fetch_router=self.fetch_router,
             system_prompt_overlay=system_prompt_overlay,
-            memory_block=None,
+            memory_block=memory_block,
             tool_policy_overrides=overrides,
         )
 

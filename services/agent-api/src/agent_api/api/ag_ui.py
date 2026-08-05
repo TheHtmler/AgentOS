@@ -31,6 +31,8 @@ from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_
 from agent_api.db.models import Thread, User
 from agent_api.db.session import session_factory
 from agent_api.hitl_pause import persist_deferred_approvals
+from agent_api.memory.extract import schedule_memory_extract
+from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import get_runtime
 from agent_api.thread_title import schedule_auto_thread_title
@@ -141,11 +143,26 @@ async def stream_ag_ui_run(
         if thread is None:
             raise RuntimeError(f"Thread {started.thread_id} disappeared after starting its run")
         version = await get_published_version(session, thread.agent_id)
+        memory_block = None
+        if version.memory_enabled:
+            try:
+                memories = await load_relevant_memories(
+                    session,
+                    user_id=user.id,
+                    agent_id=thread.agent_id,
+                    message=prompt,
+                    top_k=get_settings().memory_recall_top_k,
+                    max_chars=get_settings().memory_recall_max_chars,
+                )
+                memory_block = format_memory_block(memories)
+            except Exception:
+                logger.exception("memory recall failed; continuing without memories")
 
     runtime = get_runtime(request)
     agent = runtime.build_run_agent(
         system_prompt_overlay=version.system_prompt_overlay,
         tool_policy_overrides=version.tool_policy_overrides,
+        memory_block=memory_block,
     )
 
     # Ignore browser-supplied history, state, tools, and run identity.
@@ -234,6 +251,16 @@ async def stream_ag_ui_run(
             if runtime.ollama_http_client is not None:
                 schedule_auto_thread_title(
                     thread_id=started.thread_id,
+                    user_message=prompt,
+                    assistant_content=assistant_content,
+                    model_semaphore=runtime.model_semaphore,
+                    http_client=runtime.ollama_http_client,
+                )
+                schedule_memory_extract(
+                    user_id=user.id,
+                    agent_id=thread.agent_id,
+                    thread_id=started.thread_id,
+                    run_id=started.run_id,
                     user_message=prompt,
                     assistant_content=assistant_content,
                     model_semaphore=runtime.model_semaphore,

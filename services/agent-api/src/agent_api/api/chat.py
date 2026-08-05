@@ -28,6 +28,8 @@ from agent_api.db.chat_store import (
 )
 from agent_api.db.models import Message, Thread, User
 from agent_api.db.session import session_factory
+from agent_api.memory.extract import schedule_memory_extract
+from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import AgentRuntime, get_runtime
 from agent_api.thread_title import schedule_auto_thread_title
@@ -239,6 +241,8 @@ async def event_stream(
     message: str,
     thread_id: UUID,
     run_id: UUID,
+    user_id: UUID,
+    agent_id: UUID,
     message_history: list[ModelMessage],
     runtime: AgentRuntime,
     agent: Agent[Any, AgentOutput],
@@ -376,6 +380,16 @@ async def event_stream(
             model_semaphore=runtime.model_semaphore,
             http_client=runtime.ollama_http_client,
         )
+        schedule_memory_extract(
+            user_id=user_id,
+            agent_id=agent_id,
+            thread_id=thread_id,
+            run_id=run_id,
+            user_message=message,
+            assistant_content=assistant_content,
+            model_semaphore=runtime.model_semaphore,
+            http_client=runtime.ollama_http_client,
+        )
 
     yield encode_sse_event("done", {})
 
@@ -420,10 +434,25 @@ async def stream_chat(
         if thread is None:
             raise RuntimeError(f"Thread {started.thread_id} disappeared after starting its run")
         version = await get_published_version(session, thread.agent_id)
+        memory_block = None
+        if version.memory_enabled:
+            try:
+                memories = await load_relevant_memories(
+                    session,
+                    user_id=user.id,
+                    agent_id=thread.agent_id,
+                    message=payload.message,
+                    top_k=get_settings().memory_recall_top_k,
+                    max_chars=get_settings().memory_recall_max_chars,
+                )
+                memory_block = format_memory_block(memories)
+            except Exception:
+                logger.exception("memory recall failed; continuing without memories")
     runtime = get_runtime(request)
     agent = runtime.build_run_agent(
         system_prompt_overlay=version.system_prompt_overlay,
         tool_policy_overrides=version.tool_policy_overrides,
+        memory_block=memory_block,
     )
 
     return StreamingResponse(
@@ -432,6 +461,8 @@ async def stream_chat(
             payload.message,
             started.thread_id,
             started.run_id,
+            user.id,
+            thread.agent_id,
             message_history,
             runtime,
             agent,
