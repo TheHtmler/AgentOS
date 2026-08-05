@@ -23,3 +23,5 @@ artifacts/
 workspaces/
 
 *.log
+.worktrees/
+.superpowers/
