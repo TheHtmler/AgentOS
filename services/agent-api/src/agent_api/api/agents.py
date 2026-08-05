@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -5,11 +6,12 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from agent_api.api.auth import get_current_user
-from agent_api.db.agent_store import get_published_version, list_active_agents
+from agent_api.db.agent_store import list_active_agents_with_published_versions
 from agent_api.db.models import User
 from agent_api.db.session import session_factory
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
+logger = logging.getLogger(__name__)
 
 
 class AgentResponse(BaseModel):
@@ -38,18 +40,26 @@ async def get_agents(
 
     del user
     async with session_factory() as session:
-        agents = await list_active_agents(session)
-        responses = [
-            AgentResponse(
-                id=agent.id,
-                slug=agent.slug,
-                name=agent.name,
-                description=agent.description,
-                kind=agent.kind,
-                is_default=agent.is_default,
-                memory_enabled=(await get_published_version(session, agent.id)).memory_enabled,
+        agents_and_versions = await list_active_agents_with_published_versions(session)
+        responses: list[AgentResponse] = []
+        for agent, version in agents_and_versions:
+            if version is None:
+                logger.warning(
+                    "Skipping active agent without published version agent_id=%s slug=%s",
+                    agent.id,
+                    agent.slug,
+                )
+                continue
+            responses.append(
+                AgentResponse(
+                    id=agent.id,
+                    slug=agent.slug,
+                    name=agent.name,
+                    description=agent.description,
+                    kind=agent.kind,
+                    is_default=agent.is_default,
+                    memory_enabled=version.memory_enabled,
+                ),
             )
-            for agent in agents
-        ]
 
     return AgentListResponse(agents=responses)

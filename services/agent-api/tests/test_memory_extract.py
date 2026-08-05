@@ -1,5 +1,4 @@
 import asyncio
-from types import SimpleNamespace
 from typing import cast
 from uuid import uuid4
 
@@ -10,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.db.memory_store import list_active_memories
 from agent_api.db.models import Agent, User
-from agent_api.memory import extract
 from agent_api.memory.extract import schedule_memory_extract, upsert_extracted_facts
 
 
@@ -49,17 +47,45 @@ async def test_upsert_archives_previous_same_primary_tag(database_session: Async
 
 
 @pytest.mark.anyio
+async def test_upsert_does_not_archive_an_adjacent_secondary_tag(
+    database_session: AsyncSession,
+) -> None:
+    """Only the primary tag defines the replacement group."""
+
+    user = User(email=f"memory-tags-{uuid4().hex}@example.com", status="active")
+    database_session.add(user)
+    agent = await database_session.scalar(select(Agent).where(Agent.slug == "parenting"))
+    assert agent is not None
+    await database_session.flush()
+
+    await upsert_extracted_facts(
+        database_session,
+        user_id=user.id,
+        agent_id=agent.id,
+        facts=[{"content": "宝宝对花生过敏", "tags": ["过敏", "饮食"]}],
+        source_thread_id=None,
+        source_run_id=None,
+    )
+    await upsert_extracted_facts(
+        database_session,
+        user_id=user.id,
+        agent_id=agent.id,
+        facts=[{"content": "宝宝喜欢吃面条", "tags": ["饮食"]}],
+        source_thread_id=None,
+        source_run_id=None,
+    )
+    await database_session.flush()
+
+    active = await list_active_memories(database_session, user_id=user.id, agent_id=agent.id)
+
+    assert {memory.content for memory in active} == {"宝宝对花生过敏", "宝宝喜欢吃面条"}
+
+
+@pytest.mark.anyio
 async def test_extract_schedule_does_not_call_extractor_when_memory_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A memory-disabled Agent exits before invoking extraction or writing rows."""
-
-    class EmptySession:
-        async def __aenter__(self) -> "EmptySession":
-            return self
-
-        async def __aexit__(self, *args: object) -> None:
-            return None
 
     extractor_called = False
 
@@ -72,20 +98,6 @@ async def test_extract_schedule_does_not_call_extractor_when_memory_disabled(
         extractor_called = True
         return [{"content": "宝宝身高 75cm", "tags": ["身高"], "op": "upsert"}]
 
-    async def disabled_version(
-        session: EmptySession,
-        agent_id: object,
-    ) -> SimpleNamespace:
-        return SimpleNamespace(memory_enabled=False)
-
-    monkeypatch.setattr(
-        extract,
-        "get_settings",
-        lambda: SimpleNamespace(memory_extract_enabled=True, memory_extract_timeout_seconds=1),
-    )
-    monkeypatch.setattr(extract, "session_factory", EmptySession)
-    monkeypatch.setattr(extract, "get_published_version", disabled_version)
-
     schedule_memory_extract(
         user_id=uuid4(),
         agent_id=uuid4(),
@@ -95,6 +107,7 @@ async def test_extract_schedule_does_not_call_extractor_when_memory_disabled(
         assistant_content="上次记录是 75cm。",
         model_semaphore=asyncio.Semaphore(1),
         http_client=cast(httpx.AsyncClient, object()),
+        memory_enabled=False,
         extract_facts=fake_extract,
     )
     await asyncio.sleep(0)

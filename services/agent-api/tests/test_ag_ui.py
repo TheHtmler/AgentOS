@@ -197,3 +197,96 @@ async def test_ag_ui_ignores_client_supplied_history(authenticated_api_user: UUI
                 thread = await session.get(Thread, thread_id)
                 if thread is not None:
                     await session.delete(thread)
+
+
+@pytest.mark.anyio
+async def test_ag_ui_binds_requested_agent_for_new_thread(
+    authenticated_api_user: UUID,
+) -> None:
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel(custom_output_text="ok")),
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+    parenting_id = UUID("00000000-0000-0000-0000-000000000002")
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/v1/ag-ui/runs",
+            headers={"X-AgentOS-Agent-Id": str(parenting_id)},
+            json={
+                "threadId": "new",
+                "runId": "browser-run-agent-bind",
+                "state": {},
+                "messages": [{"id": "message-1", "role": "user", "content": "育儿问题"}],
+                "tools": [],
+                "context": [],
+                "forwardedProps": {},
+            },
+        )
+
+    assert response.status_code == 200
+    thread_id = UUID(response.headers["x-agentos-thread-id"])
+    try:
+        async with session_factory() as session:
+            thread = await session.get(Thread, thread_id)
+        assert thread is not None
+        assert thread.agent_id == parenting_id
+    finally:
+        async with session_factory() as session, session.begin():
+            thread = await session.get(Thread, thread_id)
+            if thread is not None:
+                await session.delete(thread)
+
+
+@pytest.mark.anyio
+async def test_ag_ui_existing_thread_ignores_malformed_agent_header(
+    authenticated_api_user: UUID,
+) -> None:
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel(custom_output_text="ok")),
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        created = await client.post(
+            "/v1/ag-ui/runs",
+            json={
+                "threadId": "new",
+                "runId": "browser-run-agent-first",
+                "state": {},
+                "messages": [{"id": "message-1", "role": "user", "content": "第一轮"}],
+                "tools": [],
+                "context": [],
+                "forwardedProps": {},
+            },
+        )
+        assert created.status_code == 200
+        thread_id = UUID(created.headers["x-agentos-thread-id"])
+
+        continued = await client.post(
+            "/v1/ag-ui/runs",
+            headers={"X-AgentOS-Agent-Id": "not-a-uuid"},
+            json={
+                "threadId": str(thread_id),
+                "runId": "browser-run-agent-second",
+                "state": {},
+                "messages": [{"id": "message-2", "role": "user", "content": "第二轮"}],
+                "tools": [],
+                "context": [],
+                "forwardedProps": {},
+            },
+        )
+
+    assert continued.status_code == 200
+    try:
+        async with session_factory() as session:
+            thread = await session.get(Thread, thread_id)
+        assert thread is not None
+        assert thread.agent_id == UUID("00000000-0000-0000-0000-000000000001")
+    finally:
+        async with session_factory() as session, session.begin():
+            thread = await session.get(Thread, thread_id)
+            if thread is not None:
+                await session.delete(thread)

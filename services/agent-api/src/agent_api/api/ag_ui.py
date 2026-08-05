@@ -26,7 +26,11 @@ from agent_api.api.chat import (
     strip_thinking_parts,
 )
 from agent_api.config import get_settings
-from agent_api.db.agent_store import AgentNotFoundError, get_published_version
+from agent_api.db.agent_store import (
+    AgentNotFoundError,
+    PublishedAgentVersionNotFoundError,
+    get_published_version,
+)
 from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_run
 from agent_api.db.models import Thread, User
 from agent_api.db.session import session_factory
@@ -132,38 +136,53 @@ async def stream_ag_ui_run(
 
     try:
         history = await load_thread_model_history(started.thread_id, user_id=user.id)
-    except (ThreadNotFoundError, ValidationError) as error:
-        logger.exception("Unable to load model history for thread %s", started.thread_id)
+        async with session_factory() as session:
+            thread = await session.get(Thread, started.thread_id)
+            if thread is None:
+                raise RuntimeError(f"Thread {started.thread_id} disappeared after starting its run")
+            version = await get_published_version(session, thread.agent_id)
+            memory_block = None
+            if version.memory_enabled:
+                try:
+                    memories = await load_relevant_memories(
+                        session,
+                        user_id=user.id,
+                        agent_id=thread.agent_id,
+                        message=prompt,
+                        top_k=get_settings().memory_recall_top_k,
+                        max_chars=get_settings().memory_recall_max_chars,
+                    )
+                    memory_block = format_memory_block(memories)
+                except Exception:
+                    logger.exception("memory recall failed; continuing without memories")
+
+        runtime = get_runtime(request)
+        agent = runtime.build_run_agent(
+            system_prompt_overlay=version.system_prompt_overlay,
+            tool_policy_overrides=version.tool_policy_overrides,
+            memory_block=memory_block,
+        )
+    except PublishedAgentVersionNotFoundError as error:
+        logger.exception("Agent version unavailable for run %s", started.run_id)
+        await persist_failed_run(started.run_id)
         raise HTTPException(
-            status_code=500, detail="Conversation history is unavailable"
+            status_code=409,
+            detail="Agent configuration has no published version",
         ) from error
-
-    async with session_factory() as session:
-        thread = await session.get(Thread, started.thread_id)
-        if thread is None:
-            raise RuntimeError(f"Thread {started.thread_id} disappeared after starting its run")
-        version = await get_published_version(session, thread.agent_id)
-        memory_block = None
-        if version.memory_enabled:
-            try:
-                memories = await load_relevant_memories(
-                    session,
-                    user_id=user.id,
-                    agent_id=thread.agent_id,
-                    message=prompt,
-                    top_k=get_settings().memory_recall_top_k,
-                    max_chars=get_settings().memory_recall_max_chars,
-                )
-                memory_block = format_memory_block(memories)
-            except Exception:
-                logger.exception("memory recall failed; continuing without memories")
-
-    runtime = get_runtime(request)
-    agent = runtime.build_run_agent(
-        system_prompt_overlay=version.system_prompt_overlay,
-        tool_policy_overrides=version.tool_policy_overrides,
-        memory_block=memory_block,
-    )
+    except (ThreadNotFoundError, ValidationError) as error:
+        logger.exception("Unable to prepare AG-UI run %s", started.run_id)
+        await persist_failed_run(started.run_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Conversation history is unavailable",
+        ) from error
+    except Exception as error:
+        logger.exception("Unable to prepare AG-UI run %s", started.run_id)
+        await persist_failed_run(started.run_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to start agent execution",
+        ) from error
 
     # Ignore browser-supplied history, state, tools, and run identity.
     server_input = client_input.model_copy(
@@ -255,6 +274,7 @@ async def stream_ag_ui_run(
                     assistant_content=assistant_content,
                     model_semaphore=runtime.model_semaphore,
                     http_client=runtime.ollama_http_client,
+                    memory_enabled=version.memory_enabled,
                 )
                 schedule_memory_extract(
                     user_id=user.id,

@@ -14,7 +14,11 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, Text
 from agent_api.agent import AgentOutput
 from agent_api.api.auth import get_current_user
 from agent_api.config import get_settings
-from agent_api.db.agent_store import AgentNotFoundError, get_published_version
+from agent_api.db.agent_store import (
+    AgentNotFoundError,
+    PublishedAgentVersionNotFoundError,
+    get_published_version,
+)
 from agent_api.db.chat_store import (
     ThreadBusyError,
     ThreadNotFoundError,
@@ -243,6 +247,7 @@ async def event_stream(
     run_id: UUID,
     user_id: UUID,
     agent_id: UUID,
+    memory_enabled: bool,
     message_history: list[ModelMessage],
     runtime: AgentRuntime,
     agent: Agent[Any, AgentOutput],
@@ -379,6 +384,7 @@ async def event_stream(
             assistant_content=assistant_content,
             model_semaphore=runtime.model_semaphore,
             http_client=runtime.ollama_http_client,
+            memory_enabled=memory_enabled,
         )
         schedule_memory_extract(
             user_id=user_id,
@@ -422,38 +428,52 @@ async def stream_chat(
 
     try:
         message_history = await load_thread_model_history(started.thread_id, user_id=user.id)
+        async with session_factory() as session:
+            thread = await session.get(Thread, started.thread_id)
+            if thread is None:
+                raise RuntimeError(f"Thread {started.thread_id} disappeared after starting its run")
+            version = await get_published_version(session, thread.agent_id)
+            memory_block = None
+            if version.memory_enabled:
+                try:
+                    memories = await load_relevant_memories(
+                        session,
+                        user_id=user.id,
+                        agent_id=thread.agent_id,
+                        message=payload.message,
+                        top_k=get_settings().memory_recall_top_k,
+                        max_chars=get_settings().memory_recall_max_chars,
+                    )
+                    memory_block = format_memory_block(memories)
+                except Exception:
+                    logger.exception("memory recall failed; continuing without memories")
+        runtime = get_runtime(request)
+        agent = runtime.build_run_agent(
+            system_prompt_overlay=version.system_prompt_overlay,
+            tool_policy_overrides=version.tool_policy_overrides,
+            memory_block=memory_block,
+        )
+    except PublishedAgentVersionNotFoundError as error:
+        logger.exception("Agent version unavailable for run %s", started.run_id)
+        await persist_failed_run(started.run_id)
+        raise HTTPException(
+            status_code=409,
+            detail="Agent configuration has no published version",
+        ) from error
     except (ThreadNotFoundError, ValidationError) as error:
-        logger.exception("Unable to load model history for thread %s", started.thread_id)
+        logger.exception("Unable to prepare chat run %s", started.run_id)
+        await persist_failed_run(started.run_id)
         raise HTTPException(
             status_code=500,
             detail="Conversation history is unavailable",
         ) from error
-
-    async with session_factory() as session:
-        thread = await session.get(Thread, started.thread_id)
-        if thread is None:
-            raise RuntimeError(f"Thread {started.thread_id} disappeared after starting its run")
-        version = await get_published_version(session, thread.agent_id)
-        memory_block = None
-        if version.memory_enabled:
-            try:
-                memories = await load_relevant_memories(
-                    session,
-                    user_id=user.id,
-                    agent_id=thread.agent_id,
-                    message=payload.message,
-                    top_k=get_settings().memory_recall_top_k,
-                    max_chars=get_settings().memory_recall_max_chars,
-                )
-                memory_block = format_memory_block(memories)
-            except Exception:
-                logger.exception("memory recall failed; continuing without memories")
-    runtime = get_runtime(request)
-    agent = runtime.build_run_agent(
-        system_prompt_overlay=version.system_prompt_overlay,
-        tool_policy_overrides=version.tool_policy_overrides,
-        memory_block=memory_block,
-    )
+    except Exception as error:
+        logger.exception("Unable to prepare chat run %s", started.run_id)
+        await persist_failed_run(started.run_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to start agent execution",
+        ) from error
 
     return StreamingResponse(
         event_stream(
@@ -463,6 +483,7 @@ async def stream_chat(
             started.run_id,
             user.id,
             thread.agent_id,
+            version.memory_enabled,
             message_history,
             runtime,
             agent,

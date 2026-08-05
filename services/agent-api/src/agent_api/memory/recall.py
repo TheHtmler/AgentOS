@@ -19,9 +19,18 @@ _TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+")
 
 
 def _tokens(text: str) -> set[str]:
-    """Return simple searchable Chinese runs and alphanumeric words."""
+    """Return alphanumeric words plus Chinese bigrams for meaningful overlap."""
 
-    return {match.group(0).lower() for match in _TOKEN_RE.finditer(text)}
+    tokens: set[str] = set()
+    for match in _TOKEN_RE.finditer(text):
+        token = match.group(0).lower()
+        if "\u4e00" <= token[0] <= "\u9fff":
+            tokens.update(token[index : index + 2] for index in range(len(token) - 1))
+            if len(token) == 1:
+                tokens.add(token)
+        else:
+            tokens.add(token)
+    return tokens
 
 
 def _expanded_tokens(message: str) -> set[str]:
@@ -40,7 +49,9 @@ def _score_memory(message: str, memory: UserMemory) -> tuple[int, int]:
     expanded = _expanded_tokens(message)
     lowered_message = message.lower()
     tag_hits = sum(
-        tag.lower() in expanded or tag.lower() in lowered_message for tag in memory.tags
+        tag.lower() in expanded
+        or (len(tag) >= 2 and tag.lower() in lowered_message)
+        for tag in memory.tags
     )
     overlap = sum(token in memory.content.lower() for token in expanded)
     return tag_hits, overlap

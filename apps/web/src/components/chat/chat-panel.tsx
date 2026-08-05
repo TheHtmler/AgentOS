@@ -98,8 +98,10 @@ async function loadRunApprovalState(runId: string): Promise<{
 type ChatPanelProps = {
   selectedThreadId: string | null | undefined;
   agentId: string | null;
+  agentLoadError: string | null;
   /** When false, this panel stays mounted for background runs but must not own the URL/inspector. */
   isActive?: boolean;
+  onRetryAgentLoad: () => void;
   onNewConversation: () => void;
   onRunStarted: (runId: string) => void;
   onStreamingChanged: (isStreaming: boolean) => void;
@@ -367,7 +369,9 @@ async function loadRunDurationLabel(runId: string): Promise<string | null> {
 export function ChatPanel({
   selectedThreadId,
   agentId,
+  agentLoadError,
   isActive = true,
+  onRetryAgentLoad,
   onNewConversation,
   onRunStarted,
   onStreamingChanged,
@@ -808,7 +812,7 @@ export function ChatPanel({
   async function sendMessage() {
     const content = draft.trim();
 
-    if (!content || isStreaming || isLoadingHistory || historyLoadFailed || agentId === null) {
+    if (!content || isStreaming || isLoadingHistory || historyLoadFailed) {
       return;
     }
 
@@ -1139,6 +1143,19 @@ export function ChatPanel({
         </div>
       </header>
 
+      {agentLoadError !== null ? (
+        <div role="alert" className="agentos-chat-error border-b px-5 py-3 text-sm">
+          无法加载 Agent 列表，将使用默认 Agent 继续对话。
+          <button
+            type="button"
+            onClick={onRetryAgentLoad}
+            className="ml-3 underline underline-offset-2"
+          >
+            重试
+          </button>
+        </div>
+      ) : null}
+
       <div
         ref={messagesViewportRef}
         onScroll={handleMessageScroll}
@@ -1355,16 +1372,13 @@ export function ChatPanel({
             isStreaming ||
             isLoadingHistory ||
             historyLoadFailed ||
-            pendingInterrupts.length > 0 ||
-            agentId === null
+            pendingInterrupts.length > 0
           }
           maxLength={4_000}
           placeholder={
             pendingInterrupts.length > 0
               ? "请先批准或拒绝上方的工具调用"
-              : agentId === null
-                ? "正在加载 Agent"
-                : "输入任务、问题或需要 Agent 执行的操作"
+              : "输入任务、问题或需要 Agent 执行的操作"
           }
           rows={1}
           className="agentos-composer-input block max-h-50 w-full resize-none overflow-y-hidden px-3 py-2 text-sm leading-6 outline-none disabled:cursor-not-allowed"
@@ -1381,7 +1395,6 @@ export function ChatPanel({
               isLoadingHistory ||
               historyLoadFailed ||
               pendingInterrupts.length > 0 ||
-              agentId === null ||
               (!isStreaming && !draft.trim())
             }
             className={`agentos-send-button min-w-18 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-45 ${

@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.db.models import Agent, AgentVersion
@@ -23,6 +23,30 @@ async def list_active_agents(session: AsyncSession) -> list[Agent]:
         .order_by(Agent.is_default.desc(), Agent.slug),
     )
     return list(agents)
+
+
+async def list_active_agents_with_published_versions(
+    session: AsyncSession,
+) -> list[tuple[Agent, AgentVersion | None]]:
+    """Return active Agents and their published revision in one query.
+
+    An Agent without a published revision is returned with ``None`` so callers can
+    skip it without turning a selectable-agent list into a server error.
+    """
+
+    rows = await session.execute(
+        select(Agent, AgentVersion)
+        .outerjoin(
+            AgentVersion,
+            and_(
+                AgentVersion.agent_id == Agent.id,
+                AgentVersion.is_published.is_(True),
+            ),
+        )
+        .where(Agent.status == "active")
+        .order_by(Agent.is_default.desc(), Agent.slug)
+    )
+    return list(rows.tuples())
 
 
 async def get_default_agent_id(session: AsyncSession) -> UUID:

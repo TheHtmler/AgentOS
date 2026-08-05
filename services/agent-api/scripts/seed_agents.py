@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.db.models import Agent, AgentVersion
@@ -122,6 +122,9 @@ async def seed_agents() -> list[str]:
     """Upsert every built-in Agent and return the touched slugs."""
 
     async with session_factory() as session, session.begin():
+        # Clear first so changing the default cannot violate the partial unique
+        # index during an autoflush between individual Agent updates.
+        await session.execute(update(Agent).values(is_default=False))
         for spec in SEED_AGENTS:
             await upsert_seed_agent(session, spec)
 

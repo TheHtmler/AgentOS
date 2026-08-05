@@ -16,7 +16,6 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.config import get_settings
-from agent_api.db.agent_store import get_published_version
 from agent_api.db.memory_store import list_active_memories
 from agent_api.db.models import UserMemory
 from agent_api.db.session import session_factory
@@ -60,7 +59,6 @@ def _valid_facts(facts: object) -> list[dict[str, object]]:
             {
                 "content": content.strip(),
                 "tags": [tag.strip() for tag in cast(list[str], tags)],
-                "op": fact.get("op") if fact.get("op") == "upsert" else "upsert",
             },
         )
     return valid
@@ -127,7 +125,11 @@ async def upsert_extracted_facts(
         assert isinstance(tags, list)
         primary_tag = cast(list[str], tags)[0]
         active = await list_active_memories(session, user_id=user_id, agent_id=agent_id)
-        matching = [memory for memory in active if primary_tag in memory.tags]
+        matching = [
+            memory
+            for memory in active
+            if memory.tags and memory.tags[0] == primary_tag
+        ]
         normalized = _normalize_content(content)
         duplicate = next(
             (
@@ -171,12 +173,13 @@ def schedule_memory_extract(
     assistant_content: str,
     model_semaphore: asyncio.Semaphore,
     http_client: httpx.AsyncClient,
+    memory_enabled: bool,
     extract_facts: ExtractFactsFn | None = None,
 ) -> None:
     """Schedule best-effort fact extraction without delaying a completed run."""
 
     settings = get_settings()
-    if not settings.memory_extract_enabled or run_id in _inflight:
+    if not memory_enabled or not settings.memory_extract_enabled or run_id in _inflight:
         return
     if not user_message.strip() or not assistant_content.strip():
         return
@@ -185,10 +188,6 @@ def schedule_memory_extract(
 
     async def _run() -> None:
         try:
-            async with session_factory() as session:
-                version = await get_published_version(session, agent_id)
-            if not version.memory_enabled:
-                return
             try:
                 await asyncio.wait_for(
                     model_semaphore.acquire(),

@@ -89,6 +89,8 @@ export function ChatWorkspace({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [agentLoadError, setAgentLoadError] = useState<string | null>(null);
+  const [agentLoadAttempt, setAgentLoadAttempt] = useState(0);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadListVersion, setThreadListVersion] = useState(0);
@@ -120,16 +122,20 @@ export function ChatWorkspace({
 
     void (async () => {
       try {
+        setAgentLoadError(null);
         const response = await fetch("/api/agents", {
           cache: "no-store",
           signal: controller.signal,
         });
         if (!response.ok) {
-          return;
+          throw new Error("无法加载 Agent 列表。");
         }
 
         const nextAgents = parseAgentSummaries((await response.json()) as unknown);
-        if (nextAgents === null || !isCurrent) {
+        if (nextAgents === null) {
+          throw new Error("Agent 列表格式无效。");
+        }
+        if (!isCurrent) {
           return;
         }
 
@@ -140,8 +146,10 @@ export function ChatWorkspace({
           }
           return nextAgents.find((agent) => agent.is_default)?.id ?? nextAgents[0]?.id ?? null;
         });
-      } catch {
-        // The conversation rail remains unavailable until the Agent API is reachable.
+      } catch (error: unknown) {
+        if (isCurrent && !controller.signal.aborted) {
+          setAgentLoadError(error instanceof Error ? error.message : "无法加载 Agent 列表。");
+        }
       }
     })();
 
@@ -149,6 +157,10 @@ export function ChatWorkspace({
       isCurrent = false;
       controller.abort();
     };
+  }, [agentLoadAttempt]);
+
+  const retryAgentLoad = useCallback(() => {
+    setAgentLoadAttempt((current) => current + 1);
   }, []);
 
   const streamingThreadIds = useMemo(() => {
@@ -491,7 +503,9 @@ export function ChatWorkspace({
                     <ChatPanel
                       selectedThreadId={slot.threadId}
                       agentId={selectedAgentId}
+                      agentLoadError={agentLoadError}
                       isActive={isActive}
+                      onRetryAgentLoad={retryAgentLoad}
                       onNewConversation={handleNewConversation}
                       onRunStarted={(runId) => handleSlotRunStarted(slot.key, runId)}
                       onStreamingChanged={(isStreaming) =>

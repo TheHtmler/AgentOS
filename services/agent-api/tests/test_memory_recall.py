@@ -52,6 +52,16 @@ def test_synonym_tag_hit_ranks_height_memory() -> None:
     assert ranked[0].tags == ["身高"]
 
 
+def test_chinese_bigram_content_overlap_recalls_memory() -> None:
+    """Content recall works when Chinese wording overlaps without an exact tag hit."""
+
+    memory = fake_memory(tags=["睡眠"], content="宝宝晚上入睡需要安抚奶嘴")
+
+    ranked = score_memories("晚上怎么哄宝宝入睡", cast(list[UserMemory], [memory]))
+
+    assert ranked == [memory]
+
+
 def test_unrelated_message_returns_empty_block() -> None:
     """No recalled facts means no memory instruction section."""
 
