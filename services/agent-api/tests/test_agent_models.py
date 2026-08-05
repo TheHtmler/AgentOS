@@ -1,7 +1,6 @@
+import pytest
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-
-import pytest
 
 from agent_api.db.models import Agent, AgentVersion, Thread, UserMemory
 

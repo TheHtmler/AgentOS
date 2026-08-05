@@ -24,7 +24,9 @@
 
 ## Phase 2.5：领域 Agent 与患者上下文
 
-- 建立 `AgentProfile`、`AgentVersion` 和领域知识库边界。
+**首个竖切（2026-08-05，已落地）：** 多 Agent 选择与 `user_memories` 用户长期记忆（`agents` / `agent_versions` / `user_memories` 表；侧栏切换、Thread 绑定与按 Agent 过滤；关键词/标签召回 + Run 完成后异步抽取）。`PatientCase`、知识库 RAG 与向量检索仍属本 Phase 后续增量。
+
+- 建立 `AgentProfile`、`AgentVersion` 和领域知识库边界。（首个竖切已用 spec 命名 `agents` / `agent_versions` 落地配置层 Agent，非完整 `AgentProfile` 域模型。）
 - 将 `agent_id` 纳入 Thread、Run 和运行快照。
 - 建立 `PatientCase`、患者授权关系和患者私有上下文。
 - 实现公共 MMA/PA 知识库与患者私有资料的分离检索。

@@ -1,10 +1,10 @@
 # 实施进度
 
-最后更新：2026-08-05
+最后更新：2026-08-05（多 Agent + 用户记忆竖切）
 
 ## 当前状态
 
-前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。领域 Agent 与患者上下文的分层架构已形成设计，尚未进入实现。
+前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地；`PatientCase` 与知识库 RAG 仍属后续增量。
 
 已完成：
 
@@ -71,6 +71,13 @@
 - 自动会话标题：首轮 Run 成功后后台用模型生成短标题；仅 `title IS NULL` 时写入；`AUTO_THREAD_TITLE_*` 配置；侧栏靠既有 run finalize 刷新拉取。
 - 聊天过程组 UI（Codex 风格）：Thinking + 工具收入「处理中 / 已处理」可折叠组；紧凑工具行；邀请弹窗移动端自适应；深色次要文字对比抬高。
 - Thinking UI 默认只显示紧凑状态，不实时展开模型 reasoning 文本。
+- 多 Agent 数据模型：`agents`、`agent_versions`、`user_memories` 表；`threads.agent_id` 创建后不可变；迁移 `d8e9f0a1b2c3` 种子 `general`（默认、记忆关）与 `parenting`（垂类、记忆开）并回填既有 Thread。
+- `GET /v1/agents` 与 Web BFF `/api/agents`：返回可选 Agent 列表及 published 版本的 `memory_enabled`。
+- Thread 绑定与过滤：新建 Thread 经 `start_run` + `X-AgentOS-Agent-Id` 绑定当前 Agent（非 `POST /v1/threads`）；`GET /v1/threads?agent_id=` 按 Agent 过滤；既有 Thread 忽略客户端 agent 头。
+- Run 时按 Agent published 版本拼装 `system_prompt_overlay`、工具策略覆盖；`memory_enabled` 时关键词/标签 Top-K 召回注入 instructions。
+- Run `completed` 后异步抽取用户事实（`agent_api/memory/extract.py`，同 auto-title 模式）；作用域 `user_id × agent_id`；`MEMORY_*` 环境变量可配置。
+- 前端侧栏 Agent 切换、按 Agent 过滤会话列表、新建对话转发 `X-AgentOS-Agent-Id`；打开 Thread 同步选中 Agent；深链 `?thread=` 从消息 API 恢复 `agent_id`。
+- 运维：`scripts/seed_agents.py` 可重复 upsert 内置 Agent 配置。
 
 ## 验证
 
@@ -79,9 +86,11 @@
 - `uv run --directory services/agent-api pyright` 通过，`0 errors, 0 warnings`。
 - `uv run --directory services/agent-api pytest` 通过（含搜索 Provider / Router / 工具注册测试）。
 - `uv run --directory services/agent-api pyright` 通过，`0 errors, 0 warnings`。
-- `uv run --directory services/agent-api alembic upgrade head` 已应用至含 `waiting_approval` / `interrupts` 的迁移 `c7d8e9f0a1b2`。
-- `pnpm --filter web exec tsc --noEmit` 通过。
-- `uv run --directory services/agent-api pytest` 通过（含 HITL store / AG-UI pause / resume / timeout）。
+- `uv run --directory services/agent-api alembic upgrade head` 已应用至含 `agents` / `user_memories` 的迁移 `d8e9f0a1b2c3`。
+- `uv run --directory services/agent-api pytest` 通过（含 agent / memory / thread 隔离测试）。
+- `pnpm --filter web exec tsc --noEmit` 通过（含 Agent 侧栏与 filtered threads）。
+- `uv run --directory services/agent-api ruff check .` 通过。
+- `uv run --directory services/agent-api pyright` 通过，`0 errors, 0 warnings`。
 - `pnpm build:web` 通过；构建不再依赖 Google Fonts 网络访问。
 - `curl --noproxy '*' http://127.0.0.1:3000/api/health` 返回 `{ "status": "ok" }`。
 - 浏览器手动验证聊天页面可向本地 Agent API 发送消息并接收模型回复。
@@ -90,10 +99,10 @@
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
 - Artifact 落库 / `read_artifact`、完整 `messages.role=tool` 模型历史对齐。
-- 通用 `AgentProfile` / `AgentVersion`、MMA/PA 公共知识库、`PatientCase` 和患者私有上下文隔离。
+- 通用 `AgentProfile` / `AgentVersion`、MMA/PA 公共知识库、`PatientCase` 和患者私有上下文隔离。（首个竖切已落地 spec 命名 `agents` / `agent_versions` + `user_memories`，非完整 PatientCase 域。）
 - MCP 和 Sandbox；侧栏 Run 活动时间线与按工具类型的富展示。
 - 参数级 Tool Policy（如按 URL/命令细规则）、审计表落库。
 
 ## 下一步
 
-下一开发增量：先实现 Artifact、AgentProfile/AgentVersion 和 PatientCase 的数据边界，再建立 MMA/PA 公共知识库与患者私有上下文的分离检索。随后接入带引用的 `knowledge_search` 和 `read_artifact`，最后再进入 MCP 与 Sandbox。
+下一开发增量：按 `docs/12-domain-agents-and-patient-context.md` 建立 `PatientCase`、患者授权与私有上下文边界，再实现 MMA/PA 公共知识库与 `knowledge_search` RAG；Artifact 落库与 `read_artifact` 可并行推进。

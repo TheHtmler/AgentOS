@@ -253,7 +253,9 @@ def upgrade() -> None:
     )
     op.create_index("ix_threads_agent_id", "threads", ["agent_id"])
     op.execute(
-        sa.text("UPDATE threads SET agent_id = :general_agent_id WHERE agent_id IS NULL").bindparams(
+        sa.text(
+            "UPDATE threads SET agent_id = :general_agent_id WHERE agent_id IS NULL",
+        ).bindparams(
             general_agent_id=GENERAL_AGENT_ID,
         ),
     )

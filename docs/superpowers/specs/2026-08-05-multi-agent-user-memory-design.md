@@ -1,7 +1,7 @@
 # 多 Agent 与用户长期记忆
 
 日期：2026-08-05  
-状态：accepted（待实现）  
+状态：accepted（已实现）  
 前置：架构基线（`docs/01-architecture-baseline.md` 中的 `agents` / `agent_versions`）、Thread 所有权、AG-UI Run、auto-title 后台任务模式
 
 ## 背景
