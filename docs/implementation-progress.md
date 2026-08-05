@@ -71,7 +71,7 @@
 - 自动会话标题：首轮 Run 成功后后台用模型生成短标题；仅 `title IS NULL` 时写入；`AUTO_THREAD_TITLE_*` 配置；侧栏靠既有 run finalize 刷新拉取。
 - 聊天过程组 UI（Codex 风格）：Thinking + 工具收入「处理中 / 已处理」可折叠组；紧凑工具行；邀请弹窗移动端自适应；深色次要文字对比抬高。
 - Thinking UI 默认只显示紧凑状态，不实时展开模型 reasoning 文本。
-- 多 Agent 数据模型：`agents`、`agent_versions`、`user_memories` 表；`threads.agent_id` 创建后不可变；迁移 `d8e9f0a1b2c3` 种子 `general`（默认、记忆关）与 `parenting`（垂类、记忆开）并回填既有 Thread。
+- 多 Agent 数据模型：`agents`、`agent_versions`、`user_memories` 表；`threads.agent_id` 创建后不可变；迁移 `d8e9f0a1b2c3` 种子后经 `seed_agents.py` 收敛为 `general`（默认、记忆关）与 `imd` /「遗传代谢」（垂类、记忆开；合并原 parenting + mma-pa）。
 - `GET /v1/agents` 与 Web BFF `/api/agents`：返回可选 Agent 列表及 published 版本的 `memory_enabled`。
 - Thread 绑定与过滤：新建 Thread 经 `start_run` + `X-AgentOS-Agent-Id` 绑定当前 Agent（非 `POST /v1/threads`）；`GET /v1/threads?agent_id=` 按 Agent 过滤；既有 Thread 忽略客户端 agent 头。
 - Run 时按 Agent published 版本拼装 `system_prompt_overlay`、工具策略覆盖；`memory_enabled` 时关键词/标签 Top-K 召回注入 instructions。
@@ -83,7 +83,7 @@
 - 调研笔记：`docs/13-mma-knowledge-and-mcp-inventory.md`（MMA/PA 知识分层 + 候选 MCP/Skills）。
 - 内建 `growth_assess`：WHO 2006（`anthro`）z 分数/百分位；`GROWTH_ASSESS_ENABLED`；育儿 overlay 优先调用；无需 search/fetch router。
 - 知识库表：`knowledge_bases` / `knowledge_documents` / `knowledge_chunks`（迁移 `e9f0a1b2c3d4`）；`scripts/seed_knowledge.py` 写入 MMA/PA 中文教育摘要（带亚型 tags + 来源指针）。
-- 内建 `knowledge_search`：关键词 + tags overlap；`KNOWLEDGE_SEARCH_ENABLED`；种子 Agent `mma-pa`（记忆开）。
+- 内建 `knowledge_search`：关键词 + tags overlap；`KNOWLEDGE_SEARCH_ENABLED`；垂类 Agent「遗传代谢」(`imd`) 优先使用。
 
 ## 验证
 

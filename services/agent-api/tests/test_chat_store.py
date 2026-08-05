@@ -352,7 +352,7 @@ async def test_start_run_binds_requested_agent_id(database_session: AsyncSession
     transaction = await session.begin()
 
     try:
-        parenting_id = await session.scalar(select(Agent.id).where(Agent.slug == "parenting"))
+        parenting_id = await session.scalar(select(Agent.id).where(Agent.slug == "imd"))
         assert parenting_id is not None
 
         started = await start_run(
@@ -380,7 +380,7 @@ async def test_list_threads_filters_by_agent(database_session: AsyncSession) -> 
         session.add(user)
         await session.flush()
         general_id = await session.scalar(select(Agent.id).where(Agent.slug == "general"))
-        parenting_id = await session.scalar(select(Agent.id).where(Agent.slug == "parenting"))
+        parenting_id = await session.scalar(select(Agent.id).where(Agent.slug == "imd"))
         assert general_id is not None
         assert parenting_id is not None
 
@@ -421,7 +421,7 @@ async def test_existing_thread_ignores_requested_agent_id(database_session: Asyn
 
     try:
         general_id = await session.scalar(select(Agent.id).where(Agent.slug == "general"))
-        parenting_id = await session.scalar(select(Agent.id).where(Agent.slug == "parenting"))
+        parenting_id = await session.scalar(select(Agent.id).where(Agent.slug == "imd"))
         assert general_id is not None
         assert parenting_id is not None
         first = await start_run(

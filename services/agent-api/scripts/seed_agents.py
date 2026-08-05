@@ -1,4 +1,4 @@
-"""Idempotently upsert the built-in general, parenting, and MMA/PA Agents."""
+"""Idempotently upsert built-in Agents (General + 遗传代谢)."""
 
 import asyncio
 from dataclasses import dataclass
@@ -11,30 +11,27 @@ from agent_api.db.models import Agent, AgentVersion
 from agent_api.db.session import close_database, session_factory
 
 GENERAL_AGENT_ID = UUID("00000000-0000-0000-0000-000000000001")
-PARENTING_AGENT_ID = UUID("00000000-0000-0000-0000-000000000002")
+# Stable id: formerly "parenting"; keep so existing Threads remain bound.
+IMD_AGENT_ID = UUID("00000000-0000-0000-0000-000000000002")
 GENERAL_AGENT_VERSION_ID = UUID("00000000-0000-0000-0000-000000000003")
-PARENTING_AGENT_VERSION_ID = UUID("00000000-0000-0000-0000-000000000004")
-MMA_PA_AGENT_ID = UUID("00000000-0000-0000-0000-000000000005")
-MMA_PA_AGENT_VERSION_ID = UUID("00000000-0000-0000-0000-000000000006")
+IMD_AGENT_VERSION_ID = UUID("00000000-0000-0000-0000-000000000004")
+# Retired vertical (merged into 遗传代谢); seed keeps it disabled if present.
+RETIRED_MMA_PA_AGENT_ID = UUID("00000000-0000-0000-0000-000000000005")
 
-PARENTING_OVERLAY = (
-    "你是 AgentOS 育儿顾问：帮助家长理解孩子档案、生长指标与常见养育问题。\n"
-    "当用户给出身高/体重等测量并要求对照标准曲线或生长情况时：\n"
-    "1) 优先调用 growth_assess（WHO 2006）做 z 分数/百分位评估；"
-    "缺性别、月龄或生日时只问一个问题；\n"
-    "2) 若还需中国卫健委等其他公开标准，再用 web_search / fetch_url 补充，并附来源；\n"
-    "3) 不要让用户自己去找或粘贴标准曲线表；不要用长篇「我不是医生」替代作答。\n"
-    "区分已记录事实与推断。免责声明最多一句。仅在急性危险症状、明显异常且资料不足、"
-    "或需要个体化诊疗决策时，建议尽快就医。"
-)
-
-MMA_PA_OVERLAY = (
-    "你是 AgentOS MMA/PA 教育顾问：帮助家庭理解甲基丙二酸血症与丙酸血症的公共知识。\n"
-    "回答前先区分亚型标签（isolated_mma / cobalamin_disorder / pa 及基因标签），"
+IMD_OVERLAY = (
+    "你是 AgentOS「遗传代谢」顾问：面向先天代谢异常（IMD）家庭的教育与随访助手，"
+    "覆盖疾病公共知识、生长营养对照与日常管理问题（当前知识库以 MMA/PA 为主，可逐步扩展）。\n"
+    "回答前先区分疾病/亚型标签（如 isolated_mma / cobalamin_disorder / pa 及基因标签），"
     "禁止把不同亚型结论默认同化。\n"
-    "优先调用 knowledge_search（可带 disease_tags）；需要生长对照时用 growth_assess；"
-    "库内不足再用 web_search / fetch_url，并引用 source_url。\n"
-    "不给个体化处方剂量；急性症状、擅自改饮食/药物时升级就医。免责声明最多一句。"
+    "工具优先级：\n"
+    "1) 疾病教育、急症识别、饮食/监测原则 → 优先 knowledge_search（可带 disease_tags），"
+    "并引用 source_url；\n"
+    "2) 身高/体重等生长对照 → 优先 growth_assess（WHO 2006）；缺性别、月龄或生日时只问一个问题；\n"
+    "3) 库内不足或需要其他公开标准/页面时再用 web_search / fetch_url。\n"
+    "不要让用户代查标准或粘贴曲线表；不要用长篇「我不是医生」替代作答。\n"
+    "不给个体化处方剂量。区分已记录事实与推断。免责声明最多一句。"
+    "仅在急性危险症状、擅自改饮食/药物、明显异常且资料不足、或需要个体化诊疗决策时，"
+    "建议尽快就医。"
 )
 
 
@@ -73,40 +70,34 @@ SEED_AGENTS: tuple[SeedAgent, ...] = (
         ),
     ),
     SeedAgent(
-        id=PARENTING_AGENT_ID,
-        slug="parenting",
-        name="Parenting",
-        description="A parenting guidance assistant.",
-        kind="vertical",
-        is_default=False,
-        published_version=SeedAgentVersion(
-            id=PARENTING_AGENT_VERSION_ID,
-            version=1,
-            system_prompt_overlay=PARENTING_OVERLAY,
-            memory_enabled=True,
+        id=IMD_AGENT_ID,
+        slug="imd",
+        name="遗传代谢",
+        description=(
+            "先天代谢异常（IMD）家庭助手：疾病教育、生长随访与日常管理"
+            "（含 MMA/PA 等）。"
         ),
-    ),
-    SeedAgent(
-        id=MMA_PA_AGENT_ID,
-        slug="mma-pa",
-        name="MMA/PA",
-        description="Educational assistant for methylmalonic and propionic acidemias.",
         kind="vertical",
         is_default=False,
         published_version=SeedAgentVersion(
-            id=MMA_PA_AGENT_VERSION_ID,
+            id=IMD_AGENT_VERSION_ID,
             version=1,
-            system_prompt_overlay=MMA_PA_OVERLAY,
+            system_prompt_overlay=IMD_OVERLAY,
             memory_enabled=True,
         ),
     ),
 )
 
+RETIRED_AGENT_IDS: tuple[UUID, ...] = (RETIRED_MMA_PA_AGENT_ID,)
+
 
 async def upsert_seed_agent(session: AsyncSession, spec: SeedAgent) -> None:
-    """Insert or refresh one Agent and its published version, keyed by slug."""
+    """Insert or refresh one Agent and its published version, keyed by id."""
 
-    agent = await session.scalar(select(Agent).where(Agent.slug == spec.slug))
+    agent = await session.get(Agent, spec.id)
+    if agent is None:
+        # Recover rows that still use a retired slug on the same identity.
+        agent = await session.scalar(select(Agent).where(Agent.slug == spec.slug))
     if agent is None:
         agent = Agent(
             id=spec.id,
@@ -119,6 +110,13 @@ async def upsert_seed_agent(session: AsyncSession, spec: SeedAgent) -> None:
         )
         session.add(agent)
     else:
+        # Slug changes (e.g. parenting → imd) must not collide with another row.
+        clash = await session.scalar(
+            select(Agent).where(Agent.slug == spec.slug, Agent.id != agent.id),
+        )
+        if clash is not None:
+            raise RuntimeError(f"agent slug conflict: {spec.slug}")
+        agent.slug = spec.slug
         agent.name = spec.name
         agent.description = spec.description
         agent.kind = spec.kind
@@ -148,8 +146,33 @@ async def upsert_seed_agent(session: AsyncSession, spec: SeedAgent) -> None:
         version.is_published = True
 
 
+async def disable_retired_agents(session: AsyncSession) -> list[str]:
+    """Hide merged/retired Agents from the selectable list."""
+
+    disabled: list[str] = []
+    for agent_id in RETIRED_AGENT_IDS:
+        agent = await session.get(Agent, agent_id)
+        if agent is None:
+            continue
+        agent.status = "disabled"
+        agent.is_default = False
+        disabled.append(agent.slug)
+    # Also retire any leftover "parenting" / "mma-pa" rows not using fixed ids.
+    leftovers = await session.scalars(
+        select(Agent).where(Agent.slug.in_(("parenting", "mma-pa"))),
+    )
+    for agent in leftovers:
+        if agent.id in {spec.id for spec in SEED_AGENTS}:
+            continue
+        agent.status = "disabled"
+        agent.is_default = False
+        if agent.slug not in disabled:
+            disabled.append(agent.slug)
+    return disabled
+
+
 async def seed_agents() -> list[str]:
-    """Upsert every built-in Agent and return the touched slugs."""
+    """Upsert active built-ins, disable retired ones, return active slugs."""
 
     async with session_factory() as session, session.begin():
         # Clear first so changing the default cannot violate the partial unique
@@ -157,6 +180,7 @@ async def seed_agents() -> list[str]:
         await session.execute(update(Agent).values(is_default=False))
         for spec in SEED_AGENTS:
             await upsert_seed_agent(session, spec)
+        await disable_retired_agents(session)
 
     return [spec.slug for spec in SEED_AGENTS]
 

@@ -80,7 +80,7 @@ async def test_recall_isolates_user_and_agent_and_only_injects_relevant_facts(
     user_a = User(email=f"memory-a-{uuid4().hex}@example.com", status="active")
     user_b = User(email=f"memory-b-{uuid4().hex}@example.com", status="active")
     database_session.add_all([user_a, user_b])
-    parenting = await database_session.scalar(select(Agent).where(Agent.slug == "parenting"))
+    parenting = await database_session.scalar(select(Agent).where(Agent.slug == "imd"))
     general = await database_session.scalar(select(Agent).where(Agent.slug == "general"))
     assert parenting is not None
     assert general is not None

@@ -32,14 +32,14 @@ async def test_seeded_general_agent_exists(database_session: AsyncSession) -> No
 
 
 @pytest.mark.anyio
-async def test_seeded_parenting_memory_enabled(database_session: AsyncSession) -> None:
-    """The parenting vertical publishes memory-enabled behavior."""
+async def test_seeded_imd_memory_enabled(database_session: AsyncSession) -> None:
+    """The 遗传代谢 (imd) vertical publishes memory-enabled behavior."""
 
     session = database_session
     transaction = await session.begin()
 
     try:
-        agent = await session.scalar(select(Agent).where(Agent.slug == "parenting"))
+        agent = await session.scalar(select(Agent).where(Agent.slug == "imd"))
 
         assert agent is not None
         version = await session.scalar(

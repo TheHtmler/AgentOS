@@ -18,7 +18,7 @@ async def dispose_database_pool() -> AsyncIterator[None]:
 
 
 @pytest.mark.anyio
-async def test_list_agents_returns_general_and_parenting(
+async def test_list_agents_returns_general_and_imd(
     authenticated_api_user: UUID,
 ) -> None:
     transport = ASGITransport(app=app)
@@ -28,8 +28,13 @@ async def test_list_agents_returns_general_and_parenting(
 
     assert response.status_code == 200
     agents = response.json()["agents"]
-    assert {"general", "parenting"} <= {agent["slug"] for agent in agents}
+    slugs = {agent["slug"] for agent in agents}
+    assert {"general", "imd"} <= slugs
+    assert "mma-pa" not in slugs
+    assert "parenting" not in slugs
     assert len([agent for agent in agents if agent["is_default"]]) == 1
+    imd = next(agent for agent in agents if agent["slug"] == "imd")
+    assert imd["name"] == "遗传代谢"
 
 
 @pytest.mark.anyio

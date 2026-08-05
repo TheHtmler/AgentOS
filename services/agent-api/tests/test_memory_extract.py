@@ -30,7 +30,7 @@ async def test_upsert_archives_previous_same_primary_tag(database_session: Async
 
     user = User(email=f"memory-test-{uuid4().hex}@example.com", status="active")
     database_session.add(user)
-    agent = await database_session.scalar(select(Agent).where(Agent.slug == "parenting"))
+    agent = await database_session.scalar(select(Agent).where(Agent.slug == "imd"))
     assert agent is not None
     await database_session.flush()
 
@@ -66,7 +66,7 @@ async def test_upsert_does_not_archive_an_adjacent_secondary_tag(
 
     user = User(email=f"memory-tags-{uuid4().hex}@example.com", status="active")
     database_session.add(user)
-    agent = await database_session.scalar(select(Agent).where(Agent.slug == "parenting"))
+    agent = await database_session.scalar(select(Agent).where(Agent.slug == "imd"))
     assert agent is not None
     await database_session.flush()
 
