@@ -41,7 +41,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    const upstream = await fetch(`${agentApiBaseUrl()}/v1/threads?limit=${limit}`, {
+    const query = new URLSearchParams({ limit: String(limit) });
+    const agentId = new URL(request.url).searchParams.get("agent_id");
+    if (agentId !== null) {
+      query.set("agent_id", agentId);
+    }
+    const upstream = await fetch(`${agentApiBaseUrl()}/v1/threads?${query}`, {
       headers: await agentApiSessionHeaders(),
       cache: "no-store",
       signal: request.signal,

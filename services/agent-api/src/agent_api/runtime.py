@@ -61,6 +61,37 @@ class AgentRuntime:
         task.cancel()
         return True
 
+    def build_run_agent(
+        self,
+        *,
+        system_prompt_overlay: str | None,
+        tool_policy_overrides: dict[str, object] | None,
+        memory_block: str | None = None,
+    ) -> Agent[Any, AgentOutput]:
+        """Build a fresh agent with the published configuration for one run."""
+
+        if self.ollama_http_client is None:
+            # Test runtimes provide a deterministic agent without a live Ollama client.
+            return self.agent
+
+        overrides = (
+            {
+                name: action
+                for name, action in tool_policy_overrides.items()
+                if isinstance(action, str)
+            }
+            if tool_policy_overrides is not None
+            else None
+        )
+        return create_agent(
+            self.ollama_http_client,
+            search_router=self.search_router,
+            fetch_router=self.fetch_router,
+            system_prompt_overlay=system_prompt_overlay,
+            memory_block=memory_block,
+            tool_policy_overrides=overrides,
+        )
+
     async def stop_background_runs(self) -> None:
         """Stop in-process model tasks before shared resources are closed."""
 

@@ -34,6 +34,30 @@ def test_env_ask_overrides_default_allow() -> None:
     assert evaluate("fetch_url", settings=settings) == PolicyAction.ASK
 
 
+def test_agent_override_applies_after_environment_policy() -> None:
+    settings = _settings()
+    assert (
+        evaluate(
+            "fetch_url",
+            settings=settings,
+            overrides={"fetch_url": PolicyAction.DENY},
+        )
+        == PolicyAction.DENY
+    )
+
+
+def test_environment_policy_beats_agent_override() -> None:
+    settings = _settings(tool_policy_ask="fetch_url")
+    assert (
+        evaluate(
+            "fetch_url",
+            settings=settings,
+            overrides={"fetch_url": PolicyAction.DENY},
+        )
+        == PolicyAction.ASK
+    )
+
+
 def test_disabled_tool_is_denied() -> None:
     settings = _settings(search_enabled=False)
     assert evaluate("web_search", settings=settings) == PolicyAction.DENY

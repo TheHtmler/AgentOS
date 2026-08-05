@@ -26,10 +26,17 @@ from agent_api.api.chat import (
     strip_thinking_parts,
 )
 from agent_api.config import get_settings
+from agent_api.db.agent_store import (
+    AgentNotFoundError,
+    PublishedAgentVersionNotFoundError,
+    get_published_version,
+)
 from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_run
-from agent_api.db.models import User
+from agent_api.db.models import Thread, User
 from agent_api.db.session import session_factory
 from agent_api.hitl_pause import persist_deferred_approvals
+from agent_api.memory.extract import schedule_memory_extract
+from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import get_runtime
 from agent_api.thread_title import schedule_auto_thread_title
@@ -69,6 +76,21 @@ def requested_thread_id(thread_id: str) -> UUID | None:
         raise HTTPException(status_code=422, detail="threadId must be a UUID or 'new'") from error
 
 
+def requested_agent_id(request: Request) -> UUID | None:
+    """Parse the Agent header used only when creating a new Thread."""
+
+    raw = request.headers.get("X-AgentOS-Agent-Id")
+    if not raw:
+        return None
+    try:
+        return UUID(raw)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
+            detail="X-AgentOS-Agent-Id must be a UUID",
+        ) from error
+
+
 def text_from_native_event(event: NativeEvent) -> str | None:
     if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
         return event.part.content or None
@@ -92,27 +114,74 @@ async def stream_ag_ui_run(
         raise HTTPException(status_code=422, detail="Invalid AG-UI request") from error
 
     user_message, prompt = current_user_message(client_input)
+    thread_id = requested_thread_id(client_input.thread_id)
 
     try:
         async with session_factory() as session, session.begin():
+            agent_id = requested_agent_id(request) if thread_id is None else None
             started = await start_run(
                 session,
-                thread_id=requested_thread_id(client_input.thread_id),
+                thread_id=thread_id,
                 user_content=prompt,
                 model_name=get_settings().ollama_model,
                 user_id=user.id,
+                agent_id=agent_id,
             )
     except ThreadNotFoundError as error:
         raise HTTPException(status_code=404, detail="Thread not found") from error
+    except AgentNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Agent not found") from error
     except ThreadBusyError as error:
         raise HTTPException(status_code=409, detail="Thread is already running") from error
 
     try:
         history = await load_thread_model_history(started.thread_id, user_id=user.id)
-    except (ThreadNotFoundError, ValidationError) as error:
-        logger.exception("Unable to load model history for thread %s", started.thread_id)
+        async with session_factory() as session:
+            thread = await session.get(Thread, started.thread_id)
+            if thread is None:
+                raise RuntimeError(f"Thread {started.thread_id} disappeared after starting its run")
+            version = await get_published_version(session, thread.agent_id)
+            memory_block = None
+            if version.memory_enabled:
+                try:
+                    memories = await load_relevant_memories(
+                        session,
+                        user_id=user.id,
+                        agent_id=thread.agent_id,
+                        message=prompt,
+                        top_k=get_settings().memory_recall_top_k,
+                        max_chars=get_settings().memory_recall_max_chars,
+                    )
+                    memory_block = format_memory_block(memories)
+                except Exception:
+                    logger.exception("memory recall failed; continuing without memories")
+
+        runtime = get_runtime(request)
+        agent = runtime.build_run_agent(
+            system_prompt_overlay=version.system_prompt_overlay,
+            tool_policy_overrides=version.tool_policy_overrides,
+            memory_block=memory_block,
+        )
+    except PublishedAgentVersionNotFoundError as error:
+        logger.exception("Agent version unavailable for run %s", started.run_id)
+        await persist_failed_run(started.run_id)
         raise HTTPException(
-            status_code=500, detail="Conversation history is unavailable"
+            status_code=409,
+            detail="Agent configuration has no published version",
+        ) from error
+    except (ThreadNotFoundError, ValidationError) as error:
+        logger.exception("Unable to prepare AG-UI run %s", started.run_id)
+        await persist_failed_run(started.run_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Conversation history is unavailable",
+        ) from error
+    except Exception as error:
+        logger.exception("Unable to prepare AG-UI run %s", started.run_id)
+        await persist_failed_run(started.run_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to start agent execution",
         ) from error
 
     # Ignore browser-supplied history, state, tools, and run identity.
@@ -128,11 +197,10 @@ async def stream_ag_ui_run(
         },
     )
     adapter = AGUIAdapter(
-        agent=get_runtime(request).agent,
+        agent=agent,
         run_input=server_input,
         accept=request.headers.get("accept"),
     )
-    runtime = get_runtime(request)
     event_queue: asyncio.Queue[BaseEvent | BaseException | None] = asyncio.Queue()
     client_disconnected = asyncio.Event()
 
@@ -206,6 +274,17 @@ async def stream_ag_ui_run(
                     assistant_content=assistant_content,
                     model_semaphore=runtime.model_semaphore,
                     http_client=runtime.ollama_http_client,
+                )
+                schedule_memory_extract(
+                    user_id=user.id,
+                    agent_id=thread.agent_id,
+                    thread_id=started.thread_id,
+                    run_id=started.run_id,
+                    user_message=prompt,
+                    assistant_content=assistant_content,
+                    model_semaphore=runtime.model_semaphore,
+                    http_client=runtime.ollama_http_client,
+                    memory_enabled=version.memory_enabled,
                 )
         except AGUIExecutionError:
             raise

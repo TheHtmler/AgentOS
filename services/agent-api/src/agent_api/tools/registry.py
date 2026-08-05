@@ -84,6 +84,7 @@ def should_mount_tool(
     search_router_present: bool,
     fetch_router_present: bool,
     settings: Settings | None = None,
+    overrides: dict[str, PolicyAction] | None = None,
 ) -> bool:
     """Decide whether the tool is exposed to the model.
 
@@ -101,7 +102,7 @@ def should_mount_tool(
         return False
 
     # Hide denied tools from the model; ask/allow remain callable.
-    return evaluate(spec.name, settings=cfg) != PolicyAction.DENY
+    return evaluate(spec.name, settings=cfg, overrides=overrides) != PolicyAction.DENY
 
 
 def mounted_tool_handlers(
@@ -109,6 +110,7 @@ def mounted_tool_handlers(
     search_router_present: bool,
     fetch_router_present: bool,
     settings: Settings | None = None,
+    overrides: dict[str, PolicyAction] | None = None,
 ) -> list[Callable[..., object]]:
     """Return raw handlers (tests / legacy). Prefer `mounted_tools` for agents."""
 
@@ -118,6 +120,7 @@ def mounted_tool_handlers(
             search_router_present=search_router_present,
             fetch_router_present=fetch_router_present,
             settings=settings,
+            overrides=overrides,
         )
     ]
 
@@ -127,6 +130,7 @@ def mounted_tools(
     search_router_present: bool,
     fetch_router_present: bool,
     settings: Settings | None = None,
+    overrides: dict[str, PolicyAction] | None = None,
 ) -> list[Tool[AgentDeps]]:
     """Build Pydantic AI Tool objects, marking ask-policy tools for deferred approval."""
 
@@ -138,9 +142,10 @@ def mounted_tools(
             search_router_present=search_router_present,
             fetch_router_present=fetch_router_present,
             settings=cfg,
+            overrides=overrides,
         ):
             continue
-        action = evaluate(spec.name, settings=cfg)
+        action = evaluate(spec.name, settings=cfg, overrides=overrides)
         tools.append(
             Tool(
                 spec.handler,
@@ -156,6 +161,7 @@ def mounted_tool_names(
     search_router_present: bool,
     fetch_router_present: bool,
     settings: Settings | None = None,
+    overrides: dict[str, PolicyAction] | None = None,
 ) -> set[str]:
     cfg = settings or get_settings()
     return {
@@ -166,5 +172,6 @@ def mounted_tool_names(
             search_router_present=search_router_present,
             fetch_router_present=fetch_router_present,
             settings=cfg,
+            overrides=overrides,
         )
     }

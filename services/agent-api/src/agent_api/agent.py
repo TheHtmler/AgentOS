@@ -6,6 +6,7 @@ from pydantic_ai.tools import DeferredToolRequests
 
 from agent_api.config import get_settings
 from agent_api.tools.fetch.router import FetchRouter
+from agent_api.tools.policy import PolicyAction
 from agent_api.tools.registry import mounted_tool_names, mounted_tools
 from agent_api.tools.search.router import SearchRouter
 from agent_api.tools.search.tool import AgentDeps
@@ -72,6 +73,43 @@ Base claims on the returned text/outline and cite the URL. Never pretend you
 opened a link if you did not.
 """
 
+MEMORY_HEADER = "## Known user facts (for this agent only; use when relevant)"
+
+
+def build_instructions(
+    *,
+    overlay: str | None,
+    memory_block: str | None,
+    mounted_names: set[str],
+) -> str:
+    """Assemble the platform base and agent-specific runtime instructions."""
+
+    sections = [SYSTEM_INSTRUCTIONS]
+    if overlay and overlay.strip():
+        sections.append(overlay.strip())
+    if memory_block and memory_block.strip():
+        sections.append(memory_block.strip())
+    if "web_search" in mounted_names:
+        sections.append(SEARCH_INSTRUCTIONS.strip())
+    if "fetch_url" in mounted_names:
+        sections.append(FETCH_INSTRUCTIONS.strip())
+    return "\n\n".join(sections)
+
+
+def _parse_policy_overrides(
+    raw_overrides: dict[str, str] | None,
+) -> dict[str, PolicyAction] | None:
+    if raw_overrides is None:
+        return None
+
+    overrides: dict[str, PolicyAction] = {}
+    for tool_name, action in raw_overrides.items():
+        try:
+            overrides[tool_name] = PolicyAction(action)
+        except ValueError:
+            continue
+    return overrides
+
 
 def create_ollama_http_client() -> httpx.AsyncClient:
     """Create a local-only client that never inherits shell proxy settings."""
@@ -89,6 +127,9 @@ def create_agent(
     search_enabled: bool | None = None,
     fetch_router: FetchRouter | None = None,
     fetch_enabled: bool | None = None,
+    system_prompt_overlay: str | None = None,
+    memory_block: str | None = None,
+    tool_policy_overrides: dict[str, str] | None = None,
 ) -> Agent[AgentDeps, AgentOutput]:
     """Build a stateless agent; the caller owns and closes the HTTP client."""
 
@@ -104,22 +145,25 @@ def create_agent(
 
     search_present = search_router is not None
     fetch_present = fetch_router is not None
+    policy_overrides = _parse_policy_overrides(tool_policy_overrides)
     mounted_names = mounted_tool_names(
         search_router_present=search_present,
         fetch_router_present=fetch_present,
         settings=settings,
+        overrides=policy_overrides,
     )
 
-    instructions = SYSTEM_INSTRUCTIONS
-    if "web_search" in mounted_names:
-        instructions = f"{instructions}\n{SEARCH_INSTRUCTIONS}"
-    if "fetch_url" in mounted_names:
-        instructions = f"{instructions}\n{FETCH_INSTRUCTIONS}"
+    instructions = build_instructions(
+        overlay=system_prompt_overlay,
+        memory_block=memory_block,
+        mounted_names=mounted_names,
+    )
 
     tools = mounted_tools(
         search_router_present=search_present,
         fetch_router_present=fetch_present,
         settings=settings,
+        overrides=policy_overrides,
     )
 
     model = OllamaModel(

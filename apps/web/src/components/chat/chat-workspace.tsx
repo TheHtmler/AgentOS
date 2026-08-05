@@ -9,6 +9,8 @@ import { ConversationList } from "@/components/chat/conversation-list";
 import { RunInspector } from "@/components/run/run-inspector";
 import { HealthStatus } from "@/components/system/health-status";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { parseAgentSummaries, type AgentSummary } from "@/lib/agents";
+import type { Conversation } from "@/components/chat/conversation-list";
 
 type ChatWorkspaceProps = {
   userEmail: string;
@@ -85,6 +87,10 @@ export function ChatWorkspace({
   onLogout,
 }: ChatWorkspaceProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [agentLoadError, setAgentLoadError] = useState<string | null>(null);
+  const [agentLoadAttempt, setAgentLoadAttempt] = useState(0);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadListVersion, setThreadListVersion] = useState(0);
@@ -109,6 +115,53 @@ export function ChatWorkspace({
     slotsRef.current = slots;
     visibleSlotKeyRef.current = visibleSlotKey;
   }, [runIdBySlotKey, slots, streamingBySlotKey, visibleSlotKey]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let isCurrent = true;
+
+    void (async () => {
+      try {
+        setAgentLoadError(null);
+        const response = await fetch("/api/agents", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error("无法加载 Agent 列表。");
+        }
+
+        const nextAgents = parseAgentSummaries((await response.json()) as unknown);
+        if (nextAgents === null) {
+          throw new Error("Agent 列表格式无效。");
+        }
+        if (!isCurrent) {
+          return;
+        }
+
+        setAgents(nextAgents);
+        setSelectedAgentId((current) => {
+          if (current !== null && nextAgents.some((agent) => agent.id === current)) {
+            return current;
+          }
+          return nextAgents.find((agent) => agent.is_default)?.id ?? nextAgents[0]?.id ?? null;
+        });
+      } catch (error: unknown) {
+        if (isCurrent && !controller.signal.aborted) {
+          setAgentLoadError(error instanceof Error ? error.message : "无法加载 Agent 列表。");
+        }
+      }
+    })();
+
+    return () => {
+      isCurrent = false;
+      controller.abort();
+    };
+  }, [agentLoadAttempt]);
+
+  const retryAgentLoad = useCallback(() => {
+    setAgentLoadAttempt((current) => current + 1);
+  }, []);
 
   const streamingThreadIds = useMemo(() => {
     const ids = new Set<string>();
@@ -197,7 +250,9 @@ export function ChatWorkspace({
   }, []);
 
   const handleSelectThread = useCallback(
-    (threadId: string) => {
+    (conversation: Conversation) => {
+      const { id: threadId, agent_id: agentId } = conversation;
+      setSelectedAgentId(agentId);
       const currentSlots = slotsRef.current;
       const existing = currentSlots.find((slot) => slot.threadId === threadId);
 
@@ -237,24 +292,42 @@ export function ChatWorkspace({
     focusSlot(key, null);
   }, [focusSlot]);
 
-  const handleSlotThreadChanged = useCallback((slotKey: string, threadId: string | null) => {
-    setSlots((current) =>
-      current.map((slot) => (slot.key === slotKey ? { ...slot, threadId } : slot)),
-    );
-
-    if (slotKey === visibleSlotKeyRef.current) {
-      setActiveThreadId(threadId);
-
-      if (threadId === null) {
-        setActiveRunId(null);
-        clearThreadFromUrl();
-      } else {
-        setThreadInUrl(threadId);
+  const handleSelectAgent = useCallback(
+    (agentId: string) => {
+      if (agentId === selectedAgentId) {
+        return;
       }
-    }
+      setSelectedAgentId(agentId);
+      handleNewConversation();
+    },
+    [handleNewConversation, selectedAgentId],
+  );
 
-    setThreadListVersion((current) => current + 1);
-  }, []);
+  const handleSlotThreadChanged = useCallback(
+    (slotKey: string, threadId: string | null, agentId?: string) => {
+      setSlots((current) =>
+        current.map((slot) => (slot.key === slotKey ? { ...slot, threadId } : slot)),
+      );
+
+      if (agentId !== undefined) {
+        setSelectedAgentId(agentId);
+      }
+
+      if (slotKey === visibleSlotKeyRef.current) {
+        setActiveThreadId(threadId);
+
+        if (threadId === null) {
+          setActiveRunId(null);
+          clearThreadFromUrl();
+        } else {
+          setThreadInUrl(threadId);
+        }
+      }
+
+      setThreadListVersion((current) => current + 1);
+    },
+    [],
+  );
 
   const handleSlotRunStarted = useCallback((slotKey: string, runId: string) => {
     setRunIdBySlotKey((current) => ({ ...current, [slotKey]: runId }));
@@ -404,10 +477,13 @@ export function ChatWorkspace({
         <aside className="agentos-conversation-rail hidden min-h-0 lg:flex lg:flex-col">
           <ConversationList
             activeThreadId={activeThreadId}
+            agents={agents}
+            selectedAgentId={selectedAgentId}
             refreshKey={threadListVersion}
             streamingThreadIds={streamingThreadIds}
             awaitingApprovalThreadIds={awaitingApprovalThreadIds}
             onNewConversation={handleNewConversation}
+            onSelectAgent={handleSelectAgent}
             onSelectThread={handleSelectThread}
             onThreadDeleted={handleThreadDeleted}
           />
@@ -426,7 +502,10 @@ export function ChatWorkspace({
                   >
                     <ChatPanel
                       selectedThreadId={slot.threadId}
+                      agentId={selectedAgentId}
+                      agentLoadError={agentLoadError}
                       isActive={isActive}
+                      onRetryAgentLoad={retryAgentLoad}
                       onNewConversation={handleNewConversation}
                       onRunStarted={(runId) => handleSlotRunStarted(slot.key, runId)}
                       onStreamingChanged={(isStreaming) =>
@@ -435,7 +514,9 @@ export function ChatWorkspace({
                       onAwaitingApprovalChanged={(isAwaiting) =>
                         handleSlotAwaitingApprovalChanged(slot.key, isAwaiting)
                       }
-                      onThreadChanged={(threadId) => handleSlotThreadChanged(slot.key, threadId)}
+                      onThreadChanged={(threadId, agentId) =>
+                        handleSlotThreadChanged(slot.key, threadId, agentId)
+                      }
                       onRunFinalized={handleRunFinalized}
                     />
                   </div>
@@ -498,10 +579,13 @@ export function ChatWorkspace({
             <div className="min-h-0 flex-1 overflow-hidden">
               <ConversationList
                 activeThreadId={activeThreadId}
+                agents={agents}
+                selectedAgentId={selectedAgentId}
                 refreshKey={threadListVersion}
                 streamingThreadIds={streamingThreadIds}
                 awaitingApprovalThreadIds={awaitingApprovalThreadIds}
                 onNewConversation={handleNewConversation}
+                onSelectAgent={handleSelectAgent}
                 onSelectThread={handleSelectThread}
                 onThreadDeleted={handleThreadDeleted}
               />

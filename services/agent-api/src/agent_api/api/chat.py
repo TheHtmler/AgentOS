@@ -2,17 +2,23 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
-from pydantic_ai import ModelMessagesTypeAdapter
+from pydantic_ai import Agent, ModelMessagesTypeAdapter
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 
+from agent_api.agent import AgentOutput
 from agent_api.api.auth import get_current_user
 from agent_api.config import get_settings
+from agent_api.db.agent_store import (
+    AgentNotFoundError,
+    PublishedAgentVersionNotFoundError,
+    get_published_version,
+)
 from agent_api.db.chat_store import (
     ThreadBusyError,
     ThreadNotFoundError,
@@ -24,8 +30,10 @@ from agent_api.db.chat_store import (
     list_thread_messages,
     start_run,
 )
-from agent_api.db.models import Message, User
+from agent_api.db.models import Message, Thread, User
 from agent_api.db.session import session_factory
+from agent_api.memory.extract import schedule_memory_extract
+from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import AgentRuntime, get_runtime
 from agent_api.thread_title import schedule_auto_thread_title
@@ -50,6 +58,21 @@ class ChatStreamRequest(BaseModel):
             raise ValueError("message must not be blank")
 
         return message
+
+
+def requested_agent_id(request: Request) -> UUID | None:
+    """Parse the Agent header used only when creating a new Thread."""
+
+    raw = request.headers.get("X-AgentOS-Agent-Id")
+    if not raw:
+        return None
+    try:
+        return UUID(raw)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
+            detail="X-AgentOS-Agent-Id must be a UUID",
+        ) from error
 
 
 def encode_sse_event(event: str, data: dict[str, str]) -> str:
@@ -222,8 +245,12 @@ async def event_stream(
     message: str,
     thread_id: UUID,
     run_id: UUID,
+    user_id: UUID,
+    agent_id: UUID,
+    memory_enabled: bool,
     message_history: list[ModelMessage],
     runtime: AgentRuntime,
+    agent: Agent[Any, AgentOutput],
 ) -> AsyncIterator[str]:
     """Run the full agent graph (including tools), then emit the final answer over SSE.
 
@@ -246,7 +273,7 @@ async def event_stream(
 
             # Prefer run() over run_stream() so web_search and other tools finish
             # before any assistant text is treated as the final answer.
-            result = await runtime.agent.run(
+            result = await agent.run(
                 message,
                 message_history=message_history or None,
                 conversation_id=str(thread_id),
@@ -358,6 +385,17 @@ async def event_stream(
             model_semaphore=runtime.model_semaphore,
             http_client=runtime.ollama_http_client,
         )
+        schedule_memory_extract(
+            user_id=user_id,
+            agent_id=agent_id,
+            thread_id=thread_id,
+            run_id=run_id,
+            user_message=message,
+            assistant_content=assistant_content,
+            model_semaphore=runtime.model_semaphore,
+            http_client=runtime.ollama_http_client,
+            memory_enabled=memory_enabled,
+        )
 
     yield encode_sse_event("done", {})
 
@@ -372,25 +410,69 @@ async def stream_chat(
 
     try:
         async with session_factory() as session, session.begin():
+            agent_id = requested_agent_id(request) if payload.thread_id is None else None
             started = await start_run(
                 session,
                 thread_id=payload.thread_id,
                 user_content=payload.message,
                 model_name=get_settings().ollama_model,
                 user_id=user.id,
+                agent_id=agent_id,
             )
     except ThreadNotFoundError as error:
         raise HTTPException(status_code=404, detail="Thread not found") from error
+    except AgentNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Agent not found") from error
     except ThreadBusyError as error:
         raise HTTPException(status_code=409, detail="Thread is already running") from error
 
     try:
         message_history = await load_thread_model_history(started.thread_id, user_id=user.id)
+        async with session_factory() as session:
+            thread = await session.get(Thread, started.thread_id)
+            if thread is None:
+                raise RuntimeError(f"Thread {started.thread_id} disappeared after starting its run")
+            version = await get_published_version(session, thread.agent_id)
+            memory_block = None
+            if version.memory_enabled:
+                try:
+                    memories = await load_relevant_memories(
+                        session,
+                        user_id=user.id,
+                        agent_id=thread.agent_id,
+                        message=payload.message,
+                        top_k=get_settings().memory_recall_top_k,
+                        max_chars=get_settings().memory_recall_max_chars,
+                    )
+                    memory_block = format_memory_block(memories)
+                except Exception:
+                    logger.exception("memory recall failed; continuing without memories")
+        runtime = get_runtime(request)
+        agent = runtime.build_run_agent(
+            system_prompt_overlay=version.system_prompt_overlay,
+            tool_policy_overrides=version.tool_policy_overrides,
+            memory_block=memory_block,
+        )
+    except PublishedAgentVersionNotFoundError as error:
+        logger.exception("Agent version unavailable for run %s", started.run_id)
+        await persist_failed_run(started.run_id)
+        raise HTTPException(
+            status_code=409,
+            detail="Agent configuration has no published version",
+        ) from error
     except (ThreadNotFoundError, ValidationError) as error:
-        logger.exception("Unable to load model history for thread %s", started.thread_id)
+        logger.exception("Unable to prepare chat run %s", started.run_id)
+        await persist_failed_run(started.run_id)
         raise HTTPException(
             status_code=500,
             detail="Conversation history is unavailable",
+        ) from error
+    except Exception as error:
+        logger.exception("Unable to prepare chat run %s", started.run_id)
+        await persist_failed_run(started.run_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to start agent execution",
         ) from error
 
     return StreamingResponse(
@@ -399,8 +481,12 @@ async def stream_chat(
             payload.message,
             started.thread_id,
             started.run_id,
+            user.id,
+            thread.agent_id,
+            version.memory_enabled,
             message_history,
-            get_runtime(request),
+            runtime,
+            agent,
         ),
         media_type="text/event-stream",
         headers={

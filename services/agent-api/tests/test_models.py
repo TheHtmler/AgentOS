@@ -1,5 +1,7 @@
 from agent_api.db.base import Base
 from agent_api.db.models import (
+    Agent,
+    AgentVersion,
     AuthToken,
     Interrupt,
     Message,
@@ -8,6 +10,7 @@ from agent_api.db.models import (
     RunMessageHistory,
     Thread,
     User,
+    UserMemory,
     UserSession,
 )
 
@@ -19,6 +22,9 @@ def test_core_model_tables_are_registered() -> None:
         "users",
         "auth_tokens",
         "user_sessions",
+        "agents",
+        "agent_versions",
+        "user_memories",
         "threads",
         "messages",
         "runs",
@@ -31,6 +37,9 @@ def test_core_model_tables_are_registered() -> None:
         User.__tablename__,
         AuthToken.__tablename__,
         UserSession.__tablename__,
+        Agent.__tablename__,
+        AgentVersion.__tablename__,
+        UserMemory.__tablename__,
         Thread.__tablename__,
         Message.__tablename__,
         Run.__tablename__,

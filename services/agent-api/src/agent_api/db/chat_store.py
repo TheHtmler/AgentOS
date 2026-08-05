@@ -7,7 +7,15 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_api.db.models import Interrupt, Message, Run, RunEvent, RunMessageHistory, Thread
+from agent_api.db.agent_store import resolve_agent_for_new_thread
+from agent_api.db.models import (
+    Interrupt,
+    Message,
+    Run,
+    RunEvent,
+    RunMessageHistory,
+    Thread,
+)
 from agent_api.hitl_types import ApprovalRequest, InterruptDecision
 
 
@@ -44,6 +52,7 @@ class ThreadListItem:
     """One recent conversation summary for the chat navigation."""
 
     id: UUID
+    agent_id: UUID
     title: str | None
     latest_message_content: str | None
     updated_at: datetime
@@ -62,8 +71,13 @@ class ThreadToolCallItem:
     after_message_id: UUID
 
 
-async def _create_thread(session: AsyncSession, *, user_id: UUID) -> Thread:
-    thread = Thread(user_id=user_id)
+async def _create_thread(
+    session: AsyncSession,
+    *,
+    user_id: UUID | None,
+    agent_id: UUID,
+) -> Thread:
+    thread = Thread(user_id=user_id, agent_id=agent_id)
     session.add(thread)
     await session.flush()
     return thread
@@ -294,6 +308,7 @@ async def list_threads(
     *,
     limit: int,
     user_id: UUID,
+    agent_id: UUID | None = None,
 ) -> list[ThreadListItem]:
     """Return recent Threads with a render-safe latest-message preview."""
 
@@ -305,19 +320,21 @@ async def list_threads(
         .scalar_subquery()
     )
 
+    statement = select(Thread, latest_message_content).where(
+        Thread.user_id == user_id,
+        Thread.deleted_at.is_(None),
+    )
+    if agent_id is not None:
+        statement = statement.where(Thread.agent_id == agent_id)
+
     result = await session.execute(
-        select(Thread, latest_message_content)
-        .where(
-            Thread.user_id == user_id,
-            Thread.deleted_at.is_(None),
-        )
-        .order_by(Thread.updated_at.desc(), Thread.id.desc())
-        .limit(limit),
+        statement.order_by(Thread.updated_at.desc(), Thread.id.desc()).limit(limit),
     )
 
     return [
         ThreadListItem(
             id=thread.id,
+            agent_id=thread.agent_id,
             title=thread.title,
             latest_message_content=message_content,
             updated_at=thread.updated_at,
@@ -441,6 +458,7 @@ async def start_run(
     user_content: str,
     model_name: str,
     user_id: UUID | None = None,
+    agent_id: UUID | None = None,
 ) -> StartedRun:
     """Record a user message and a running execution in the caller's transaction.
 
@@ -449,13 +467,14 @@ async def start_run(
     """
 
     if thread_id is None:
-        if user_id is None:
-            thread = Thread()
-            session.add(thread)
-            await session.flush()
-        else:
-            thread = await _create_thread(session, user_id=user_id)
+        resolved_agent_id = await resolve_agent_for_new_thread(session, agent_id)
+        thread = await _create_thread(
+            session,
+            user_id=user_id,
+            agent_id=resolved_agent_id,
+        )
     else:
+        # Existing Threads retain their Agent to preserve conversation isolation.
         if user_id is None:
             thread = await _get_active_thread(
                 session,

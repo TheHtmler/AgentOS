@@ -1,7 +1,20 @@
 import pytest
 
-from agent_api.agent import create_agent, create_ollama_http_client
+from agent_api.agent import build_instructions, create_agent, create_ollama_http_client
 from agent_api.config import Settings
+
+
+def test_build_instructions_appends_overlay_and_memory() -> None:
+    text = build_instructions(
+        overlay="你是育儿顾问。",
+        memory_block="## Known user facts\n- [身高] 75cm",
+        mounted_names=set(),
+    )
+
+    assert "AgentOS assistant" in text
+    assert "育儿顾问" in text
+    assert "Known user facts" in text
+    assert "75cm" in text
 
 
 def test_default_settings() -> None:

@@ -38,6 +38,7 @@ type TimelineStep = ThinkingStepState | ToolTimelineStep;
 
 type ThreadHistory = {
   thread_id: string;
+  agent_id: string;
   messages: ChatMessage[];
   toolCalls: ToolCallState[];
 };
@@ -96,13 +97,16 @@ async function loadRunApprovalState(runId: string): Promise<{
 
 type ChatPanelProps = {
   selectedThreadId: string | null | undefined;
+  agentId: string | null;
+  agentLoadError: string | null;
   /** When false, this panel stays mounted for background runs but must not own the URL/inspector. */
   isActive?: boolean;
+  onRetryAgentLoad: () => void;
   onNewConversation: () => void;
   onRunStarted: (runId: string) => void;
   onStreamingChanged: (isStreaming: boolean) => void;
   onAwaitingApprovalChanged?: (isAwaiting: boolean) => void;
-  onThreadChanged: (threadId: string | null) => void;
+  onThreadChanged: (threadId: string | null, agentId?: string) => void;
   onRunFinalized: () => void;
 };
 
@@ -181,6 +185,8 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
     !isRecord(value) ||
     typeof value.thread_id !== "string" ||
     !isUuid(value.thread_id) ||
+    typeof value.agent_id !== "string" ||
+    !isUuid(value.agent_id) ||
     !Array.isArray(value.messages)
   ) {
     return null;
@@ -212,7 +218,7 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
     return null;
   }
 
-  return { thread_id: value.thread_id, messages, toolCalls };
+  return { thread_id: value.thread_id, agent_id: value.agent_id, messages, toolCalls };
 }
 
 function toAgentMessages(messages: ChatMessage[]): Message[] {
@@ -308,11 +314,12 @@ function mergeHistoryToolCalls(
   return merged;
 }
 
-function createAgent(threadId: string, messages: ChatMessage[]): HttpAgent {
+function createAgent(threadId: string, messages: ChatMessage[], agentId: string | null): HttpAgent {
   return new HttpAgent({
     url: "/api/ag-ui/runs",
     threadId,
     initialMessages: toAgentMessages(messages),
+    headers: agentId === null ? {} : { "X-AgentOS-Agent-Id": agentId },
   });
 }
 
@@ -361,7 +368,10 @@ async function loadRunDurationLabel(runId: string): Promise<string | null> {
 
 export function ChatPanel({
   selectedThreadId,
+  agentId,
+  agentLoadError,
   isActive = true,
+  onRetryAgentLoad,
   onNewConversation,
   onRunStarted,
   onStreamingChanged,
@@ -404,7 +414,7 @@ export function ChatPanel({
   isActiveRef.current = isActive;
 
   if (agentRef.current === null) {
-    agentRef.current = createAgent("new", []);
+    agentRef.current = createAgent("new", [], agentId);
   }
 
   useEffect(() => {
@@ -512,6 +522,12 @@ export function ChatPanel({
       agentRef.current?.abortRun();
     };
   }, []);
+
+  useEffect(() => {
+    if (threadId === null && !isStreaming) {
+      agentRef.current = createAgent("new", messages, agentId);
+    }
+  }, [agentId, isStreaming, messages, threadId]);
 
   useEffect(() => {
     if (
@@ -632,7 +648,7 @@ export function ChatPanel({
         }
 
         if (isCurrent) {
-          agentRef.current = createAgent(history.thread_id, history.messages);
+          agentRef.current = createAgent(history.thread_id, history.messages, agentId);
           setMessages(history.messages);
           setThreadId(history.thread_id);
           setTimelineSteps([]);
@@ -643,7 +659,7 @@ export function ChatPanel({
           if (isActiveRef.current) {
             updateThreadInUrl(history.thread_id);
           }
-          onThreadChanged(history.thread_id);
+          onThreadChanged(history.thread_id, history.agent_id);
         }
       } catch (caughtError: unknown) {
         if (isCurrent && !controller.signal.aborted) {
@@ -661,7 +677,7 @@ export function ChatPanel({
       isCurrent = false;
       controller.abort();
     };
-  }, [historyRefreshKey, onThreadChanged, selectedThreadId, threadId]);
+  }, [agentId, historyRefreshKey, onThreadChanged, selectedThreadId, threadId]);
 
   function scrollMessagesToBottom(behavior: ScrollBehavior = "auto") {
     const viewport = messagesViewportRef.current;
@@ -1127,6 +1143,19 @@ export function ChatPanel({
         </div>
       </header>
 
+      {agentLoadError !== null ? (
+        <div role="alert" className="agentos-chat-error border-b px-5 py-3 text-sm">
+          无法加载 Agent 列表，将使用默认 Agent 继续对话。
+          <button
+            type="button"
+            onClick={onRetryAgentLoad}
+            className="ml-3 underline underline-offset-2"
+          >
+            重试
+          </button>
+        </div>
+      ) : null}
+
       <div
         ref={messagesViewportRef}
         onScroll={handleMessageScroll}
@@ -1340,7 +1369,10 @@ export function ChatPanel({
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={handleKeyDown}
           disabled={
-            isStreaming || isLoadingHistory || historyLoadFailed || pendingInterrupts.length > 0
+            isStreaming ||
+            isLoadingHistory ||
+            historyLoadFailed ||
+            pendingInterrupts.length > 0
           }
           maxLength={4_000}
           placeholder={

@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     hitl_approval_timeout_seconds: int = 1_800
     auto_thread_title_enabled: bool = True
     auto_thread_title_timeout_seconds: float = 30.0
+    memory_extract_enabled: bool = True
+    memory_extract_timeout_seconds: float = 30.0
+    memory_recall_top_k: int = 8
+    memory_recall_max_chars: int = 2_000
 
     @field_validator("database_url")
     @classmethod
@@ -152,6 +156,22 @@ class Settings(BaseSettings):
     def auto_thread_title_timeout_seconds_must_be_positive(cls, value: float) -> float:
         if value <= 0:
             raise ValueError("auto_thread_title_timeout_seconds must be greater than 0")
+
+        return value
+
+    @field_validator("memory_extract_timeout_seconds")
+    @classmethod
+    def memory_extract_timeout_seconds_must_be_positive(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("memory_extract_timeout_seconds must be greater than 0")
+
+        return value
+
+    @field_validator("memory_recall_top_k", "memory_recall_max_chars")
+    @classmethod
+    def memory_recall_limits_must_be_positive(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("memory recall limits must be at least 1")
 
         return value
 
