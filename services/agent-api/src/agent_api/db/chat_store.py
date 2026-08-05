@@ -7,7 +7,15 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_api.db.models import Interrupt, Message, Run, RunEvent, RunMessageHistory, Thread
+from agent_api.db.models import (
+    Agent,
+    Interrupt,
+    Message,
+    Run,
+    RunEvent,
+    RunMessageHistory,
+    Thread,
+)
 from agent_api.hitl_types import ApprovalRequest, InterruptDecision
 
 
@@ -62,8 +70,20 @@ class ThreadToolCallItem:
     after_message_id: UUID
 
 
-async def _create_thread(session: AsyncSession, *, user_id: UUID) -> Thread:
-    thread = Thread(user_id=user_id)
+async def _create_thread(session: AsyncSession, *, user_id: UUID | None) -> Thread:
+    default_agent_id = await session.scalar(
+        select(Agent.id)
+        .where(
+            Agent.is_default.is_(True),
+            Agent.status == "active",
+        )
+        .limit(1),
+    )
+    if default_agent_id is None:
+        raise RuntimeError("No active default Agent is configured")
+
+    # The partial unique index guarantees concurrent creators resolve to the same default Agent.
+    thread = Thread(user_id=user_id, agent_id=default_agent_id)
     session.add(thread)
     await session.flush()
     return thread
@@ -449,12 +469,7 @@ async def start_run(
     """
 
     if thread_id is None:
-        if user_id is None:
-            thread = Thread()
-            session.add(thread)
-            await session.flush()
-        else:
-            thread = await _create_thread(session, user_id=user_id)
+        thread = await _create_thread(session, user_id=user_id)
     else:
         if user_id is None:
             thread = await _get_active_thread(

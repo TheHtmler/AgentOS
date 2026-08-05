@@ -1,10 +1,8 @@
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.config import get_settings
 from agent_api.db.chat_store import (
@@ -18,24 +16,6 @@ from agent_api.db.chat_store import (
     start_run,
 )
 from agent_api.db.models import Run, RunEvent, RunMessageHistory, Thread
-
-
-@pytest.fixture
-async def database_session() -> AsyncIterator[AsyncSession]:
-    """Create an event-loop-local database connection for each AnyIO test."""
-
-    # asyncpg connections cannot be reused across pytest's separate event loops.
-    engine = create_async_engine(
-        get_settings().database_url,
-        poolclass=NullPool,
-    )
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    try:
-        async with factory() as session:
-            yield session
-    finally:
-        await engine.dispose()
 
 
 @pytest.mark.anyio

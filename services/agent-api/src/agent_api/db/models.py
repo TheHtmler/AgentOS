@@ -13,7 +13,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -104,6 +104,123 @@ class UserSession(Base):
     )
 
 
+class Agent(Base):
+    """A selectable general-purpose or vertical agent."""
+
+    __tablename__ = "agents"
+    __table_args__ = (
+        CheckConstraint("kind IN ('general', 'vertical')", name="ck_agents_kind"),
+        CheckConstraint("status IN ('active', 'disabled')", name="ck_agents_status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    is_default: Mapped[bool] = mapped_column(
+        server_default=text("false"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(16),
+        server_default=text("'active'"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class AgentVersion(Base):
+    """An immutable configuration revision for one Agent."""
+
+    __tablename__ = "agent_versions"
+    __table_args__ = (
+        UniqueConstraint("agent_id", "version", name="uq_agent_versions_agent_version"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    agent_id: Mapped[UUID] = mapped_column(
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    system_prompt_overlay: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_policy_overrides: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    memory_enabled: Mapped[bool] = mapped_column(
+        server_default=text("false"),
+        nullable=False,
+    )
+    is_published: Mapped[bool] = mapped_column(
+        server_default=text("false"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+class UserMemory(Base):
+    """A user fact scoped to one Agent's memory policy."""
+
+    __tablename__ = "user_memories"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'archived')",
+            name="ck_user_memories_status",
+        ),
+        Index("ix_user_memories_user_agent_status", "user_id", "agent_id", "status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    agent_id: Mapped[UUID] = mapped_column(
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        server_default=text("'{}'"),
+        nullable=False,
+    )
+    # JSONB keeps the MVP portable until a pgvector retrieval design is selected.
+    embedding: Mapped[list[float] | None] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        server_default=text("'active'"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class Thread(Base):
     """A durable conversation container owned by one authenticated user."""
 
@@ -115,6 +232,11 @@ class Thread(Base):
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         index=True,
+    )
+    agent_id: Mapped[UUID] = mapped_column(
+        ForeignKey("agents.id"),
+        index=True,
+        nullable=False,
     )
     title: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
