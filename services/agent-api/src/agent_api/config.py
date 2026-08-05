@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     memory_extract_timeout_seconds: float = 30.0
     memory_recall_top_k: int = 8
     memory_recall_max_chars: int = 2_000
+    # Note-memory hybrid recall via OpenAI-compatible /embeddings (Ollama).
+    memory_embedding_enabled: bool = True
+    memory_embedding_model: str = "nomic-embed-text"
     # Injected into every Run as the authoritative "now" / language preference.
     runtime_timezone: str = "Asia/Shanghai"
     runtime_locale: str = "zh-CN"

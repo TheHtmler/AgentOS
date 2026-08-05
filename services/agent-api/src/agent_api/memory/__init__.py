@@ -1,1 +1,1 @@
-"""Keyword recall and asynchronous extraction of Agent-scoped user memories."""
+"""Profile + hybrid note memory for Agent-scoped user facts."""

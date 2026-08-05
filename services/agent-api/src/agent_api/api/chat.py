@@ -434,6 +434,7 @@ async def stream_chat(
                 raise RuntimeError(f"Thread {started.thread_id} disappeared after starting its run")
             version = await get_published_version(session, thread.agent_id)
             memory_block = None
+            runtime = get_runtime(request)
             if version.memory_enabled:
                 try:
                     memories = await load_relevant_memories(
@@ -443,11 +444,11 @@ async def stream_chat(
                         message=payload.message,
                         top_k=get_settings().memory_recall_top_k,
                         max_chars=get_settings().memory_recall_max_chars,
+                        http_client=runtime.ollama_http_client,
                     )
                     memory_block = format_memory_block(memories)
                 except Exception:
                     logger.exception("memory recall failed; continuing without memories")
-        runtime = get_runtime(request)
         agent = runtime.build_run_agent(
             system_prompt_overlay=version.system_prompt_overlay,
             tool_policy_overrides=version.tool_policy_overrides,

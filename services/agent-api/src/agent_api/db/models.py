@@ -282,7 +282,11 @@ class KnowledgeChunk(Base):
 
 
 class UserMemory(Base):
-    """A user fact scoped to one Agent's memory policy."""
+    """A user fact scoped to one Agent's memory policy.
+
+    ``profile`` rows are keyed slots (height/weight/…) always injected.
+    ``note`` rows are free-text facts retrieved by keyword + embedding hybrid.
+    """
 
     __tablename__ = "user_memories"
     __table_args__ = (
@@ -290,7 +294,28 @@ class UserMemory(Base):
             "status IN ('active', 'archived')",
             name="ck_user_memories_status",
         ),
+        CheckConstraint(
+            "kind IN ('profile', 'note')",
+            name="ck_user_memories_kind",
+        ),
         Index("ix_user_memories_user_agent_status", "user_id", "agent_id", "status"),
+        Index(
+            "ix_user_memories_user_agent_kind_status",
+            "user_id",
+            "agent_id",
+            "kind",
+            "status",
+        ),
+        Index(
+            "uq_user_memories_active_profile_key",
+            "user_id",
+            "agent_id",
+            "key",
+            unique=True,
+            postgresql_where=text(
+                "kind = 'profile' AND status = 'active' AND key IS NOT NULL",
+            ),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -310,13 +335,20 @@ class UserMemory(Base):
     source_run_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("runs.id", ondelete="SET NULL"),
     )
+    kind: Mapped[str] = mapped_column(
+        String(16),
+        server_default=text("'note'"),
+        nullable=False,
+    )
+    # Profile slot id such as height_cm / weight_kg; null for free-text notes.
+    key: Mapped[str | None] = mapped_column(String(64))
     content: Mapped[str] = mapped_column(Text, nullable=False)
     tags: Mapped[list[str]] = mapped_column(
         ARRAY(Text),
         server_default=text("'{}'"),
         nullable=False,
     )
-    # JSONB keeps the MVP portable until a pgvector retrieval design is selected.
+    # Dense vector as JSON array (Ollama embeddings); null when embedding is off/failed.
     embedding: Mapped[list[float] | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(
         String(16),

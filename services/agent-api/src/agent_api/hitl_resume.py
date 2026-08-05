@@ -86,6 +86,7 @@ async def continue_run_after_approval(
                         message=prompt,
                         top_k=get_settings().memory_recall_top_k,
                         max_chars=get_settings().memory_recall_max_chars,
+                        http_client=runtime.ollama_http_client,
                     )
                     memory_block = format_memory_block(memories)
                 except Exception:

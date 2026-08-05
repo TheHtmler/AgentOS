@@ -11,30 +11,41 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent_api.db.memory_store import list_active_memories
 from agent_api.db.models import Agent, User
 from agent_api.memory.extract import (
-    extract_measurement_facts,
-    merge_fact_lists,
+    ExtractedMemoryPayload,
+    parse_extracted_payload,
     schedule_memory_extract,
     upsert_extracted_facts,
+    upsert_extracted_memory,
 )
+from agent_api.memory.profile import normalize_profile_value
 from agent_api.thread_title import schedule_auto_thread_title
 
 
-def test_extract_measurement_facts_from_chinese_message() -> None:
-    facts = extract_measurement_facts("男宝，身高 86cm，体重 12.5kg，今天体检")
-    primary_tags = {
-        cast(list[str], fact["tags"])[0]
-        for fact in facts
-        if isinstance(fact.get("tags"), list)
-    }
-    contents = [str(fact["content"]) for fact in facts]
-    assert {"身高", "体重"} <= primary_tags
-    assert any("86" in content for content in contents)
-    assert any("12.5" in content for content in contents)
+def test_normalize_profile_slots() -> None:
+    assert normalize_profile_value("height_cm", 86) == ("height_cm", ["身高"], "身高 86cm")
+    assert normalize_profile_value("weight_kg", 12.5) == ("weight_kg", ["体重"], "体重 12.5kg")
+    assert normalize_profile_value("sex", "男") == ("sex", ["性别"], "性别 男")
+    assert normalize_profile_value("height_cm", -1) is None
+
+
+def test_parse_structured_and_legacy_payloads() -> None:
+    structured = parse_extracted_payload(
+        {
+            "profile": {"height_cm": 86, "weight_kg": 12, "ignored": 1},
+            "notes": [{"content": "对花生过敏", "tags": ["过敏"]}],
+        },
+    )
+    assert structured.profile == {"height_cm": 86, "weight_kg": 12}
+    assert structured.notes[0]["tags"] == ["过敏"]
+
+    legacy = parse_extracted_payload(
+        [{"content": "宝宝身高 75cm", "tags": ["身高"], "op": "upsert"}],
+    )
+    assert legacy.profile == {}
+    assert legacy.notes[0]["content"] == "宝宝身高 75cm"
 
 
 def test_post_complete_scheduler_signatures_match_call_sites() -> None:
-    """Title jobs omit memory_enabled; extract jobs require it (avoids TypeError on done)."""
-
     title_params = inspect.signature(schedule_auto_thread_title).parameters
     extract_params = inspect.signature(schedule_memory_extract).parameters
     assert "memory_enabled" not in title_params
@@ -43,45 +54,42 @@ def test_post_complete_scheduler_signatures_match_call_sites() -> None:
 
 
 @pytest.mark.anyio
-async def test_upsert_archives_previous_same_primary_tag(database_session: AsyncSession) -> None:
-    """A newer fact replaces the active memory for its primary tag."""
-
+async def test_upsert_profile_replaces_same_slot(database_session: AsyncSession) -> None:
     user = User(email=f"memory-test-{uuid4().hex}@example.com", status="active")
     database_session.add(user)
     agent = await database_session.scalar(select(Agent).where(Agent.slug == "imd"))
     assert agent is not None
     await database_session.flush()
 
-    await upsert_extracted_facts(
+    await upsert_extracted_memory(
         database_session,
         user_id=user.id,
         agent_id=agent.id,
-        facts=[{"content": "宝宝身高 75cm", "tags": ["身高"], "op": "upsert"}],
+        payload=ExtractedMemoryPayload(profile={"height_cm": 75}),
         source_thread_id=None,
         source_run_id=None,
     )
-    await upsert_extracted_facts(
+    await upsert_extracted_memory(
         database_session,
         user_id=user.id,
         agent_id=agent.id,
-        facts=[{"content": "宝宝身高 78cm", "tags": ["身高"], "op": "upsert"}],
+        payload=ExtractedMemoryPayload(profile={"height_cm": 78}),
         source_thread_id=None,
         source_run_id=None,
     )
     await database_session.flush()
 
     active = await list_active_memories(database_session, user_id=user.id, agent_id=agent.id)
-
-    assert len([memory for memory in active if "身高" in memory.tags]) == 1
-    assert "78" in active[0].content
+    heights = [memory for memory in active if memory.key == "height_cm"]
+    assert len(heights) == 1
+    assert "78" in heights[0].content
+    assert heights[0].kind == "profile"
 
 
 @pytest.mark.anyio
 async def test_upsert_does_not_archive_an_adjacent_secondary_tag(
     database_session: AsyncSession,
 ) -> None:
-    """Only the primary tag defines the replacement group."""
-
     user = User(email=f"memory-tags-{uuid4().hex}@example.com", status="active")
     database_session.add(user)
     agent = await database_session.scalar(select(Agent).where(Agent.slug == "imd"))
@@ -107,61 +115,45 @@ async def test_upsert_does_not_archive_an_adjacent_secondary_tag(
     await database_session.flush()
 
     active = await list_active_memories(database_session, user_id=user.id, agent_id=agent.id)
-
     assert {memory.content for memory in active} == {"宝宝对花生过敏", "宝宝喜欢吃面条"}
 
 
 @pytest.mark.anyio
-async def test_regex_facts_persist_when_model_extract_is_empty(
+async def test_legacy_height_fact_becomes_profile_slot(
     database_session: AsyncSession,
 ) -> None:
-    """Local models that skip extraction still persist explicit 身高/体重."""
-
-    user = User(email=f"memory-regex-{uuid4().hex}@example.com", status="active")
+    user = User(email=f"memory-legacy-{uuid4().hex}@example.com", status="active")
     database_session.add(user)
     agent = await database_session.scalar(select(Agent).where(Agent.slug == "imd"))
     assert agent is not None
     await database_session.flush()
 
-    facts = merge_fact_lists(
-        extract_measurement_facts("宝宝身高 86cm，体重 12kg"),
-        [],
-    )
     await upsert_extracted_facts(
         database_session,
         user_id=user.id,
         agent_id=agent.id,
-        facts=facts,
+        facts=[{"content": "宝宝身高 86cm", "tags": ["身高"]}],
         source_thread_id=None,
         source_run_id=None,
     )
     await database_session.flush()
-
-    active = await list_active_memories(
-        database_session,
-        user_id=user.id,
-        agent_id=agent.id,
-    )
-    tags = {memory.tags[0] for memory in active if memory.tags}
-    assert {"身高", "体重"} <= tags
+    active = await list_active_memories(database_session, user_id=user.id, agent_id=agent.id)
+    assert active[0].kind == "profile"
+    assert active[0].key == "height_cm"
 
 
 @pytest.mark.anyio
-async def test_extract_schedule_does_not_call_extractor_when_memory_disabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A memory-disabled Agent exits before invoking extraction or writing rows."""
-
+async def test_extract_schedule_does_not_call_extractor_when_memory_disabled() -> None:
     extractor_called = False
 
     async def fake_extract(
         user_message: str,
         assistant_content: str,
         http_client: httpx.AsyncClient,
-    ) -> list[dict[str, object]]:
+    ) -> ExtractedMemoryPayload:
         nonlocal extractor_called
         extractor_called = True
-        return [{"content": "宝宝身高 75cm", "tags": ["身高"], "op": "upsert"}]
+        return ExtractedMemoryPayload(profile={"height_cm": 75})
 
     schedule_memory_extract(
         user_id=uuid4(),
@@ -173,8 +165,7 @@ async def test_extract_schedule_does_not_call_extractor_when_memory_disabled(
         model_semaphore=asyncio.Semaphore(1),
         http_client=cast(httpx.AsyncClient, object()),
         memory_enabled=False,
-        extract_facts=fake_extract,
+        extract_memory=fake_extract,
     )
     await asyncio.sleep(0)
-
     assert extractor_called is False
