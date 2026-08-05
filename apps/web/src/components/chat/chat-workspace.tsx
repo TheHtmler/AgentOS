@@ -500,7 +500,9 @@ export function ChatWorkspace({
                       onAwaitingApprovalChanged={(isAwaiting) =>
                         handleSlotAwaitingApprovalChanged(slot.key, isAwaiting)
                       }
-                      onThreadChanged={(threadId) => handleSlotThreadChanged(slot.key, threadId)}
+                      onThreadChanged={(threadId, agentId) =>
+                        handleSlotThreadChanged(slot.key, threadId, agentId)
+                      }
                       onRunFinalized={handleRunFinalized}
                     />
                   </div>
