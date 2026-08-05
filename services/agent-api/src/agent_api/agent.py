@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import httpx
 from pydantic_ai import Agent
 from pydantic_ai.models.ollama import OllamaModel
@@ -5,6 +7,7 @@ from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.tools import DeferredToolRequests
 
 from agent_api.config import get_settings
+from agent_api.runtime_context import format_runtime_context_pack
 from agent_api.tools.fetch.router import FetchRouter
 from agent_api.tools.policy import PolicyAction
 from agent_api.tools.registry import mounted_tool_names, mounted_tools
@@ -81,10 +84,21 @@ def build_instructions(
     overlay: str | None,
     memory_block: str | None,
     mounted_names: set[str],
+    timezone_name: str = "Asia/Shanghai",
+    locale: str = "zh-CN",
+    now: datetime | None = None,
 ) -> str:
-    """Assemble the platform base and agent-specific runtime instructions."""
+    """Assemble the platform base, runtime context pack, and agent-specific instructions."""
 
     sections = [SYSTEM_INSTRUCTIONS]
+    # Fresh every call so "today" stays correct without relying on model world knowledge.
+    sections.append(
+        format_runtime_context_pack(
+            now=now,
+            timezone_name=timezone_name,
+            locale=locale,
+        ),
+    )
     if overlay and overlay.strip():
         sections.append(overlay.strip())
     if memory_block and memory_block.strip():
@@ -157,6 +171,8 @@ def create_agent(
         overlay=system_prompt_overlay,
         memory_block=memory_block,
         mounted_names=mounted_names,
+        timezone_name=settings.runtime_timezone,
+        locale=settings.runtime_locale,
     )
 
     tools = mounted_tools(

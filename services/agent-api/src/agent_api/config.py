@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -51,6 +52,9 @@ class Settings(BaseSettings):
     memory_extract_timeout_seconds: float = 30.0
     memory_recall_top_k: int = 8
     memory_recall_max_chars: int = 2_000
+    # Injected into every Run as the authoritative "now" / language preference.
+    runtime_timezone: str = "Asia/Shanghai"
+    runtime_locale: str = "zh-CN"
 
     @field_validator("database_url")
     @classmethod
@@ -150,6 +154,26 @@ class Settings(BaseSettings):
             raise ValueError("fetch_url_max_chars must be between 1000 and 100000")
 
         return value
+
+    @field_validator("runtime_timezone")
+    @classmethod
+    def runtime_timezone_must_be_valid(cls, value: str) -> str:
+        name = value.strip()
+        if not name:
+            raise ValueError("runtime_timezone must not be empty")
+        try:
+            ZoneInfo(name)
+        except ZoneInfoNotFoundError as error:
+            raise ValueError(f"runtime_timezone is not a valid IANA zone: {name}") from error
+        return name
+
+    @field_validator("runtime_locale")
+    @classmethod
+    def runtime_locale_must_not_be_empty(cls, value: str) -> str:
+        name = value.strip()
+        if not name:
+            raise ValueError("runtime_locale must not be empty")
+        return name
 
     @field_validator("auto_thread_title_timeout_seconds")
     @classmethod

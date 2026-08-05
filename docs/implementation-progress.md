@@ -78,6 +78,7 @@
 - Run `completed` 后异步抽取用户事实（`agent_api/memory/extract.py`，同 auto-title 模式）；作用域 `user_id × agent_id`；`MEMORY_*` 环境变量可配置。
 - 前端侧栏 Agent 切换、按 Agent 过滤会话列表、新建对话转发 `X-AgentOS-Agent-Id`；打开 Thread 同步选中 Agent；深链 `?thread=` 从消息 API 恢复 `agent_id`。
 - 运维：`scripts/seed_agents.py` 可重复 upsert 内置 Agent 配置。
+- Runtime Context Pack：每次 Run 注入当前本地时间、时区、`RUNTIME_LOCALE` 与能力边界（不以模型内建「现在」为准）。
 
 ## 验证
 
@@ -105,4 +106,4 @@
 
 ## 下一步
 
-下一开发增量：按 `docs/12-domain-agents-and-patient-context.md` 建立 `PatientCase`、患者授权与私有上下文边界，再实现 MMA/PA 公共知识库与 `knowledge_search` RAG；Artifact 落库与 `read_artifact` 可并行推进。
+平台基础能力：通用基础工具（时间差/计算）与基础能力评测集；模型/Provider 档位。领域侧仍按 `docs/12-domain-agents-and-patient-context.md` 推进 PatientCase / 知识库 RAG。
