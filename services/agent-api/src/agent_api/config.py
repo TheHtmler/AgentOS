@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     growth_assess_enabled: bool = True
     # Built-in keyword search over curated knowledge_chunks.
     knowledge_search_enabled: bool = True
+    # Read confirmed Case facts for case-enabled Agents (mounted per-run when Case bound).
+    case_context_read_enabled: bool = True
     # Comma-separated tool names forced to deny/ask (deny wins if listed in both).
     tool_policy_deny: str = ""
     tool_policy_ask: str = ""

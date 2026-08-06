@@ -27,6 +27,7 @@ from agent_api.db.models import Interrupt, Thread
 from agent_api.db.session import session_factory
 from agent_api.hitl_pause import persist_deferred_approvals
 from agent_api.memory.extract import schedule_memory_extract
+from agent_api.case.recall import load_case_block
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import AgentRuntime
@@ -67,6 +68,8 @@ async def continue_run_after_approval(
         )
         prompt = ""
         memory_block = None
+        case_block = None
+        case_id = thread.case_id if thread is not None else None
         if thread is not None and version is not None:
             messages = await list_thread_messages(
                 session,
@@ -91,6 +94,11 @@ async def continue_run_after_approval(
                     memory_block = format_memory_block(memories)
                 except Exception:
                     logger.exception("memory recall failed; continuing without memories")
+            if version.case_enabled and case_id is not None:
+                try:
+                    case_block = await load_case_block(session, case_id=case_id)
+                except Exception:
+                    logger.exception("case recall failed; continuing without case block")
 
     if thread is None or version is None:
         logger.error("Missing thread for resume run_id=%s", run_id)
@@ -114,6 +122,8 @@ async def continue_run_after_approval(
         system_prompt_overlay=version.system_prompt_overlay,
         tool_policy_overrides=version.tool_policy_overrides,
         memory_block=memory_block,
+        case_block=case_block,
+        case_bound=case_id is not None,
     )
 
     try:
@@ -128,6 +138,7 @@ async def continue_run_after_approval(
                     search_router=runtime.search_router,
                     fetch_router=runtime.fetch_router,
                     run_id=run_id,
+                    case_id=case_id,
                 ),
             )
     except Exception:

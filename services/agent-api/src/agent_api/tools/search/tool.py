@@ -25,6 +25,7 @@ class AgentDeps:
     search_router: SearchRouter | None = None
     fetch_router: FetchRouter | None = None
     run_id: UUID | None = None
+    case_id: UUID | None = None
     persist_tool_events: bool = True
 
 

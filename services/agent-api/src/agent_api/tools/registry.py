@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic_ai import Tool
 
 from agent_api.config import Settings, get_settings
+from agent_api.tools.case.tool import case_context_read
 from agent_api.tools.fetch.tool import fetch_url
 from agent_api.tools.growth.tool import growth_assess
 from agent_api.tools.knowledge.tool import knowledge_search
@@ -24,6 +25,7 @@ class ToolDomain(StrEnum):
     FETCH = "fetch"
     GROWTH = "growth"
     KNOWLEDGE = "knowledge"
+    CASE = "case"
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +75,14 @@ _BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         description="Keyword search over curated disease knowledge chunks",
         handler=knowledge_search,
     ),
+    ToolSpec(
+        name="case_context_read",
+        domain=ToolDomain.CASE,
+        risk="read",
+        default_action=PolicyAction.ALLOW,
+        description="Read confirmed facts from the Case archive bound to this thread",
+        handler=case_context_read,
+    ),
 )
 
 
@@ -99,6 +109,8 @@ def is_tool_enabled(spec: ToolSpec, settings: Settings | None = None) -> bool:
         return cfg.growth_assess_enabled
     if spec.domain == ToolDomain.KNOWLEDGE:
         return cfg.knowledge_search_enabled
+    if spec.domain == ToolDomain.CASE:
+        return cfg.case_context_read_enabled
     return False
 
 
@@ -109,12 +121,14 @@ def should_mount_tool(
     fetch_router_present: bool,
     settings: Settings | None = None,
     overrides: dict[str, PolicyAction] | None = None,
+    case_bound: bool = False,
 ) -> bool:
     """Decide whether the tool is exposed to the model.
 
     Deny (default or env override) keeps the tool out of the model context entirely.
     Ask still mounts so the model can request it; execution is blocked in the wrapper.
     Built-in local tools (growth / knowledge) do not require search/fetch routers.
+    Case tools mount only when the Thread has a bound Case.
     """
 
     cfg = settings or get_settings()
@@ -124,6 +138,8 @@ def should_mount_tool(
     if spec.domain == ToolDomain.SEARCH and not search_router_present:
         return False
     if spec.domain == ToolDomain.FETCH and not fetch_router_present:
+        return False
+    if spec.domain == ToolDomain.CASE and not case_bound:
         return False
 
     # Hide denied tools from the model; ask/allow remain callable.
@@ -136,6 +152,7 @@ def mounted_tool_handlers(
     fetch_router_present: bool,
     settings: Settings | None = None,
     overrides: dict[str, PolicyAction] | None = None,
+    case_bound: bool = False,
 ) -> list[Callable[..., object]]:
     """Return raw handlers (tests / legacy). Prefer `mounted_tools` for agents."""
 
@@ -146,6 +163,7 @@ def mounted_tool_handlers(
             fetch_router_present=fetch_router_present,
             settings=settings,
             overrides=overrides,
+            case_bound=case_bound,
         )
     ]
 
@@ -156,6 +174,7 @@ def mounted_tools(
     fetch_router_present: bool,
     settings: Settings | None = None,
     overrides: dict[str, PolicyAction] | None = None,
+    case_bound: bool = False,
 ) -> list[Tool[AgentDeps]]:
     """Build Pydantic AI Tool objects, marking ask-policy tools for deferred approval."""
 
@@ -168,6 +187,7 @@ def mounted_tools(
             fetch_router_present=fetch_router_present,
             settings=cfg,
             overrides=overrides,
+            case_bound=case_bound,
         ):
             continue
         action = evaluate(spec.name, settings=cfg, overrides=overrides)
@@ -187,6 +207,7 @@ def mounted_tool_names(
     fetch_router_present: bool,
     settings: Settings | None = None,
     overrides: dict[str, PolicyAction] | None = None,
+    case_bound: bool = False,
 ) -> set[str]:
     cfg = settings or get_settings()
     return {
@@ -198,5 +219,6 @@ def mounted_tool_names(
             fetch_router_present=fetch_router_present,
             settings=cfg,
             overrides=overrides,
+            case_bound=case_bound,
         )
     }

@@ -36,6 +36,7 @@ from agent_api.db.models import Thread, User
 from agent_api.db.session import session_factory
 from agent_api.hitl_pause import persist_deferred_approvals
 from agent_api.memory.extract import schedule_memory_extract
+from agent_api.case.recall import load_case_block
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import get_runtime
@@ -142,6 +143,8 @@ async def stream_ag_ui_run(
                 raise RuntimeError(f"Thread {started.thread_id} disappeared after starting its run")
             version = await get_published_version(session, thread.agent_id)
             memory_block = None
+            case_block = None
+            case_id = thread.case_id
             runtime = get_runtime(request)
             if version.memory_enabled:
                 try:
@@ -157,11 +160,18 @@ async def stream_ag_ui_run(
                     memory_block = format_memory_block(memories)
                 except Exception:
                     logger.exception("memory recall failed; continuing without memories")
+            if version.case_enabled and case_id is not None:
+                try:
+                    case_block = await load_case_block(session, case_id=case_id)
+                except Exception:
+                    logger.exception("case recall failed; continuing without case block")
 
         agent = runtime.build_run_agent(
             system_prompt_overlay=version.system_prompt_overlay,
             tool_policy_overrides=version.tool_policy_overrides,
             memory_block=memory_block,
+            case_block=case_block,
+            case_bound=case_id is not None,
         )
     except PublishedAgentVersionNotFoundError as error:
         logger.exception("Agent version unavailable for run %s", started.run_id)
@@ -218,6 +228,7 @@ async def stream_ag_ui_run(
                         search_router=runtime.search_router,
                         fetch_router=runtime.fetch_router,
                         run_id=started.run_id,
+                        case_id=case_id,
                     ),
                 ):
                     if text := text_from_native_event(event):

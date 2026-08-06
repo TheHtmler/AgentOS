@@ -106,11 +106,18 @@ the curated base is insufficient or the user needs a newer external page.
 
 MEMORY_HEADER = "## Known user facts (for this agent only; use when relevant)"
 
+CASE_INSTRUCTIONS = """
+When a Case profile block is present, treat those facts as the durable subject archive
+for this conversation. Prefer case_context_read if you need to re-check confirmed slots.
+Do not invent Case facts. Object anthropometrics belong in the Case, not as guesses.
+"""
+
 
 def build_instructions(
     *,
     overlay: str | None,
     memory_block: str | None,
+    case_block: str | None = None,
     mounted_names: set[str],
     timezone_name: str = "Asia/Shanghai",
     locale: str = "zh-CN",
@@ -131,6 +138,8 @@ def build_instructions(
         sections.append(overlay.strip())
     if memory_block and memory_block.strip():
         sections.append(memory_block.strip())
+    if case_block and case_block.strip():
+        sections.append(case_block.strip())
     if "web_search" in mounted_names:
         sections.append(SEARCH_INSTRUCTIONS.strip())
     if "fetch_url" in mounted_names:
@@ -139,6 +148,8 @@ def build_instructions(
         sections.append(GROWTH_INSTRUCTIONS.strip())
     if "knowledge_search" in mounted_names:
         sections.append(KNOWLEDGE_INSTRUCTIONS.strip())
+    if "case_context_read" in mounted_names:
+        sections.append(CASE_INSTRUCTIONS.strip())
     return "\n\n".join(sections)
 
 
@@ -177,6 +188,8 @@ def create_agent(
     knowledge_enabled: bool | None = None,
     system_prompt_overlay: str | None = None,
     memory_block: str | None = None,
+    case_block: str | None = None,
+    case_bound: bool = False,
     tool_policy_overrides: dict[str, str] | None = None,
 ) -> Agent[AgentDeps, AgentOutput]:
     """Build a stateless agent; the caller owns and closes the HTTP client."""
@@ -203,11 +216,13 @@ def create_agent(
         fetch_router_present=fetch_present,
         settings=settings,
         overrides=policy_overrides,
+        case_bound=case_bound,
     )
 
     instructions = build_instructions(
         overlay=system_prompt_overlay,
         memory_block=memory_block,
+        case_block=case_block,
         mounted_names=mounted_names,
         timezone_name=settings.runtime_timezone,
         locale=settings.runtime_locale,
@@ -218,6 +233,7 @@ def create_agent(
         fetch_router_present=fetch_present,
         settings=settings,
         overrides=policy_overrides,
+        case_bound=case_bound,
     )
 
     model = OllamaModel(
