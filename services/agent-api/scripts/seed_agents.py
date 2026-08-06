@@ -41,6 +41,7 @@ class SeedAgentVersion:
     version: int
     system_prompt_overlay: str
     memory_enabled: bool
+    case_enabled: bool = False
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,7 @@ SEED_AGENTS: tuple[SeedAgent, ...] = (
             version=1,
             system_prompt_overlay="",
             memory_enabled=False,
+            case_enabled=False,
         ),
     ),
     SeedAgent(
@@ -84,6 +86,7 @@ SEED_AGENTS: tuple[SeedAgent, ...] = (
             version=1,
             system_prompt_overlay=IMD_OVERLAY,
             memory_enabled=True,
+            case_enabled=True,
         ),
     ),
 )
@@ -137,12 +140,14 @@ async def upsert_seed_agent(session: AsyncSession, spec: SeedAgent) -> None:
             version=version_spec.version,
             system_prompt_overlay=version_spec.system_prompt_overlay,
             memory_enabled=version_spec.memory_enabled,
+            case_enabled=version_spec.case_enabled,
             is_published=True,
         )
         session.add(version)
     else:
         version.system_prompt_overlay = version_spec.system_prompt_overlay
         version.memory_enabled = version_spec.memory_enabled
+        version.case_enabled = version_spec.case_enabled
         version.is_published = True
 
 

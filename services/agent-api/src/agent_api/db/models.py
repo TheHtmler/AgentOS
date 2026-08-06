@@ -161,6 +161,10 @@ class AgentVersion(Base):
         server_default=text("false"),
         nullable=False,
     )
+    case_enabled: Mapped[bool] = mapped_column(
+        server_default=text("false"),
+        nullable=False,
+    )
     is_published: Mapped[bool] = mapped_column(
         server_default=text("false"),
         nullable=False,
@@ -168,6 +172,155 @@ class AgentVersion(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
+        nullable=False,
+    )
+
+
+class Case(Base):
+    """A platform-generic subject archive owned by a user (not domain-specific)."""
+
+    __tablename__ = "cases"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'archived')",
+            name="ck_cases_status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    owner_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    display_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        server_default=text("'active'"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class CaseMembership(Base):
+    """Grants a user access to one Case (MVP: owner only)."""
+
+    __tablename__ = "case_memberships"
+    __table_args__ = (
+        CheckConstraint("role IN ('owner')", name="ck_case_memberships_role"),
+        UniqueConstraint("case_id", "user_id", name="uq_case_memberships_case_user"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    case_id: Mapped[UUID] = mapped_column(
+        ForeignKey("cases.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+class CaseFact(Base):
+    """A stable fact about one Case (proposed until confirmed)."""
+
+    __tablename__ = "case_facts"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('proposed', 'confirmed', 'rejected', 'archived')",
+            name="ck_case_facts_status",
+        ),
+        Index("ix_case_facts_case_status", "case_id", "status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    case_id: Mapped[UUID] = mapped_column(
+        ForeignKey("cases.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    key: Mapped[str | None] = mapped_column(String(64))
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        server_default=text("'{}'"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(16),
+        server_default=text("'proposed'"),
+        nullable=False,
+    )
+    source_thread_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("threads.id", ondelete="SET NULL"),
+    )
+    source_run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("runs.id", ondelete="SET NULL"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class UserAgentDefaultCase(Base):
+    """Per-user default Case for one Agent (avoids cross-vertical default clashes)."""
+
+    __tablename__ = "user_agent_default_cases"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "agent_id",
+            name="uq_user_agent_default_cases_user_agent",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    agent_id: Mapped[UUID] = mapped_column(
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    case_id: Mapped[UUID] = mapped_column(
+        ForeignKey("cases.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
         nullable=False,
     )
 
@@ -384,6 +537,10 @@ class Thread(Base):
         ForeignKey("agents.id"),
         index=True,
         nullable=False,
+    )
+    case_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("cases.id", ondelete="SET NULL"),
+        index=True,
     )
     title: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
