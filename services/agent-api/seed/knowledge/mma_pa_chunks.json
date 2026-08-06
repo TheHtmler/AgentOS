@@ -71,6 +71,42 @@
       "title": "生长随访与代谢病叠加",
       "tags": ["growth", "monitoring", "isolated_mma", "pa", "age_band:infant", "age_band:child"],
       "content": "MMA/PA 儿童需常规追踪身长/身高、体重与营养是否跟上限蛋白/配方方案。生长偏离可能来自能量不足、感染后消耗、慢性并发症或多因素叠加。教育回答可结合公开生长标准（如 WHO）做对照解读，但疾病特异性目标仍以代谢团队为准；急性症状时优先就医而非只谈百分位。"
+    },
+    {
+      "chunk_index": 10,
+      "title": "B12 反应型与非反应型 MMA 的区分",
+      "tags": ["cobalamin_disorder", "isolated_mma", "b12_responsive", "differential", "gene:MMAA", "gene:MMAB"],
+      "content": "部分 MMA 亚型（如 cblA/cblB 等，常与 MMAA/MMAB 相关）对羟钴胺或氰钴胺补充有代谢改善，称为 B12 反应型；经典 mut0 型等多为非反应型，长期管理重点在天然蛋白控制与应急方案，而非指望 B12 单药纠正。家庭教育应先确认基因分型与同型半胱氨酸结果，再谈「是否需要长期 B12」——不可把全部 MMA 都描述为同一种 B12 叙事。综述入口：GeneReviews Isolated Methylmalonic Acidemia（NBK1231）钴胺素缺陷章节；JIMD 2021 修订版对亚型分层管理有说明。教育向，非个体用药处方。"
+    },
+    {
+      "chunk_index": 11,
+      "title": "肾脏并发症概述（MMA/PA）",
+      "tags": ["renal", "complications", "isolated_mma", "monitoring", "age_band:child", "age_band:adolescent"],
+      "content": "MMA 患儿长期可见肾小管间质病变、慢性肾病乃至终末期肾病的风险，部分与甲基丙二酸蓄积及反复失代偿有关；PA 亦需关注肾功能与电解质。家庭教育重点：按代谢团队节奏复查尿常规、肾功能、血压与影像学安排，不要等出现明显水肿或尿量异常才首次评估。早期发现不等于立刻透析，而是与专科共同调整蛋白/能量与并发症筛查。参考：GeneReviews NBK1231 并发症章节；JIMD 2021 长期随访建议。本条目为风险教育，不替代个体肾科评估。"
+    },
+    {
+      "chunk_index": 12,
+      "title": "神经系统并发症概述（MMA/PA）",
+      "tags": ["neuro", "complications", "isolated_mma", "pa", "development", "age_band:infant", "age_band:child"],
+      "content": "MMA/PA 可伴发育迟缓、运动障碍、基底节信号异常、癫痫或认知受累，急性期亦可出现嗜睡、肌张力改变。解释时应区分：感染/代谢失代偿相关的可逆变化 vs 慢性神经损伤；二者处理 urgency 不同。家庭若见新发抽搐、持续嗜睡、步态突变或语言明显倒退，应联系代谢/神经专科或急诊，而非仅当作「慢慢会好」。神经影像与发育评估由主管团队安排。参考：GeneReviews MMA/PA 神经表现；JIMD 2021 神经发育随访框架。公共知识不存放个体 MRI/EEG 报告。"
+    },
+    {
+      "chunk_index": 13,
+      "title": "随访监测细节：频率与解读原则",
+      "tags": ["labs", "monitoring", "isolated_mma", "pa", "growth", "renal", "neuro"],
+      "content": "稳定期常见监测组合：血氨、血气/阴离子间隙、酰基肉碱与尿有机酸趋势、肝肾功能、血常规、营养与生长参数；亚型相关可加同型半胱氨酸、维生素 B12 水平或专项并发症筛查。频率由代谢团队按年龄与稳定性个体化（婴儿期通常更密，稳定儿童可适度延长间隔）。解读原则：与「自家基线」和主管目标区间比，而不是照搬健康儿童参考范围；单次轻度波动需结合是否感染、拒食或呕吐。计划外化验异常应反馈给代谢专科，家庭不宜自行停药或大幅改蛋白。框架见 JIMD 2021；GeneReviews 随访章节。不开具体复查日历。"
+    },
+    {
+      "chunk_index": 14,
+      "title": "感染期间的家庭指导",
+      "tags": ["infection", "acute", "emergency", "isolated_mma", "pa", "age_band:infant", "age_band:child"],
+      "content": "普通上感、发热、胃肠炎均可触发 MMA/PA 代谢失代偿。家庭侧：尽早联系代谢团队并按既定「生病日」方案执行（常包括额外能量摄入、更频监测、何时抽血/何时入院）；不要因食欲差而长时间零能量摄入。需升级就医的信号：持续呕吐、无法口服、呼吸深快、嗜睡加重、抽搐或主管医生定义的「红区」指标。抗生素等用药需告知代谢/儿科团队，避免自行使用高蛋白「增强免疫」偏方。管理原则参见 JIMD 2021 sick-day 章节；GeneReviews 急性处理概述。本摘要不给具体输液或药物剂量。"
+    },
+    {
+      "chunk_index": 15,
+      "title": "禁食与拒食期间的家庭指导",
+      "tags": ["fasting", "nutrition", "acute", "isolated_mma", "pa", "diet", "age_band:infant", "age_band:child"],
+      "content": "MMA/PA 患儿长时间空腹会显著增加分解代谢与失代偿风险，「先饿着等好了再吃」并不安全。轻度拒食时可优先在代谢/营养团队指导下使用医学配方、葡萄糖聚合物或既定应急能量方案维持摄入；无法保证 oral 摄入时应尽快联系专科，评估是否需静脉能量支持。手术、麻醉前禁食须由代谢团队与麻醉科共同制定方案，不可照搬普通儿童长时间禁食流程。与感染叠加时 urgency 更高。参考 JIMD 2021 代谢稳定与 sick-day 管理；GeneReviews 营养与急性代谢失代偿章节。公共知识不提供个体化 ml/kcal 处方。"
     }
   ]
 }
