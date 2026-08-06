@@ -1,10 +1,11 @@
-"""Built-in child growth assessment against WHO 2006 standards (via anthro)."""
+"""Built-in child growth assessment (WHO 2006 via anthro; NHC WS/T 423-2022 via SD tables)."""
 
 from __future__ import annotations
 
 import json
 import logging
 import math
+from datetime import date
 from typing import Any, cast
 from uuid import UUID
 
@@ -14,14 +15,28 @@ from agent_api.tools.search.tool import AgentDeps
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_STANDARDS = frozenset({"who-2006"})
-SOURCE_URL = "https://www.who.int/tools/child-growth-standards"
+WHO_SOURCE_URL = "https://www.who.int/tools/child-growth-standards"
+SUPPORTED_STANDARDS = frozenset({"who-2006", "nhc-wst-423-2022"})
+STANDARD_ALIASES: dict[str, str] = {
+    "who-2006": "who-2006",
+    "nhc-wst-423-2022": "nhc-wst-423-2022",
+    "nhc": "nhc-wst-423-2022",
+    "nhc-2022": "nhc-wst-423-2022",
+}
+DAYS_PER_MONTH = 365.25 / 12.0
 
 
 def z_to_percentile(z: float) -> float:
     """Approximate cumulative normal percentile for a z-score."""
 
     return round(100.0 * 0.5 * (1.0 + math.erf(z / math.sqrt(2.0))), 1)
+
+
+def _normalize_standard(standard: str) -> str | None:
+    key = standard.strip().lower()
+    if not key:
+        return "who-2006"
+    return STANDARD_ALIASES.get(key)
 
 
 def _normalize_sex(sex: str) -> str | None:
@@ -56,6 +71,27 @@ def _indicator_payload(z: object, label: str) -> dict[str, Any] | None:
     }
 
 
+def _resolve_age_months(
+    *,
+    age_months: float | None,
+    date_of_birth: str | None,
+    measured_on: str | None,
+) -> float | None:
+    if age_months is not None:
+        return float(age_months)
+    if not date_of_birth or not measured_on:
+        return None
+    try:
+        dob = date.fromisoformat(date_of_birth.strip())
+        measured = date.fromisoformat(measured_on.strip())
+    except ValueError:
+        return None
+    days = (measured - dob).days
+    if days < 0:
+        return None
+    return days / DAYS_PER_MONTH
+
+
 async def run_growth_assess(
     deps: AgentDeps,
     *,
@@ -67,7 +103,7 @@ async def run_growth_assess(
     measured_on: str | None = None,
     standard: str = "who-2006",
 ) -> str:
-    """Compute WHO growth z-scores/percentiles for unit tests and the tool wrapper."""
+    """Compute growth z-scores/percentiles for unit tests and the tool wrapper."""
 
     from agent_api.tools.policy import gate_or_none
 
@@ -75,13 +111,14 @@ async def run_growth_assess(
     if blocked is not None:
         return blocked
 
-    std = standard.strip().lower() or "who-2006"
-    if std not in SUPPORTED_STANDARDS:
+    std = _normalize_standard(standard)
+    if std is None or std not in SUPPORTED_STANDARDS:
         return json.dumps(
             {
                 "error": (
                     f"Unsupported standard '{standard}'. "
-                    "MVP supports only 'who-2006' (WHO Child Growth Standards 0–5y)."
+                    f"Supported: {', '.join(sorted(SUPPORTED_STANDARDS))} "
+                    "(aliases: nhc → nhc-wst-423-2022)."
                 ),
                 "supported_standards": sorted(SUPPORTED_STANDARDS),
             },
@@ -101,9 +138,14 @@ async def run_growth_assess(
             ensure_ascii=False,
         )
 
+    resolved_age = _resolve_age_months(
+        age_months=age_months,
+        date_of_birth=date_of_birth,
+        measured_on=measured_on,
+    )
     has_age_months = age_months is not None
     has_dob_pair = bool(date_of_birth and measured_on)
-    if not has_age_months and not has_dob_pair:
+    if resolved_age is None and not has_age_months and not has_dob_pair:
         return json.dumps(
             {
                 "error": (
@@ -111,6 +153,11 @@ async def run_growth_assess(
                     "(YYYY-MM-DD)"
                 ),
             },
+            ensure_ascii=False,
+        )
+    if resolved_age is None:
+        return json.dumps(
+            {"error": "Invalid date_of_birth or measured_on (use YYYY-MM-DD)"},
             ensure_ascii=False,
         )
 
@@ -128,8 +175,89 @@ async def run_growth_assess(
     if deps.persist_tool_events and deps.run_id is not None:
         await _persist_tool_call(deps.run_id, payload)
 
+    if std == "nhc-wst-423-2022":
+        return await _run_nhc_assess(
+            deps,
+            sex=cast(Any, normalized_sex),
+            age_months=resolved_age,
+            height_cm=height_cm,
+            weight_kg=weight_kg,
+        )
+
+    return await _run_who_assess(
+        deps,
+        payload=payload,
+        height_cm=height_cm,
+        weight_kg=weight_kg,
+    )
+
+
+async def _run_nhc_assess(
+    deps: AgentDeps,
+    *,
+    sex: str,
+    age_months: float,
+    height_cm: float | None,
+    weight_kg: float | None,
+) -> str:
+    from agent_api.tools.growth.nhc import assess_nhc
+
     try:
-        # anthro ships without type stubs; import via importlib to keep pyright quiet.
+        result = assess_nhc(
+            sex=cast(Any, sex),
+            age_months=age_months,
+            height_cm=height_cm,
+            weight_kg=weight_kg,
+        )
+    except Exception as exc:
+        logger.exception("growth_assess NHC compute failed")
+        if deps.persist_tool_events and deps.run_id is not None:
+            await _persist_tool_result(deps.run_id, ok=False, summary=str(exc)[:500], provider="nhc")
+        return json.dumps({"error": f"growth computation failed: {exc}"}, ensure_ascii=False)
+
+    indicators = [
+        {
+            "indicator": row.indicator,
+            "z_score": row.z_score,
+            "percentile": row.percentile,
+        }
+        for row in result.indicators
+    ]
+
+    response: dict[str, object] = {
+        "standard": result.standard,
+        "standard_version": result.standard_version,
+        "source_url": result.source_url,
+        "sex": result.sex,
+        "age_months": result.age_months,
+        "height_cm": result.height_cm,
+        "weight_kg": result.weight_kg,
+        "indicators": indicators,
+        "warnings": result.warnings,
+        "errors": result.errors,
+        "note": (
+            "Educational NHC WS/T 423-2022 assessment (7 years and under). "
+            "Not a clinical diagnosis; cite source_url when explaining results."
+        ),
+    }
+
+    if deps.persist_tool_events and deps.run_id is not None:
+        summary = ", ".join(
+            f"{row['indicator']} p{row['percentile']}" for row in indicators[:3]
+        ) or "no indicators"
+        await _persist_tool_result(deps.run_id, ok=True, summary=summary[:500], provider="nhc")
+
+    return json.dumps(response, ensure_ascii=False)
+
+
+async def _run_who_assess(
+    deps: AgentDeps,
+    *,
+    payload: dict[str, object],
+    height_cm: float | None,
+    weight_kg: float | None,
+) -> str:
+    try:
         import importlib
 
         anthro_mod = cast(Any, importlib.import_module("anthro"))
@@ -137,7 +265,7 @@ async def run_growth_assess(
     except Exception as exc:
         logger.exception("growth_assess compute failed")
         if deps.persist_tool_events and deps.run_id is not None:
-            await _persist_tool_result(deps.run_id, ok=False, summary=str(exc)[:500])
+            await _persist_tool_result(deps.run_id, ok=False, summary=str(exc)[:500], provider="anthro")
         return json.dumps({"error": f"growth computation failed: {exc}"}, ensure_ascii=False)
 
     indicators = [
@@ -153,7 +281,7 @@ async def run_growth_assess(
 
     response: dict[str, object] = {
         "standard": "who-2006",
-        "source_url": SOURCE_URL,
+        "source_url": WHO_SOURCE_URL,
         "sex": result.get("sex"),
         "age_months": result.get("age_months"),
         "age_days": result.get("age_days"),
@@ -172,7 +300,7 @@ async def run_growth_assess(
         summary = ", ".join(
             f"{row['indicator']} p{row['percentile']}" for row in indicators[:3]
         ) or "no indicators"
-        await _persist_tool_result(deps.run_id, ok=True, summary=summary[:500])
+        await _persist_tool_result(deps.run_id, ok=True, summary=summary[:500], provider="anthro")
 
     return json.dumps(response, ensure_ascii=False)
 
@@ -187,9 +315,10 @@ async def growth_assess(
     measured_on: str | None = None,
     standard: str = "who-2006",
 ) -> str:
-    """Assess child growth vs WHO 2006 standards (z-score and percentile).
+    """Assess child growth vs WHO 2006 or NHC WS/T 423-2022 (z-score and percentile).
 
     Prefer this over web_search when the user provides height/weight and age or DOB.
+    Use standard='nhc' or 'nhc-wst-423-2022' for the China NHC standard.
     """
 
     return await run_growth_assess(
@@ -220,7 +349,13 @@ async def _persist_tool_call(run_id: UUID, args: dict[str, object]) -> None:
         logger.exception("Unable to persist growth_assess tool_call run=%s", run_id)
 
 
-async def _persist_tool_result(run_id: UUID, *, ok: bool, summary: str) -> None:
+async def _persist_tool_result(
+    run_id: UUID,
+    *,
+    ok: bool,
+    summary: str,
+    provider: str = "anthro",
+) -> None:
     try:
         from agent_api.db.chat_store import append_tool_result_event
         from agent_api.db.session import session_factory
@@ -230,7 +365,7 @@ async def _persist_tool_result(run_id: UUID, *, ok: bool, summary: str) -> None:
                 session,
                 run_id=run_id,
                 tool_name="growth_assess",
-                provider="anthro",
+                provider=provider,
                 ok=ok,
                 summary=summary,
             )

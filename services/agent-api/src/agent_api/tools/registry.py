@@ -65,7 +65,7 @@ _BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         domain=ToolDomain.GROWTH,
         risk="read",
         default_action=PolicyAction.ALLOW,
-        description="WHO 2006 child growth z-score / percentile assessment",
+        description="Child growth z-score / percentile (WHO 2006 or NHC WS/T 423-2022)",
         handler=growth_assess,
     ),
     ToolSpec(
