@@ -98,6 +98,7 @@ async function loadRunApprovalState(runId: string): Promise<{
 type ChatPanelProps = {
   selectedThreadId: string | null | undefined;
   agentId: string | null;
+  caseId?: string | null;
   agentLoadError: string | null;
   /** When false, this panel stays mounted for background runs but must not own the URL/inspector. */
   isActive?: boolean;
@@ -314,12 +315,20 @@ function mergeHistoryToolCalls(
   return merged;
 }
 
-function createAgent(threadId: string, messages: ChatMessage[], agentId: string | null): HttpAgent {
+function createAgent(
+  threadId: string,
+  messages: ChatMessage[],
+  agentId: string | null,
+  caseId: string | null = null,
+): HttpAgent {
   return new HttpAgent({
     url: "/api/ag-ui/runs",
     threadId,
     initialMessages: toAgentMessages(messages),
-    headers: agentId === null ? {} : { "X-AgentOS-Agent-Id": agentId },
+    headers: {
+      ...(agentId === null ? {} : { "X-AgentOS-Agent-Id": agentId }),
+      ...(caseId === null || threadId !== "new" ? {} : { "X-AgentOS-Case-Id": caseId }),
+    },
   });
 }
 
@@ -369,6 +378,7 @@ async function loadRunDurationLabel(runId: string): Promise<string | null> {
 export function ChatPanel({
   selectedThreadId,
   agentId,
+  caseId = null,
   agentLoadError,
   isActive = true,
   onRetryAgentLoad,
@@ -414,7 +424,7 @@ export function ChatPanel({
   isActiveRef.current = isActive;
 
   if (agentRef.current === null) {
-    agentRef.current = createAgent("new", [], agentId);
+    agentRef.current = createAgent("new", [], agentId, caseId);
   }
 
   useEffect(() => {
@@ -525,9 +535,9 @@ export function ChatPanel({
 
   useEffect(() => {
     if (threadId === null && !isStreaming) {
-      agentRef.current = createAgent("new", messages, agentId);
+      agentRef.current = createAgent("new", messages, agentId, caseId);
     }
-  }, [agentId, isStreaming, messages, threadId]);
+  }, [agentId, caseId, isStreaming, messages, threadId]);
 
   useEffect(() => {
     if (
@@ -648,7 +658,7 @@ export function ChatPanel({
         }
 
         if (isCurrent) {
-          agentRef.current = createAgent(history.thread_id, history.messages, agentId);
+          agentRef.current = createAgent(history.thread_id, history.messages, agentId, caseId);
           setMessages(history.messages);
           setThreadId(history.thread_id);
           setTimelineSteps([]);

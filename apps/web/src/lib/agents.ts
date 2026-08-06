@@ -6,6 +6,7 @@ export type AgentSummary = {
   kind: "general" | "vertical";
   is_default: boolean;
   memory_enabled: boolean;
+  case_enabled: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -21,7 +22,8 @@ function isAgentSummary(value: unknown): value is AgentSummary {
     (typeof value.description === "string" || value.description === null) &&
     (value.kind === "general" || value.kind === "vertical") &&
     typeof value.is_default === "boolean" &&
-    typeof value.memory_enabled === "boolean"
+    typeof value.memory_enabled === "boolean" &&
+    typeof value.case_enabled === "boolean"
   );
 }
 

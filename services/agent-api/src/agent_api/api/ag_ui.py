@@ -31,6 +31,7 @@ from agent_api.db.agent_store import (
     PublishedAgentVersionNotFoundError,
     get_published_version,
 )
+from agent_api.db.case_store import CaseNotFoundError
 from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_run
 from agent_api.db.models import Thread, User
 from agent_api.db.session import session_factory
@@ -93,6 +94,21 @@ def requested_agent_id(request: Request) -> UUID | None:
         ) from error
 
 
+def requested_case_id(request: Request) -> UUID | None:
+    """Parse optional Case override used only when creating a new Thread."""
+
+    raw = request.headers.get("X-AgentOS-Case-Id")
+    if not raw:
+        return None
+    try:
+        return UUID(raw)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
+            detail="X-AgentOS-Case-Id must be a UUID",
+        ) from error
+
+
 def text_from_native_event(event: NativeEvent) -> str | None:
     if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
         return event.part.content or None
@@ -121,6 +137,7 @@ async def stream_ag_ui_run(
     try:
         async with session_factory() as session, session.begin():
             agent_id = requested_agent_id(request) if thread_id is None else None
+            case_id_header = requested_case_id(request) if thread_id is None else None
             started = await start_run(
                 session,
                 thread_id=thread_id,
@@ -128,11 +145,14 @@ async def stream_ag_ui_run(
                 model_name=get_settings().ollama_model,
                 user_id=user.id,
                 agent_id=agent_id,
+                case_id=case_id_header,
             )
     except ThreadNotFoundError as error:
         raise HTTPException(status_code=404, detail="Thread not found") from error
     except AgentNotFoundError as error:
         raise HTTPException(status_code=404, detail="Agent not found") from error
+    except CaseNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Case not found") from error
     except ThreadBusyError as error:
         raise HTTPException(status_code=409, detail="Thread is already running") from error
 

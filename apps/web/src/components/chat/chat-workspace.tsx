@@ -89,6 +89,7 @@ export function ChatWorkspace({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [agentLoadError, setAgentLoadError] = useState<string | null>(null);
   const [agentLoadAttempt, setAgentLoadAttempt] = useState(0);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -298,10 +299,15 @@ export function ChatWorkspace({
         return;
       }
       setSelectedAgentId(agentId);
+      setSelectedCaseId(null);
       handleNewConversation();
     },
     [handleNewConversation, selectedAgentId],
   );
+
+  const handleSelectCase = useCallback((caseId: string) => {
+    setSelectedCaseId(caseId);
+  }, []);
 
   const handleSlotThreadChanged = useCallback(
     (slotKey: string, threadId: string | null, agentId?: string) => {
@@ -479,11 +485,13 @@ export function ChatWorkspace({
             activeThreadId={activeThreadId}
             agents={agents}
             selectedAgentId={selectedAgentId}
+            selectedCaseId={selectedCaseId}
             refreshKey={threadListVersion}
             streamingThreadIds={streamingThreadIds}
             awaitingApprovalThreadIds={awaitingApprovalThreadIds}
             onNewConversation={handleNewConversation}
             onSelectAgent={handleSelectAgent}
+            onSelectCase={handleSelectCase}
             onSelectThread={handleSelectThread}
             onThreadDeleted={handleThreadDeleted}
           />
@@ -503,6 +511,7 @@ export function ChatWorkspace({
                     <ChatPanel
                       selectedThreadId={slot.threadId}
                       agentId={selectedAgentId}
+                      caseId={selectedCaseId}
                       agentLoadError={agentLoadError}
                       isActive={isActive}
                       onRetryAgentLoad={retryAgentLoad}
@@ -581,11 +590,13 @@ export function ChatWorkspace({
                 activeThreadId={activeThreadId}
                 agents={agents}
                 selectedAgentId={selectedAgentId}
+                selectedCaseId={selectedCaseId}
                 refreshKey={threadListVersion}
                 streamingThreadIds={streamingThreadIds}
                 awaitingApprovalThreadIds={awaitingApprovalThreadIds}
                 onNewConversation={handleNewConversation}
                 onSelectAgent={handleSelectAgent}
+                onSelectCase={handleSelectCase}
                 onSelectThread={handleSelectThread}
                 onThreadDeleted={handleThreadDeleted}
               />

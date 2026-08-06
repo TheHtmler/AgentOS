@@ -24,6 +24,7 @@ class AgentResponse(BaseModel):
     kind: str
     is_default: bool
     memory_enabled: bool
+    case_enabled: bool
 
 
 class AgentListResponse(BaseModel):
@@ -59,6 +60,7 @@ async def get_agents(
                     kind=agent.kind,
                     is_default=agent.is_default,
                     memory_enabled=version.memory_enabled,
+                    case_enabled=version.case_enabled,
                 ),
             )
 

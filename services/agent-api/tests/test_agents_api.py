@@ -35,6 +35,9 @@ async def test_list_agents_returns_general_and_imd(
     assert len([agent for agent in agents if agent["is_default"]]) == 1
     imd = next(agent for agent in agents if agent["slug"] == "imd")
     assert imd["name"] == "遗传代谢"
+    assert imd["case_enabled"] is True
+    general = next(agent for agent in agents if agent["slug"] == "general")
+    assert general["case_enabled"] is False
 
 
 @pytest.mark.anyio
