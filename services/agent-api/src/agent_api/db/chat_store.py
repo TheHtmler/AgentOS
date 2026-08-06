@@ -7,7 +7,8 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_api.db.agent_store import resolve_agent_for_new_thread
+from agent_api.db.agent_store import get_published_version, resolve_agent_for_new_thread
+from agent_api.db.case_store import resolve_case_for_new_thread
 from agent_api.db.models import (
     Interrupt,
     Message,
@@ -76,8 +77,9 @@ async def _create_thread(
     *,
     user_id: UUID | None,
     agent_id: UUID,
+    case_id: UUID | None = None,
 ) -> Thread:
-    thread = Thread(user_id=user_id, agent_id=agent_id)
+    thread = Thread(user_id=user_id, agent_id=agent_id, case_id=case_id)
     session.add(thread)
     await session.flush()
     return thread
@@ -459,19 +461,32 @@ async def start_run(
     model_name: str,
     user_id: UUID | None = None,
     agent_id: UUID | None = None,
+    case_id: UUID | None = None,
 ) -> StartedRun:
     """Record a user message and a running execution in the caller's transaction.
 
     HTTP handlers always supply ``user_id``. The optional value keeps isolated legacy repository
     tests usable while ownerless development records remain inaccessible through every API.
+    New Threads on case-enabled Agents bind a Case (client override or lazy default).
     """
 
     if thread_id is None:
         resolved_agent_id = await resolve_agent_for_new_thread(session, agent_id)
+        resolved_case_id: UUID | None = None
+        if user_id is not None:
+            version = await get_published_version(session, resolved_agent_id)
+            resolved_case_id = await resolve_case_for_new_thread(
+                session,
+                user_id=user_id,
+                agent_id=resolved_agent_id,
+                case_id=case_id,
+                case_enabled=version.case_enabled,
+            )
         thread = await _create_thread(
             session,
             user_id=user_id,
             agent_id=resolved_agent_id,
+            case_id=resolved_case_id,
         )
     else:
         # Existing Threads retain their Agent to preserve conversation isolation.
