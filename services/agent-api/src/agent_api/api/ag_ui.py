@@ -35,8 +35,9 @@ from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_
 from agent_api.db.models import Thread, User
 from agent_api.db.session import session_factory
 from agent_api.hitl_pause import persist_deferred_approvals
-from agent_api.memory.extract import schedule_memory_extract
+from agent_api.case.extract import schedule_case_extract
 from agent_api.case.recall import load_case_block
+from agent_api.memory.extract import schedule_memory_extract
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import get_runtime
@@ -297,6 +298,16 @@ async def stream_ag_ui_run(
                     model_semaphore=runtime.model_semaphore,
                     http_client=runtime.ollama_http_client,
                     memory_enabled=version.memory_enabled,
+                )
+                schedule_case_extract(
+                    case_id=case_id,
+                    case_enabled=version.case_enabled,
+                    thread_id=started.thread_id,
+                    run_id=started.run_id,
+                    user_message=prompt,
+                    assistant_content=assistant_content,
+                    model_semaphore=runtime.model_semaphore,
+                    http_client=runtime.ollama_http_client,
                 )
         except AGUIExecutionError:
             raise

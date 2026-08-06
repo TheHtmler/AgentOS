@@ -32,8 +32,9 @@ from agent_api.db.chat_store import (
 )
 from agent_api.db.models import Message, Thread, User
 from agent_api.db.session import session_factory
-from agent_api.memory.extract import schedule_memory_extract
+from agent_api.case.extract import schedule_case_extract
 from agent_api.case.recall import load_case_block
+from agent_api.memory.extract import schedule_memory_extract
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import AgentRuntime, get_runtime
@@ -253,6 +254,7 @@ async def event_stream(
     runtime: AgentRuntime,
     agent: Agent[Any, AgentOutput],
     case_id: UUID | None = None,
+    case_enabled: bool = False,
 ) -> AsyncIterator[str]:
     """Run the full agent graph (including tools), then emit the final answer over SSE.
 
@@ -399,6 +401,16 @@ async def event_stream(
             http_client=runtime.ollama_http_client,
             memory_enabled=memory_enabled,
         )
+        schedule_case_extract(
+            case_id=case_id,
+            case_enabled=case_enabled,
+            thread_id=thread_id,
+            run_id=run_id,
+            user_message=message,
+            assistant_content=assistant_content,
+            model_semaphore=runtime.model_semaphore,
+            http_client=runtime.ollama_http_client,
+        )
 
     yield encode_sse_event("done", {})
 
@@ -501,6 +513,7 @@ async def stream_chat(
             runtime,
             agent,
             case_id=case_id,
+            case_enabled=version.case_enabled,
         ),
         media_type="text/event-stream",
         headers={

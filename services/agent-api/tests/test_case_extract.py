@@ -1,0 +1,133 @@
+from uuid import UUID, uuid4
+
+import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from agent_api.case.extract import (
+    CaseFactUpdate,
+    ExtractedCasePayload,
+    apply_attribution_policy,
+    apply_case_extract,
+    parse_case_extract_payload,
+)
+from agent_api.db.case_store import ensure_default_case
+from agent_api.db.models import CaseFact, User
+
+IMD_AGENT_ID = UUID("00000000-0000-0000-0000-000000000002")
+
+
+def test_parse_and_policy_branches() -> None:
+    self_payload = parse_case_extract_payload(
+        {
+            "attribution": "self",
+            "updates": [{"key": "height_cm", "content": "身高 90 cm", "tags": ["身高"]}],
+        },
+    )
+    assert apply_attribution_policy(self_payload) == "confirm"
+
+    other = parse_case_extract_payload(
+        {
+            "attribution": "other",
+            "updates": [{"key": "height_cm", "content": "身高 90 cm", "tags": ["身高"]}],
+        },
+    )
+    assert apply_attribution_policy(other) == "skip"
+
+    hypo = ExtractedCasePayload(
+        attribution="hypothetical",
+        updates=[CaseFactUpdate(key="height_cm", content="x", tags=["身高"])],
+    )
+    assert apply_attribution_policy(hypo) == "skip"
+
+    unknown = ExtractedCasePayload(
+        attribution="unknown",
+        updates=[CaseFactUpdate(key="height_cm", content="x", tags=["身高"])],
+    )
+    assert apply_attribution_policy(unknown) == "propose"
+
+    empty = ExtractedCasePayload(attribution="self", updates=[])
+    assert apply_attribution_policy(empty) == "skip"
+
+
+@pytest.mark.anyio
+async def test_apply_self_confirms_and_other_skips(database_session: AsyncSession) -> None:
+    user = User(email=f"case-extract-{uuid4().hex}@example.com", status="active")
+    database_session.add(user)
+    await database_session.flush()
+    case_id = await ensure_default_case(
+        database_session,
+        user_id=user.id,
+        agent_id=IMD_AGENT_ID,
+    )
+
+    written = await apply_case_extract(
+        database_session,
+        case_id=case_id,
+        payload=ExtractedCasePayload(
+            attribution="self",
+            updates=[
+                CaseFactUpdate(key="height_cm", content="身高 91 cm", tags=["身高"]),
+            ],
+        ),
+        source_thread_id=None,
+        source_run_id=None,
+    )
+    assert written == 1
+
+    skipped = await apply_case_extract(
+        database_session,
+        case_id=case_id,
+        payload=ExtractedCasePayload(
+            attribution="other",
+            updates=[
+                CaseFactUpdate(key="height_cm", content="身高 120 cm", tags=["身高"]),
+            ],
+        ),
+        source_thread_id=None,
+        source_run_id=None,
+    )
+    assert skipped == 0
+    await database_session.flush()
+
+    facts = list(
+        await database_session.scalars(
+            select(CaseFact).where(
+                CaseFact.case_id == case_id,
+                CaseFact.status == "confirmed",
+            ),
+        ),
+    )
+    assert len(facts) == 1
+    assert "91" in facts[0].content
+
+
+@pytest.mark.anyio
+async def test_unknown_writes_proposed(database_session: AsyncSession) -> None:
+    user = User(email=f"case-unknown-{uuid4().hex}@example.com", status="active")
+    database_session.add(user)
+    await database_session.flush()
+    case_id = await ensure_default_case(
+        database_session,
+        user_id=user.id,
+        agent_id=IMD_AGENT_ID,
+    )
+    await apply_case_extract(
+        database_session,
+        case_id=case_id,
+        payload=ExtractedCasePayload(
+            attribution="unknown",
+            updates=[CaseFactUpdate(key="weight_kg", content="体重 12 kg", tags=["体重"])],
+        ),
+        source_thread_id=None,
+        source_run_id=None,
+    )
+    await database_session.flush()
+    proposed = await database_session.scalar(
+        select(CaseFact).where(
+            CaseFact.case_id == case_id,
+            CaseFact.key == "weight_kg",
+            CaseFact.status == "proposed",
+        ),
+    )
+    assert proposed is not None

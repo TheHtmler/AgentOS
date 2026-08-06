@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     auto_thread_title_timeout_seconds: float = 30.0
     memory_extract_enabled: bool = True
     memory_extract_timeout_seconds: float = 30.0
+    case_extract_enabled: bool = True
+    case_extract_timeout_seconds: float = 30.0
     memory_recall_top_k: int = 8
     memory_recall_max_chars: int = 2_000
     # Note-memory hybrid recall via OpenAI-compatible /embeddings (Ollama).

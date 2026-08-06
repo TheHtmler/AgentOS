@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic_ai import Tool
 
 from agent_api.config import Settings, get_settings
+from agent_api.tools.case.attribution import case_attribution_confirm
 from agent_api.tools.case.tool import case_context_read
 from agent_api.tools.fetch.tool import fetch_url
 from agent_api.tools.growth.tool import growth_assess
@@ -82,6 +83,14 @@ _BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         default_action=PolicyAction.ALLOW,
         description="Read confirmed facts from the Case archive bound to this thread",
         handler=case_context_read,
+    ),
+    ToolSpec(
+        name="case_attribution_confirm",
+        domain=ToolDomain.CASE,
+        risk="write",
+        default_action=PolicyAction.ASK,
+        description="Confirm writing Case facts to the bound archive (HITL)",
+        handler=case_attribution_confirm,
     ),
 )
 

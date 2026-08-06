@@ -110,6 +110,8 @@ CASE_INSTRUCTIONS = """
 When a Case profile block is present, treat those facts as the durable subject archive
 for this conversation. Prefer case_context_read if you need to re-check confirmed slots.
 Do not invent Case facts. Object anthropometrics belong in the Case, not as guesses.
+If the user may be describing someone else's subject or a hypothetical, call
+case_attribution_confirm before treating facts as belonging to the current archive.
 """
 
 
