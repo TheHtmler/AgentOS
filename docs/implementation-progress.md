@@ -1,10 +1,10 @@
 # 实施进度
 
-最后更新：2026-08-05（growth_assess + knowledge_search MVP）
+最后更新：2026-08-06（Case 档案 + 知识扩充 + NHC 生长对照）
 
 ## 当前状态
 
-前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro）与关键词 `knowledge_search`（MMA/PA 策展切片）已接入；向量 RAG 与 `PatientCase` 仍属后续增量。
+前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与关键词 `knowledge_search`（扩充后的 MMA/PA 策展切片）已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。向量 RAG 与复杂多看护人 ACL 仍属后续增量。
 
 已完成：
 
@@ -78,6 +78,11 @@
 - 用户记忆升级为 Profile + Notes：`user_memories.kind/key`；档案槽（身高/体重/性别/生日/月龄）结构化抽取后**每次 Run 必注入**；笔记走关键词∪embedding hybrid（`MEMORY_EMBEDDING_*`，Ollama `/embeddings`）；迁移 `f1a2b3c4d5e6`。
 - 前端侧栏 Agent 切换、按 Agent 过滤会话列表、新建对话转发 `X-AgentOS-Agent-Id`；打开 Thread 同步选中 Agent；深链 `?thread=` 从消息 API 恢复 `agent_id`。
 - 运维：`scripts/seed_agents.py` 可重复 upsert 内置 Agent 配置。
+- Case 档案（平台通用）：`cases` / `case_memberships` / `case_facts` / `user_agent_default_cases`；`threads.case_id`；`agent_versions.case_enabled`（`imd` 开启）；迁移 `f2a3b4c5d6e7`。
+- Case 读写：新建 Thread 自动绑定默认 Case；Run 注入 confirmed facts；`case_context_read`；完成后异步抽取（`self`→confirmed，`other`/`hypothetical` 不写，`unknown`→proposed）；`case_attribution_confirm`（ASK/HITL）。
+- Case API/Web：`GET/POST /v1/cases`、设默认、facts/confirm；侧栏「当前档案」与多档案切换；新建对话可传 `X-AgentOS-Case-Id`。
+- `knowledge_search` seed 扩充至 16 条 MMA/PA 教育切片（含 B12 反应型、肾/神经并发症、监测与感染/禁食家庭指导）。
+- `growth_assess` 支持 `who-2006` 与 `nhc-wst-423-2022`（别名 `nhc`）；NHC SD 表分段线性插值；数据在 `seed/growth/nhc/`。
 - Runtime Context Pack：每次 Run 注入当前本地时间、时区、`RUNTIME_LOCALE` 与能力边界（不以模型内建「现在」为准）。
 - 工具纪律强化：缺公开标准/图表/指南时先 `web_search`/`fetch_url`，禁止让用户代查或用长免责声明代替作答；育儿 Agent overlay 要求主动对照权威生长标准并附来源。
 - 调研笔记：`docs/13-mma-knowledge-and-mcp-inventory.md`（MMA/PA 知识分层 + 候选 MCP/Skills）。
@@ -105,10 +110,10 @@
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
 - Artifact 落库 / `read_artifact`、完整 `messages.role=tool` 模型历史对齐。
-- `PatientCase` 与患者私有上下文隔离；知识库向量检索 / 嵌入召回（当前为关键词 MVP）。
-- 生长标准中国卫健委（NHC）对照；MCP 和 Sandbox；侧栏按工具类型的富展示。
+- 知识库向量检索 / 嵌入召回（公共知识当前为关键词 MVP；Case 笔记记忆已有 embedding）。
+- 多看护人 Case ACL、领域扩展表（如护理计划/化验时间线）；MCP 和 Sandbox；侧栏按工具类型的富展示。
 - 参数级 Tool Policy（如按 URL/命令细规则）、审计表落库。
 
 ## 下一步
 
-平台基础能力：通用基础工具（时间差/计算）与基础能力评测集；模型/Provider 档位。领域侧按 `docs/12` / `docs/13` 推进 PatientCase、知识库扩充与可选只读医学 MCP。
+平台基础能力：通用基础工具（时间差/计算）与基础能力评测集；模型/Provider 档位。领域侧在 Case 之上挂医疗扩展，并按 `docs/13` 推进可选只读医学 MCP / 向量知识检索。

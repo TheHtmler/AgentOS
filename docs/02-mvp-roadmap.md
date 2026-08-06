@@ -24,7 +24,9 @@
 
 ## Phase 2.5：领域 Agent 与患者上下文
 
-**首个竖切（2026-08-05，已落地）：** 多 Agent 选择与 `user_memories` 用户长期记忆（`agents` / `agent_versions` / `user_memories` 表；侧栏切换、Thread 绑定与按 Agent 过滤；关键词/标签召回 + Run 完成后异步抽取）。`PatientCase`、知识库 RAG 与向量检索仍属本 Phase 后续增量。
+**首个竖切（2026-08-05，已落地）：** 多 Agent 选择与 `user_memories` 用户长期记忆（`agents` / `agent_versions` / `user_memories` 表；侧栏切换、Thread 绑定与按 Agent 过滤；关键词/标签召回 + Run 完成后异步抽取）。
+
+**Case 档案竖切（2026-08-06，已落地）：** 平台级 `cases` / `case_facts`（非 `patient_*`）；`imd` 默认 `case_enabled`；确认事实注入 + `case_context_read`；归属抽取与 HITL/`proposed`；REST + 侧栏多档案切换；`knowledge_search` 切片扩充；`growth_assess` 支持 WHO + NHC WS/T 423-2022。向量 RAG 与复杂多看护人 ACL 仍属后续增量。
 
 - 建立 `AgentProfile`、`AgentVersion` 和领域知识库边界。（首个竖切已用 spec 命名 `agents` / `agent_versions` 落地配置层 Agent，非完整 `AgentProfile` 域模型。）
 - 将 `agent_id` 纳入 Thread、Run 和运行快照。

@@ -1,7 +1,7 @@
 # 通用 Case 档案、知识扩充与 NHC 生长对照
 
 日期：2026-08-06  
-状态：proposed（待实现）  
+状态：accepted（已实现）  
 前置：多 Agent + `user_memories` Profile/Notes（已落地）、`knowledge_search` MVP、`growth_assess` WHO-2006、HITL 审批框架  
 关联：`docs/12-domain-agents-and-patient-context.md`（领域意图仍有效；**平台表名/API 不用 patient 前缀**）、`docs/13-mma-knowledge-and-mcp-inventory.md`
 
