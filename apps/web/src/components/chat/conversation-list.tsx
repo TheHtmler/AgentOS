@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import type { AgentSummary } from "@/lib/agents";
-import { parseCaseSummaries, type CaseSummary } from "@/lib/cases";
 
 export type Conversation = {
   id: string;
@@ -17,13 +16,11 @@ type ConversationListProps = {
   activeThreadId: string | null;
   agents: AgentSummary[];
   selectedAgentId: string | null;
-  selectedCaseId: string | null;
   refreshKey: number;
   streamingThreadIds: ReadonlySet<string>;
   awaitingApprovalThreadIds?: ReadonlySet<string>;
   onNewConversation: () => void;
   onSelectAgent: (agentId: string) => void;
-  onSelectCase: (caseId: string) => void;
   onSelectThread: (conversation: Conversation) => void;
   onThreadDeleted: (threadId: string) => void;
 };
@@ -128,18 +125,15 @@ export function ConversationList({
   activeThreadId,
   agents,
   selectedAgentId,
-  selectedCaseId,
   refreshKey,
   streamingThreadIds,
   awaitingApprovalThreadIds = new Set<string>(),
   onNewConversation,
   onSelectAgent,
-  onSelectCase,
   onSelectThread,
   onThreadDeleted,
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [cases, setCases] = useState<CaseSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -147,9 +141,6 @@ export function ConversationList({
   const [renamingThreadId, setRenamingThreadId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [busyThreadId, setBusyThreadId] = useState<string | null>(null);
-
-  const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) ?? null;
-  const caseEnabled = selectedAgent?.case_enabled === true;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -206,54 +197,6 @@ export function ConversationList({
       controller.abort();
     };
   }, [refreshKey, selectedAgentId]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let isCurrent = true;
-
-    if (!caseEnabled || selectedAgentId === null) {
-      setCases([]);
-      return () => {
-        isCurrent = false;
-        controller.abort();
-      };
-    }
-
-    void (async () => {
-      try {
-        const response = await fetch(
-          `/api/cases?agent_id=${encodeURIComponent(selectedAgentId)}`,
-          { cache: "no-store", signal: controller.signal },
-        );
-        if (!response.ok) {
-          throw new Error("无法读取档案列表。");
-        }
-        const parsed = parseCaseSummaries((await response.json()) as unknown);
-        if (parsed === null) {
-          throw new Error("档案列表格式无效。");
-        }
-        if (!isCurrent) {
-          return;
-        }
-        setCases(parsed);
-        const defaultCase = parsed.find((item) => item.is_default) ?? parsed[0] ?? null;
-        if (defaultCase !== null && selectedCaseId === null) {
-          onSelectCase(defaultCase.id);
-        }
-      } catch (caughtError: unknown) {
-        if (!isCurrent || controller.signal.aborted) {
-          return;
-        }
-        setCases([]);
-        setError(caughtError instanceof Error ? caughtError.message : "无法读取档案列表。");
-      }
-    })();
-
-    return () => {
-      isCurrent = false;
-      controller.abort();
-    };
-  }, [caseEnabled, onSelectCase, selectedAgentId, selectedCaseId]);
 
   const groups = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -370,40 +313,6 @@ export function ConversationList({
             ))}
           </select>
         </label>
-        {caseEnabled ? (
-          <label className="mt-3 block">
-            <span className="text-xs font-medium tracking-wide text-zinc-500">当前档案</span>
-            {cases.length <= 1 ? (
-              <p className="mt-2 border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800">
-                {cases[0]?.display_name ?? "默认档案（首次对话时创建）"}
-              </p>
-            ) : (
-              <select
-                aria-label="选择档案"
-                value={selectedCaseId ?? cases.find((item) => item.is_default)?.id ?? ""}
-                onChange={(event) => {
-                  const nextId = event.target.value;
-                  onSelectCase(nextId);
-                  if (selectedAgentId !== null) {
-                    void fetch(`/api/cases/${nextId}/default`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ agent_id: selectedAgentId }),
-                    });
-                  }
-                }}
-                className="mt-2 block w-full border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-medium text-zinc-900 outline-none focus:border-zinc-500 focus:bg-white"
-              >
-                {cases.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.display_name}
-                    {item.is_default ? "（默认）" : ""}
-                  </option>
-                ))}
-              </select>
-            )}
-          </label>
-        ) : null}
         <div className="flex items-center justify-between gap-3">
           <p className="mt-4 text-sm font-semibold text-zinc-950">会话</p>
           <button

@@ -107,11 +107,13 @@ the curated base is insufficient or the user needs a newer external page.
 MEMORY_HEADER = "## Known user facts (for this agent only; use when relevant)"
 
 CASE_INSTRUCTIONS = """
-When a Case profile block is present, treat those facts as the durable subject archive
-for this conversation. Prefer case_context_read if you need to re-check confirmed slots.
+When a Case profile block is present, treat those facts as the durable default subject
+archive for this Agent (created and bound automatically; the user does not manage Cases
+in the UI). Prefer case_context_read if you need to re-check confirmed slots.
 Do not invent Case facts. Object anthropometrics belong in the Case, not as guesses.
 If the user may be describing someone else's subject or a hypothetical, call
-case_attribution_confirm before treating facts as belonging to the current archive.
+case_attribution_confirm before treating facts as belonging to the default archive.
+Additional subjects are bound via conversation attribution / HITL, not a Case picker.
 """
 
 

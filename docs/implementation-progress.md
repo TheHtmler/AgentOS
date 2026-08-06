@@ -80,7 +80,7 @@
 - 运维：`scripts/seed_agents.py` 可重复 upsert 内置 Agent 配置。
 - Case 档案（平台通用）：`cases` / `case_memberships` / `case_facts` / `user_agent_default_cases`；`threads.case_id`；`agent_versions.case_enabled`（`imd` 开启）；迁移 `f2a3b4c5d6e7`。
 - Case 读写：新建 Thread 自动绑定默认 Case；Run 注入 confirmed facts；`case_context_read`；完成后异步抽取（`self`→confirmed，`other`/`hypothetical` 不写，`unknown`→proposed）；`case_attribution_confirm`（ASK/HITL）。
-- Case API/Web：`GET/POST /v1/cases`、设默认、facts/confirm；侧栏「当前档案」与多档案切换；新建对话可传 `X-AgentOS-Case-Id`。
+- Case API：`GET/POST /v1/cases`、设默认、facts/confirm；可选 `X-AgentOS-Case-Id`（API 级）。Web **不展示**档案切换——默认 Case 全隐式；额外主体靠对话归因 + HITL。
 - `knowledge_search` seed 扩充至 16 条 MMA/PA 教育切片（含 B12 反应型、肾/神经并发症、监测与感染/禁食家庭指导）。
 - `growth_assess` 支持 `who-2006` 与 `nhc-wst-423-2022`（别名 `nhc`）；NHC SD 表分段线性插值；数据在 `seed/growth/nhc/`。
 - Runtime Context Pack：每次 Run 注入当前本地时间、时区、`RUNTIME_LOCALE` 与能力边界（不以模型内建「现在」为准）。
