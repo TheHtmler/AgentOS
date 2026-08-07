@@ -23,6 +23,7 @@ import {
   type ToolCallState,
 } from "@/components/chat/tool-call-card";
 import { formatMessageTimestamp, formatRunDurationLabel } from "@/lib/format-time";
+import { isActiveRunStatus, isLikelyTransportDisconnect } from "@/lib/run-recovery";
 
 type ChatMessage = {
   id: string;
@@ -337,6 +338,22 @@ function agentErrorMessage(error: unknown): string {
   return "Agent 生成失败，请稍后重试。";
 }
 
+async function fetchRunStatus(runId: string): Promise<string | null> {
+  try {
+    const response = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+    const payload: unknown = await response.json();
+    if (!isRecord(payload) || typeof payload.status !== "string") {
+      return null;
+    }
+    return payload.status;
+  } catch {
+    return null;
+  }
+}
+
 async function loadRunDurationLabel(runId: string): Promise<string | null> {
   try {
     const response = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
@@ -400,6 +417,8 @@ export function ChatPanel({
   const lastRunIdRef = useRef<string | null>(null);
   const lastRunThreadIdRef = useRef<string | null>(null);
   const cancellationRequestedRef = useRef(false);
+  const recoveryInFlightRef = useRef(false);
+  const deferredStreamErrorRef = useRef<string | null>(null);
   // Follow new tokens only while the user stays near the bottom.
   const autoScrollRef = useRef(true);
   // Ignore scroll events caused by our own scrollTo(bottom) calls.
@@ -529,78 +548,144 @@ export function ChatPanel({
     }
   }, [agentId, isStreaming, messages, threadId]);
 
+  const settleRunAfterStreamLoss = useCallback(
+    async (runId: string) => {
+      if (recoveryInFlightRef.current) {
+        return;
+      }
+      recoveryInFlightRef.current = true;
+      deferredStreamErrorRef.current = null;
+      setError(null);
+      setIsStreaming(true);
+      activeRunIdRef.current = runId;
+      lastRunIdRef.current = runId;
+
+      try {
+        for (let attempt = 0; attempt < 180; attempt += 1) {
+          if (cancellationRequestedRef.current) {
+            break;
+          }
+
+          const status = await fetchRunStatus(runId);
+          if (status === null) {
+            await new Promise<void>((resolve) => window.setTimeout(resolve, 1_000));
+            continue;
+          }
+
+          if (status === "waiting_approval") {
+            await applyApprovalStateFromRun(runId);
+            setHistoryRefreshKey((current) => current + 1);
+            setIsStreaming(false);
+            onRunFinalized();
+            return;
+          }
+
+          if (!isActiveRunStatus(status)) {
+            clearApprovalState();
+            setHistoryRefreshKey((current) => current + 1);
+            const durationLabel = await loadRunDurationLabel(runId);
+            if (durationLabel !== null) {
+              setMessages((previous) => {
+                const latestUserIndex = previous.reduce(
+                  (latestIndex, message, index) =>
+                    message.role === "user" ? index : latestIndex,
+                  -1,
+                );
+                const assistantIndex = previous.findIndex(
+                  (message, index) => index > latestUserIndex && message.role === "assistant",
+                );
+                if (assistantIndex === -1) {
+                  return previous;
+                }
+                return previous.map((message, index) =>
+                  index === assistantIndex ? { ...message, durationLabel } : message,
+                );
+              });
+            }
+            setIsStreaming(false);
+            onRunFinalized();
+            return;
+          }
+
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 1_000));
+        }
+
+        // Timed out waiting; leave a soft message only if still active.
+        const status = await fetchRunStatus(runId);
+        if (isActiveRunStatus(status)) {
+          setError("仍在后台生成，可稍后再打开本会话查看结果。");
+        } else {
+          setHistoryRefreshKey((current) => current + 1);
+        }
+        setIsStreaming(false);
+        onRunFinalized();
+      } finally {
+        recoveryInFlightRef.current = false;
+        if (activeRunIdRef.current === runId) {
+          activeRunIdRef.current = null;
+        }
+      }
+    },
+    [applyApprovalStateFromRun, clearApprovalState, onRunFinalized],
+  );
+
   useEffect(() => {
-    if (
-      threadId === null ||
-      lastRunIdRef.current === null ||
-      lastRunThreadIdRef.current !== threadId
-    ) {
+    if (threadId === null) {
       return;
     }
 
     let cancelled = false;
 
-    async function refreshAfterBackgroundRun() {
+    async function refreshAfterForeground() {
       const runId = lastRunIdRef.current;
-      if (runId === null || isStreaming) {
+      if (
+        runId === null ||
+        lastRunThreadIdRef.current !== threadId ||
+        cancelled ||
+        recoveryInFlightRef.current
+      ) {
         return;
       }
 
-      for (let attempt = 0; attempt < 30; attempt += 1) {
-        if (cancelled) {
-          return;
-        }
-
-        try {
-          const response = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
-          if (!response.ok) {
-            return;
-          }
-
-          const payload: unknown = await response.json();
-          if (!isRecord(payload) || typeof payload.status !== "string") {
-            return;
-          }
-
-          if (payload.status === "waiting_approval") {
-            if (!cancelled) {
-              await applyApprovalStateFromRun(runId);
-              setHistoryRefreshKey((current) => current + 1);
-            }
-            return;
-          }
-
-          if (payload.status !== "running" && payload.status !== "queued") {
-            if (!cancelled) {
-              clearApprovalState();
-              setHistoryRefreshKey((current) => current + 1);
-            }
-            return;
-          }
-
-          await new Promise<void>((resolve) => window.setTimeout(resolve, 1_000));
-        } catch {
-          return;
-        }
+      const status = await fetchRunStatus(runId);
+      if (cancelled || status === null) {
+        return;
       }
+
+      if (isActiveRunStatus(status) || status === "waiting_approval") {
+        // SSE may already be dead while the server run continues — resync quietly.
+        void settleRunAfterStreamLoss(runId);
+        return;
+      }
+
+      // Terminal run after a backgrounded tab: drop stale red errors and refresh.
+      setError(null);
+      clearApprovalState();
+      setHistoryRefreshKey((current) => current + 1);
     }
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void refreshAfterBackgroundRun();
+        void refreshAfterForeground();
       }
     };
 
+    const handleOnline = () => {
+      void refreshAfterForeground();
+    };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", handleOnline);
     if (document.visibilityState === "visible") {
-      void refreshAfterBackgroundRun();
+      void refreshAfterForeground();
     }
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", handleOnline);
     };
-  }, [applyApprovalStateFromRun, clearApprovalState, isStreaming, threadId]);
+  }, [clearApprovalState, settleRunAfterStreamLoss, threadId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -850,6 +935,8 @@ export function ChatPanel({
     cancellationRequestedRef.current = false;
 
     let activeRunId: string | null = null;
+    let recoverRunId: string | null = null;
+    deferredStreamErrorRef.current = null;
 
     try {
       await agent.runAgent(undefined, {
@@ -875,7 +962,9 @@ export function ChatPanel({
           }
         },
         onRunErrorEvent: ({ event }) => {
-          setError(event.message || "Agent 生成失败，请稍后重试。");
+          // Mobile background / SSE drop often emits RunError while the server keeps going.
+          // Defer hard UI failure until we probe Run status in the catch path.
+          deferredStreamErrorRef.current = event.message || "Agent 生成失败，请稍后重试。";
         },
         onReasoningStartEvent: ({ event }) => {
           setTimelineSteps((current) =>
@@ -1017,33 +1106,60 @@ export function ChatPanel({
         }
       }
     } catch (caughtError: unknown) {
-      if (!cancellationRequestedRef.current) {
-        setError(agentErrorMessage(caughtError));
-      } else if (activeRunId !== null) {
-        const durationLabel = await loadRunDurationLabel(activeRunId);
-        if (durationLabel !== null) {
-          setMessages((previous) => {
-            const latestUserIndex = previous.reduce(
-              (latestIndex, message, index) => (message.role === "user" ? index : latestIndex),
-              -1,
-            );
-            const assistantIndex = previous.findIndex(
-              (message, index) => index > latestUserIndex && message.role === "assistant",
-            );
+      if (cancellationRequestedRef.current) {
+        if (activeRunId !== null) {
+          const durationLabel = await loadRunDurationLabel(activeRunId);
+          if (durationLabel !== null) {
+            setMessages((previous) => {
+              const latestUserIndex = previous.reduce(
+                (latestIndex, message, index) =>
+                  message.role === "user" ? index : latestIndex,
+                -1,
+              );
+              const assistantIndex = previous.findIndex(
+                (message, index) => index > latestUserIndex && message.role === "assistant",
+              );
 
-            if (assistantIndex === -1) {
-              return previous;
-            }
+              if (assistantIndex === -1) {
+                return previous;
+              }
 
-            return previous.map((message, index) =>
-              index === assistantIndex ? { ...message, durationLabel } : message,
-            );
-          });
+              return previous.map((message, index) =>
+                index === assistantIndex ? { ...message, durationLabel } : message,
+              );
+            });
+          }
         }
+      } else if (activeRunId !== null) {
+        const status = await fetchRunStatus(activeRunId);
+        if (isActiveRunStatus(status)) {
+          // Browser SSE died; server run is still live — quiet poll + history refresh.
+          recoverRunId = activeRunId;
+          setError(null);
+        } else if (status === "completed" || status === "cancelled") {
+          setError(null);
+          setHistoryRefreshKey((current) => current + 1);
+        } else if (status === null || isLikelyTransportDisconnect(caughtError)) {
+          // Cannot reach API or looks like a transport drop — keep trying quietly.
+          recoverRunId = activeRunId;
+          setError(null);
+        } else {
+          setError(deferredStreamErrorRef.current ?? agentErrorMessage(caughtError));
+        }
+      } else {
+        setError(deferredStreamErrorRef.current ?? agentErrorMessage(caughtError));
       }
     } finally {
       const finishedRunId = activeRunId;
       const wasCancelled = cancellationRequestedRef.current;
+      deferredStreamErrorRef.current = null;
+
+      if (recoverRunId !== null && !wasCancelled) {
+        cancellationRequestedRef.current = false;
+        void settleRunAfterStreamLoss(recoverRunId);
+        return;
+      }
+
       activeRunIdRef.current = null;
       cancellationRequestedRef.current = false;
       setIsStreaming(false);
