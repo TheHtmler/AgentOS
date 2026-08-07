@@ -25,6 +25,8 @@ from agent_api.api.chat import (
     persist_text_delta,
     strip_thinking_parts,
 )
+from agent_api.case.extract import schedule_case_extract
+from agent_api.case.recall import load_case_injection
 from agent_api.config import get_settings
 from agent_api.db.agent_store import (
     AgentNotFoundError,
@@ -36,8 +38,6 @@ from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_
 from agent_api.db.models import Thread, User
 from agent_api.db.session import session_factory
 from agent_api.hitl_pause import persist_deferred_approvals
-from agent_api.case.extract import schedule_case_extract
-from agent_api.case.recall import load_case_injection
 from agent_api.memory.extract import schedule_memory_extract
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.output_limits import with_truncation_notice_if_needed
@@ -256,6 +256,8 @@ async def stream_ag_ui_run(
                         fetch_router=runtime.fetch_router,
                         run_id=started.run_id,
                         case_id=case_id,
+                        user_id=user.id,
+                        thread_id=started.thread_id,
                         http_client=runtime.ollama_http_client,
                     ),
                 ):

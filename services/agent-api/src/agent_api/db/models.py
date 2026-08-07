@@ -703,3 +703,58 @@ class RunEvent(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class Artifact(Base):
+    """Owner-scoped durable content blob (fetch bodies, later uploads/sandbox)."""
+
+    __tablename__ = "artifacts"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('fetch_url', 'upload', 'sandbox', 'other')",
+            name="ck_artifacts_kind",
+        ),
+        CheckConstraint("content_chars >= 0", name="ck_artifacts_content_chars"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    owner_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    case_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("cases.id", ondelete="SET NULL"),
+        index=True,
+    )
+    thread_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("threads.id", ondelete="SET NULL"),
+        index=True,
+    )
+    run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("runs.id", ondelete="SET NULL"),
+        index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(Text)
+    mime_type: Mapped[str] = mapped_column(
+        String(128),
+        server_default=text("'text/plain'"),
+        nullable=False,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_chars: Mapped[int] = mapped_column(Integer, nullable=False)
+    outline: Mapped[str | None] = mapped_column(Text)
+    meta: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )

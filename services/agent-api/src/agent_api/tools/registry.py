@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic_ai import Tool
 
 from agent_api.config import Settings, get_settings
+from agent_api.tools.artifact.tool import read_artifact
 from agent_api.tools.case.attribution import case_attribution_confirm
 from agent_api.tools.case.collect import case_slot_collect
 from agent_api.tools.case.tool import case_context_read
@@ -28,6 +29,7 @@ class ToolDomain(StrEnum):
     GROWTH = "growth"
     KNOWLEDGE = "knowledge"
     CASE = "case"
+    ARTIFACT = "artifact"
     MCP = "mcp"
 
 
@@ -86,6 +88,14 @@ _BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         default_action=PolicyAction.ALLOW,
         description="Read-only public URL fetch",
         handler=fetch_url,
+    ),
+    ToolSpec(
+        name="read_artifact",
+        domain=ToolDomain.ARTIFACT,
+        risk="read",
+        default_action=PolicyAction.ALLOW,
+        description="Read a window of a previously stored Artifact by id",
+        handler=read_artifact,
     ),
     ToolSpec(
         name="growth_assess",
@@ -156,6 +166,8 @@ def is_tool_enabled(spec: ToolSpec, settings: Settings | None = None) -> bool:
         return cfg.search_enabled
     if spec.domain == ToolDomain.FETCH:
         return cfg.fetch_url_enabled
+    if spec.domain == ToolDomain.ARTIFACT:
+        return cfg.artifact_enabled
     if spec.domain == ToolDomain.GROWTH:
         return cfg.growth_assess_enabled
     if spec.domain == ToolDomain.KNOWLEDGE:

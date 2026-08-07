@@ -32,4 +32,5 @@ def apply_fetch_limits(
         text=body,
         truncated=truncated,
         total_chars=total_chars,
+        full_text=normalized_text,
     )

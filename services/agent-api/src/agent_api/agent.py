@@ -106,8 +106,16 @@ FETCH_INSTRUCTIONS = """\
 ## Capability: fetch_url
 When you need the full content of a specific public URL (including a search hit), call
 fetch_url — do not stop at snippets if the user needs the actual page text.
-Base claims on the returned text/outline and cite the URL. Never pretend you opened a link
-if you did not.
+The tool returns outline + a preview (`text`); when `truncated` is true or you need more,
+use the returned `artifact_id` with read_artifact (offset windows). Cite the URL.
+Never pretend you opened a link if you did not.
+"""
+
+ARTIFACT_INSTRUCTIONS = """\
+## Capability: read_artifact
+Use read_artifact with an artifact_id from fetch_url (or prior tool results) to read the
+next window of stored page text via offset/max_chars. Prefer this over re-fetching the URL
+when you already have an artifact_id. Do not invent artifact ids.
 """
 
 GROWTH_INSTRUCTIONS = """\
@@ -192,6 +200,8 @@ def build_instructions(
         sections.append(SEARCH_INSTRUCTIONS.strip())
     if "fetch_url" in mounted_names:
         sections.append(FETCH_INSTRUCTIONS.strip())
+    if "read_artifact" in mounted_names:
+        sections.append(ARTIFACT_INSTRUCTIONS.strip())
     if "growth_assess" in mounted_names:
         sections.append(GROWTH_INSTRUCTIONS.strip())
     if "knowledge_search" in mounted_names:

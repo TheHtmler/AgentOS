@@ -14,6 +14,8 @@ def test_apply_fetch_limits_truncates_text_and_keeps_outline() -> None:
     assert response.truncated is True
     assert response.total_chars == 50
     assert len(response.text) == 20
+    assert response.full_text == "x" * 50
+    assert "full_text" not in response.to_tool_payload()
     assert response.outline.startswith("# One")
 
 

@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     firecrawl_api_key: str = ""
     fetch_url_timeout_seconds: float = 20.0
     fetch_url_max_chars: int = 10_000
+    # Persist fetch bodies + expose read_artifact (Postgres text; no object store yet).
+    artifact_enabled: bool = True
+    artifact_persist_on_fetch: bool = True
+    artifact_max_chars: int = 200_000
+    read_artifact_max_chars: int = 8_000
     # Built-in WHO growth assessment (anthro); no external router required.
     growth_assess_enabled: bool = True
     # Built-in keyword search over curated knowledge_chunks.

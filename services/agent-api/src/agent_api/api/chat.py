@@ -13,6 +13,8 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, Text
 
 from agent_api.agent import AgentOutput
 from agent_api.api.auth import get_current_user
+from agent_api.case.extract import schedule_case_extract
+from agent_api.case.recall import load_case_injection
 from agent_api.config import get_settings
 from agent_api.db.agent_store import (
     AgentNotFoundError,
@@ -33,8 +35,6 @@ from agent_api.db.chat_store import (
 )
 from agent_api.db.models import Message, Thread, User
 from agent_api.db.session import session_factory
-from agent_api.case.extract import schedule_case_extract
-from agent_api.case.recall import load_case_injection
 from agent_api.memory.extract import schedule_memory_extract
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.output_limits import with_truncation_notice_if_needed
@@ -303,6 +303,8 @@ async def event_stream(
                     fetch_router=runtime.fetch_router,
                     run_id=run_id,
                     case_id=case_id,
+                    user_id=user_id,
+                    thread_id=thread_id,
                     http_client=runtime.ollama_http_client,
                 ),
             )

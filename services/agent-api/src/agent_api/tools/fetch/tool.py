@@ -1,6 +1,6 @@
 import json
 import logging
-from dataclasses import asdict
+from dataclasses import replace
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -72,6 +72,8 @@ async def run_fetch_url(
     except ValueError as exc:
         return json.dumps({"error": str(exc), "url": normalized}, ensure_ascii=False)
 
+    response = await _maybe_persist_artifact(deps, response)
+
     if deps.persist_tool_events and deps.run_id is not None:
         await _persist_tool_result(
             deps.run_id,
@@ -80,7 +82,7 @@ async def run_fetch_url(
             summary=_summarize_response(response),
         )
 
-    return json.dumps(asdict(response), ensure_ascii=False)
+    return json.dumps(response.to_tool_payload(), ensure_ascii=False)
 
 
 async def fetch_url(
@@ -93,11 +95,64 @@ async def fetch_url(
     return await run_fetch_url(ctx.deps, url, max_chars)
 
 
+async def _maybe_persist_artifact(
+    deps: AgentDeps,
+    response: FetchResponse,
+) -> FetchResponse:
+    """Store full extracted text when Artifact is enabled and the run has an owner."""
+
+    settings = get_settings()
+    if (
+        not settings.artifact_enabled
+        or not settings.artifact_persist_on_fetch
+        or deps.user_id is None
+    ):
+        return response
+
+    full_text = (response.full_text or response.text).strip()
+    if not full_text:
+        return response
+
+    content = full_text[:settings.artifact_max_chars]
+    try:
+        from agent_api.db.artifact_store import create_artifact
+        from agent_api.db.session import session_factory
+
+        async with session_factory() as session, session.begin():
+            row = await create_artifact(
+                session,
+                owner_user_id=deps.user_id,
+                kind="fetch_url",
+                title=response.title or response.url,
+                content=content,
+                source_url=response.url,
+                outline=response.outline or None,
+                case_id=deps.case_id,
+                thread_id=deps.thread_id,
+                run_id=deps.run_id,
+                meta={
+                    "provider": response.provider,
+                    "truncated_for_model": response.truncated,
+                    "total_chars": response.total_chars,
+                    "stored_chars": len(content),
+                },
+            )
+            artifact_id = str(row.id)
+    except Exception:
+        logger.exception("Unable to persist fetch artifact for url=%s", response.url)
+        return response
+
+    return replace(response, artifact_id=artifact_id)
+
+
 def _summarize_response(response: FetchResponse) -> str:
     host = urlparse(response.url).hostname or response.url
     title = response.title or host
     flag = "truncated" if response.truncated else "full"
-    return f"{response.provider}: {title} ({flag}, {response.total_chars} chars)"[:500]
+    artifact = f", artifact={response.artifact_id}" if response.artifact_id else ""
+    return (
+        f"{response.provider}: {title} ({flag}, {response.total_chars} chars{artifact})"
+    )[:500]
 
 
 async def _persist_tool_call(run_id: UUID, url: str, max_chars: int) -> None:
