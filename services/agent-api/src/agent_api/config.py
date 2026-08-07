@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     memory_embedding_model: str = "nomic-embed-text"
     # Knowledge chunk hybrid search (reuses memory_embedding_model + ollama_base_url).
     knowledge_embedding_enabled: bool = True
+    # Read-only MCP (stdio). Default off; enable after reviewing allowlist.
+    mcp_enabled: bool = False
+    # Empty command → built-in PubMed readonly server module.
+    mcp_stdio_command: str = ""
+    mcp_tool_allowlist: str = "pubmed_search,pubmed_get_abstract"
+    mcp_tool_prefix: str = "mcp_"
     # Injected into every Run as the authoritative "now" / language preference.
     runtime_timezone: str = "Asia/Shanghai"
     runtime_locale: str = "zh-CN"

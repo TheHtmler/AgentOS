@@ -5,6 +5,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models.ollama import OllamaModel
 from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.tools import DeferredToolRequests
+from pydantic_ai.toolsets import AbstractToolset
 
 from agent_api.config import get_settings
 from agent_api.runtime_context import format_runtime_context_pack
@@ -129,6 +130,15 @@ the curated base is insufficient or the user needs a newer external page.
 
 MEMORY_HEADER = "## Known user facts (for this agent only; use when relevant)"
 
+MCP_INSTRUCTIONS = """\
+## Capability: read-only MCP literature tools
+Prefixed tools such as mcp_pubmed_search / mcp_pubmed_get_abstract query external
+literature indexes (PubMed). Prefer knowledge_search for curated MMA/PA education;
+use MCP PubMed when you need primary literature PMIDs/abstracts with citations.
+Always include source URLs/PMIDs. These tools are read-only — never treat results as
+individualized prescriptions.
+"""
+
 CASE_INSTRUCTIONS = """\
 ## Capability: Case archive (default subject)
 A Case profile block is the durable default subject archive for this Agent. It is created
@@ -188,6 +198,8 @@ def build_instructions(
         sections.append(KNOWLEDGE_INSTRUCTIONS.strip())
     if "case_context_read" in mounted_names:
         sections.append(CASE_INSTRUCTIONS.strip())
+    if any(name.startswith("mcp_") for name in mounted_names):
+        sections.append(MCP_INSTRUCTIONS.strip())
     return "\n\n".join(sections)
 
 
@@ -229,6 +241,7 @@ def create_agent(
     case_block: str | None = None,
     case_bound: bool = False,
     tool_policy_overrides: dict[str, str] | None = None,
+    toolsets: list[AbstractToolset[AgentDeps]] | None = None,
 ) -> Agent[AgentDeps, AgentOutput]:
     """Build a stateless agent; the caller owns and closes the HTTP client."""
 
@@ -290,6 +303,7 @@ def create_agent(
         output_type=[str, DeferredToolRequests],
         instructions=instructions,
         tools=tools,
+        toolsets=toolsets or [],
         model_settings={
             "max_tokens": settings.model_max_output_tokens,
             # Lower variance makes local-model reasoning and follow-up answers more consistent.

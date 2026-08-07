@@ -28,6 +28,7 @@ class ToolDomain(StrEnum):
     GROWTH = "growth"
     KNOWLEDGE = "knowledge"
     CASE = "case"
+    MCP = "mcp"
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +41,32 @@ class ToolSpec:
     default_action: PolicyAction
     description: str
     # Bound at agent build time; kept on the spec for a single mount table.
+    # MCP remote tools use a placeholder handler (execution is via MCPToolset).
     handler: Callable[..., object]
+
+
+def _mcp_placeholder_handler() -> str:
+    raise RuntimeError("MCP tools execute via MCPToolset, not registry handlers")
+
+
+_MCP_SPECS: list[ToolSpec] = []
+
+
+def register_mcp_tool_specs(names: tuple[str, ...]) -> None:
+    """Register allowlisted MCP tool names so Tool Policy can resolve them."""
+
+    _MCP_SPECS.clear()
+    for name in names:
+        _MCP_SPECS.append(
+            ToolSpec(
+                name=name,
+                domain=ToolDomain.MCP,
+                risk="external",
+                default_action=PolicyAction.ALLOW,
+                description=f"Read-only MCP tool ({name})",
+                handler=_mcp_placeholder_handler,
+            ),
+        )
 
 
 # Built-in tools live under tools/<domain>/; risk labels describe nature, not approval.
@@ -112,7 +138,14 @@ def get_tool_spec(name: str) -> ToolSpec | None:
     for spec in _BUILTIN_SPECS:
         if spec.name == name:
             return spec
+    for spec in _MCP_SPECS:
+        if spec.name == name:
+            return spec
     return None
+
+
+def iter_mcp_specs() -> tuple[ToolSpec, ...]:
+    return tuple(_MCP_SPECS)
 
 
 def is_tool_enabled(spec: ToolSpec, settings: Settings | None = None) -> bool:
@@ -129,6 +162,8 @@ def is_tool_enabled(spec: ToolSpec, settings: Settings | None = None) -> bool:
         return cfg.knowledge_search_enabled
     if spec.domain == ToolDomain.CASE:
         return cfg.case_context_read_enabled
+    if spec.domain == ToolDomain.MCP:
+        return cfg.mcp_enabled
     return False
 
 
@@ -228,7 +263,7 @@ def mounted_tool_names(
     case_bound: bool = False,
 ) -> set[str]:
     cfg = settings or get_settings()
-    return {
+    names = {
         spec.name
         for spec in _BUILTIN_SPECS
         if should_mount_tool(
@@ -240,3 +275,11 @@ def mounted_tool_names(
             case_bound=case_bound,
         )
     }
+    for spec in _MCP_SPECS:
+        if is_tool_enabled(spec, cfg) and evaluate(
+            spec.name,
+            settings=cfg,
+            overrides=overrides,
+        ) != PolicyAction.DENY:
+            names.add(spec.name)
+    return names

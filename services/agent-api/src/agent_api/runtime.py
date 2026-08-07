@@ -1,19 +1,22 @@
 import asyncio
 import logging
 from collections.abc import AsyncGenerator, Coroutine
-from contextlib import asynccontextmanager
-from typing import Any
+from contextlib import AsyncExitStack, asynccontextmanager
+from typing import Any, cast
 from uuid import UUID
 
 import httpx
 from fastapi import FastAPI, Request
 from pydantic_ai import Agent
+from pydantic_ai.toolsets import AbstractToolset
 
 from agent_api.agent import AgentOutput, create_agent, create_ollama_http_client
 from agent_api.config import get_settings
 from agent_api.db.session import close_database
 from agent_api.tools.fetch.router import FetchRouter, build_fetch_router
+from agent_api.tools.mcp.client import build_mcp_toolsets
 from agent_api.tools.search.router import SearchRouter, build_search_router
+from agent_api.tools.search.tool import AgentDeps
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,7 @@ class AgentRuntime:
         search_router: SearchRouter | None = None,
         fetch_router: FetchRouter | None = None,
         ollama_http_client: httpx.AsyncClient | None = None,
+        mcp_toolsets: list[AbstractToolset[AgentDeps]] | None = None,
     ) -> None:
         self.agent = agent
         self.model_semaphore = model_semaphore
@@ -36,6 +40,7 @@ class AgentRuntime:
         self.fetch_router = fetch_router
         # Shared with background auto-title jobs (same process lifetime as the agent).
         self.ollama_http_client = ollama_http_client
+        self.mcp_toolsets = mcp_toolsets or []
         self._run_tasks: dict[UUID, asyncio.Task[None]] = {}
 
     def start_background_run(
@@ -97,6 +102,7 @@ class AgentRuntime:
             case_block=case_block,
             case_bound=case_bound,
             tool_policy_overrides=overrides,
+            toolsets=self.mcp_toolsets,
         )
 
     async def stop_background_runs(self) -> None:
@@ -136,12 +142,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         firecrawl_api_key=settings.firecrawl_api_key,
         http_client=fetch_http_client,
     )
+
+    mcp_toolsets: list[AbstractToolset[AgentDeps]] = []
+    try:
+        mcp_toolsets = cast(
+            list[AbstractToolset[AgentDeps]],
+            build_mcp_toolsets(settings),
+        )
+    except Exception:
+        logger.exception("failed to build MCP toolsets; continuing without MCP")
+        mcp_toolsets = []
+
     agent = create_agent(
         http_client,
         search_router=search_router if settings.search_enabled else None,
         search_enabled=settings.search_enabled,
         fetch_router=fetch_router if settings.fetch_url_enabled else None,
         fetch_enabled=settings.fetch_url_enabled,
+        toolsets=mcp_toolsets,
     )
     runtime = AgentRuntime(
         agent=agent,
@@ -150,6 +168,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         search_router=search_router if settings.search_enabled else None,
         fetch_router=fetch_router if settings.fetch_url_enabled else None,
         ollama_http_client=http_client,
+        mcp_toolsets=mcp_toolsets,
     )
     app.state.runtime = runtime
 
@@ -172,7 +191,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
 
     try:
-        async with agent:
+        async with AsyncExitStack() as stack:
+            for toolset in mcp_toolsets:
+                await stack.enter_async_context(toolset)
+            await stack.enter_async_context(agent)
             try:
                 yield
             finally:
