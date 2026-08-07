@@ -20,9 +20,30 @@ def test_build_instructions_appends_overlay_and_memory() -> None:
 def test_platform_instructions_require_tools_before_refusal() -> None:
     from agent_api.agent import SEARCH_INSTRUCTIONS, SYSTEM_INSTRUCTIONS
 
+    assert "# Role" in SYSTEM_INSTRUCTIONS
+    assert "# Success criteria" in SYSTEM_INSTRUCTIONS
+    assert "# Stop rules" in SYSTEM_INSTRUCTIONS
     assert "paste that data" in SYSTEM_INSTRUCTIONS
     assert "Do not refuse with a long disclaimer" in SYSTEM_INSTRUCTIONS
     assert "reference standards/charts/guidelines" in SEARCH_INSTRUCTIONS
+
+
+def test_imd_overlay_is_structured_contract() -> None:
+    import importlib.util
+    from pathlib import Path
+
+    seed_path = Path(__file__).resolve().parents[1] / "scripts" / "seed_agents.py"
+    spec = importlib.util.spec_from_file_location("seed_agents_for_test", seed_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    overlay = module.IMD_OVERLAY
+
+    assert "# Goal" in overlay
+    assert "# Stop rules" in overlay
+    assert "knowledge_search" in overlay
+    assert "no-silent-case-write" in overlay
+    assert "growth_assess" in overlay
 
 
 def test_default_settings() -> None:
