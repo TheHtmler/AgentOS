@@ -7,7 +7,11 @@ import logging
 
 from pydantic_ai import RunContext
 
-from agent_api.case.recall import format_recorded_at
+from agent_api.case.recall import (
+    current_facts_by_key,
+    format_recorded_at,
+    history_excluding_current,
+)
 from agent_api.config import get_settings
 from agent_api.db.case_store import list_confirmed_facts, list_keyed_fact_history
 from agent_api.db.session import session_factory
@@ -22,7 +26,7 @@ async def run_case_context_read(
     query: str | None = None,
     include_history: bool = True,
 ) -> str:
-    """Return Case facts with recorded_at; optional history for keyed slots."""
+    """Return Case facts with recorded_at; history is prior values only."""
 
     from agent_api.tools.policy import gate_or_none
 
@@ -60,13 +64,9 @@ async def run_case_context_read(
         haystack = " ".join([key or "", content, " ".join(tags)]).lower()
         return needle in haystack
 
+    current_facts = current_facts_by_key(facts)
     current_items: list[dict[str, object]] = []
-    seen_keys: set[str] = set()
-    for fact in facts:
-        if fact.key and fact.key in seen_keys:
-            continue
-        if fact.key:
-            seen_keys.add(fact.key)
+    for fact in current_facts:
         tags = list(fact.tags or [])
         if not _match(fact.content, fact.key, tags):
             continue
@@ -83,8 +83,9 @@ async def run_case_context_read(
             },
         )
 
+    prior = history_excluding_current(history, current_facts) if include_history else []
     history_items: list[dict[str, object]] = []
-    for fact in history:
+    for fact in prior:
         tags = list(fact.tags or [])
         if not _match(fact.content, fact.key, tags):
             continue
@@ -109,7 +110,8 @@ async def run_case_context_read(
             "history_count": len(history_items),
             "history": history_items,
             "note": (
-                "Use current for 目前/现在. Use history+recorded_at for 什么时候记录. "
+                "Use current for 目前/现在. history is prior values only "
+                "(empty means 暂无更早记录 — do not repeat current). "
                 "Do not invent missing timestamps."
             ),
         },

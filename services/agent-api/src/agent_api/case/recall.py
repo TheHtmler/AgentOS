@@ -49,25 +49,38 @@ def current_facts_by_key(facts: list[CaseFact]) -> list[CaseFact]:
     return selected
 
 
+def history_excluding_current(
+    history: list[CaseFact],
+    current: list[CaseFact],
+) -> list[CaseFact]:
+    """Drop rows already shown under Current so History is prior values only."""
+
+    current_ids = {fact.id for fact in current}
+    return [fact for fact in history if fact.id not in current_ids]
+
+
 def format_case_block(
     facts: list[CaseFact],
     *,
     history: list[CaseFact] | None = None,
     timezone_name: str = "Asia/Shanghai",
 ) -> str | None:
-    """Render current Case facts (+ optional keyed history) with recorded_at stamps."""
+    """Render current Case facts (+ prior keyed history) with recorded_at stamps."""
 
     current = current_facts_by_key(facts)
-    if not current and not history:
+    prior = history_excluding_current(history or [], current)
+    if not current and not prior:
         return None
 
     lines = [
         CASE_HEADER,
         "Rules for answering from this block:",
         '- For "目前/现在/当前", use ### Current only (one value per key; newest).',
-        '- For "什么时候记录/历史", use ### History timestamps; do not invent dates.',
+        '- For "什么时候记录/历史": if ### History is empty, say 暂无更早记录 once;',
+        "  do not repeat Current rows as History.",
         "- Prefer Case over overlapping user_memories profile slots for the same key.",
         "- Keep factual replies short unless the user asks for analysis.",
+        "- Missing asked fields: one short line (e.g. 体重未记录), no long essay.",
         "### Current",
     ]
     if not current:
@@ -77,9 +90,11 @@ def format_case_block(
         recorded = format_recorded_at(fact.updated_at or fact.created_at, timezone_name=timezone_name)
         lines.append(f"- [{label}] {fact.content} (recorded_at: {recorded})")
 
-    if history:
-        lines.append("### History (newest first; includes superseded slot values)")
-        for fact in history:
+    lines.append("### History (prior values only; newest first; empty = no earlier records)")
+    if not prior:
+        lines.append("- (none)")
+    else:
+        for fact in prior:
             label = fact.key or "fact"
             recorded = format_recorded_at(
                 fact.updated_at or fact.created_at,

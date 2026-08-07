@@ -64,6 +64,7 @@ async def test_case_context_read_filters_and_requires_case(
     assert payload["current_count"] == 1
     assert payload["current"][0]["key"] == "height_cm"
     assert "recorded_at" in payload["current"][0]
+    assert payload["history_count"] == 0
 
     empty = json.loads(
         await run_case_context_read(
