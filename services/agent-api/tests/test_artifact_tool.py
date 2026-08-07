@@ -18,16 +18,6 @@ from agent_api.tools.registry import mounted_tool_names
 from agent_api.tools.search.tool import AgentDeps
 
 
-@pytest.fixture(autouse=True)
-async def dispose_database_pool() -> AsyncIterator[None]:
-    """Prevent asyncpg pooled connections from crossing pytest event loops."""
-
-    try:
-        yield
-    finally:
-        await close_database()
-
-
 class _FakeRouter:
     def __init__(self, text: str) -> None:
         self._text = text
@@ -83,10 +73,23 @@ def test_read_artifact_hidden_when_disabled() -> None:
     assert "read_artifact" not in names
 
 
+@pytest.fixture
+async def dispose_database_pool() -> AsyncIterator[None]:
+    """Prevent asyncpg pooled connections from crossing pytest event loops."""
+
+    try:
+        yield
+    finally:
+        await close_database()
+
+
 @pytest.mark.anyio
-async def test_fetch_persists_artifact_and_read_window(
+async def test_fetch_persist_read_and_owner_isolation(
     authenticated_api_user: UUID,
+    dispose_database_pool: None,
 ) -> None:
+    """One async test covers persist/window-read and cross-user deny (same event loop)."""
+
     user_id = authenticated_api_user
     body = ("ABCDEFGHIJ" * 200) + "TAIL"
     payload = await run_fetch_url(
@@ -130,35 +133,30 @@ async def test_fetch_persists_artifact_and_read_window(
     assert second["text"] == body[500:1_000]
     assert second["total_chars"] == len(body)
 
-
-@pytest.mark.anyio
-async def test_read_artifact_denies_other_user(
-    authenticated_api_user: UUID,
-) -> None:
-    owner_id = authenticated_api_user
+    # Separate row for ownership check (still same loop / pool).
     async with session_factory() as session, session.begin():
-        row = await create_artifact(
+        secret = await create_artifact(
             session,
-            owner_user_id=owner_id,
+            owner_user_id=user_id,
             kind="fetch_url",
             title="secret",
             content="private-body",
             source_url="https://example.com/x",
         )
-        artifact_id = str(row.id)
+        secret_id = str(secret.id)
 
-    other = json.loads(
+    denied = json.loads(
         await run_read_artifact(
             AgentDeps(persist_tool_events=False, user_id=uuid4()),
-            artifact_id,
+            secret_id,
         ),
     )
-    assert other["code"] == "artifact_not_found"
+    assert denied["code"] == "artifact_not_found"
 
     async with session_factory() as session:
         missing = await get_owned_artifact(
             session,
-            artifact_id=UUID(artifact_id),
+            artifact_id=UUID(secret_id),
             owner_user_id=uuid4(),
         )
         assert missing is None
