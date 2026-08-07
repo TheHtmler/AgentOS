@@ -25,6 +25,18 @@ _inflight: set[UUID] = set()
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
 
+# Capture height/weight numbers from colloquial Chinese user text.
+_HEIGHT_RE = re.compile(
+    r"(?:身高|身长)\s*[是为:]?\s*(\d+(?:\.\d+)?)\s*(?:cm|厘米)?",
+    re.IGNORECASE,
+)
+_WEIGHT_RE = re.compile(
+    r"(?:体重|重量)\s*[是为:]?\s*(\d+(?:\.\d+)?)\s*(?:kg|公斤)?",
+    re.IGNORECASE,
+)
+_HEIGHT_UNIT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:cm|厘米)", re.IGNORECASE)
+_WEIGHT_UNIT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:kg|公斤)", re.IGNORECASE)
+
 Attribution = Literal["self", "other", "hypothetical", "unknown"]
 
 ExtractCaseFn = Callable[
@@ -50,6 +62,100 @@ def _normalize_content(content: str) -> str:
     return _WHITESPACE_RE.sub(" ", content).strip().casefold()
 
 
+def infer_case_fact_key(content: str, tags: list[str]) -> str | None:
+    """Infer a stable Case key from content/tags when the model omitted key."""
+
+    haystack = " ".join([content, *tags]).casefold()
+    if any(token in haystack for token in ("身高", "身长", "height", "cm", "厘米")):
+        if "体重" not in haystack and "weight" not in haystack and "kg" not in haystack:
+            return "height_cm"
+        if "身高" in haystack or "身长" in haystack or "height" in haystack:
+            return "height_cm"
+    if any(token in haystack for token in ("体重", "重量", "weight", "kg", "公斤")):
+        return "weight_kg"
+    if any(token in haystack for token in ("性别", "男", "女", "sex", "male", "female")):
+        return "sex"
+    if any(token in haystack for token in ("生日", "出生", "date_of_birth", "dob")):
+        return "date_of_birth"
+    if any(token in haystack for token in ("月龄", "个月", "age_months")):
+        return "age_months"
+    return None
+
+
+def slot_hints_from_user_message(user_message: str) -> list[CaseFactUpdate]:
+    """Deterministic height/weight hints from the user turn (LLM miss safety net)."""
+
+    text = user_message.strip()
+    if not text:
+        return []
+
+    hints: list[CaseFactUpdate] = []
+    height_match = _HEIGHT_RE.search(text)
+    if height_match is None:
+        # Fallback: bare "82 cm" only when 身高/身长 also appears nearby in the turn.
+        if re.search(r"身高|身长", text):
+            height_match = _HEIGHT_UNIT_RE.search(text)
+    if height_match is not None:
+        value = height_match.group(1)
+        hints.append(
+            CaseFactUpdate(
+                key="height_cm",
+                content=f"身高 {value} cm",
+                tags=["身高"],
+            ),
+        )
+
+    weight_match = _WEIGHT_RE.search(text)
+    if weight_match is None and re.search(r"体重|重量", text):
+        weight_match = _WEIGHT_UNIT_RE.search(text)
+    if weight_match is not None:
+        value = weight_match.group(1)
+        hints.append(
+            CaseFactUpdate(
+                key="weight_kg",
+                content=f"体重 {value} kg",
+                tags=["体重"],
+            ),
+        )
+    return hints
+
+
+def merge_user_slot_hints(
+    user_message: str,
+    payload: ExtractedCasePayload,
+) -> ExtractedCasePayload:
+    """Fill missing keyed updates the model omitted but the user clearly stated."""
+
+    hints = slot_hints_from_user_message(user_message)
+    if not hints:
+        return payload
+
+    present_keys = {item.key for item in payload.updates if item.key}
+    merged = list(payload.updates)
+    for hint in hints:
+        if hint.key and hint.key not in present_keys:
+            merged.append(hint)
+            present_keys.add(hint.key)
+
+    # Prefer self when the user stated anthropometrics about 宝宝 / 我家孩子.
+    attribution = payload.attribution
+    if attribution == "unknown" and merged and re.search(
+        r"宝宝|我家|我儿|我女|我的孩子|小孩",
+        user_message,
+    ):
+        attribution = "self"
+
+    if len(merged) != len(payload.updates) or attribution != payload.attribution:
+        logger.info(
+            "case extract merged user slot hints: before=%s after=%s attribution=%s→%s",
+            len(payload.updates),
+            len(merged),
+            payload.attribution,
+            attribution,
+        )
+    return ExtractedCasePayload(attribution=attribution, updates=merged)
+
+
 def parse_case_extract_payload(raw: object) -> ExtractedCasePayload:
     """Parse extractor JSON into attribution + case updates."""
 
@@ -68,6 +174,7 @@ def parse_case_extract_payload(raw: object) -> ExtractedCasePayload:
 
     updates_raw = payload.get("updates")
     updates: list[CaseFactUpdate] = []
+    keyless = 0
     if isinstance(updates_raw, list):
         for item in cast(list[object], updates_raw):
             if not isinstance(item, dict):
@@ -86,7 +193,14 @@ def parse_case_extract_payload(raw: object) -> ExtractedCasePayload:
                     for tag in cast(list[object], tags_raw)
                     if isinstance(tag, str) and tag.strip()
                 ]
-            updates.append(CaseFactUpdate(key=key, content=content.strip(), tags=tags))
+            content = content.strip()
+            if key is None:
+                key = infer_case_fact_key(content, tags)
+                if key is None:
+                    keyless += 1
+            updates.append(CaseFactUpdate(key=key, content=content, tags=tags))
+    if keyless:
+        logger.warning("case extract had %s keyless updates after inference", keyless)
     return ExtractedCasePayload(attribution=attribution, updates=updates)
 
 
@@ -103,14 +217,19 @@ async def extract_case_via_ollama(
         "Return JSON only:\n"
         "{\n"
         '  "attribution": "self"|"other"|"hypothetical"|"unknown",\n'
-        '  "updates": [{"key":"height_cm","content":"身高 82.5 cm","tags":["身高"]}]\n'
+        '  "updates": [\n'
+        '    {"key":"height_cm","content":"身高 82.5 cm","tags":["身高"]},\n'
+        '    {"key":"weight_kg","content":"体重 15.2 kg","tags":["体重"]}\n'
+        "  ]\n"
         "}\n"
         "Rules:\n"
         "- Prefer stable keys when applicable: height_cm, weight_kg, sex, "
         "date_of_birth, age_months (one update object per key).\n"
+        "- If the user states BOTH height and weight in this turn, you MUST emit "
+        "two updates (height_cm and weight_kg).\n"
         "- Only include keys the user (or clearly confirmed assistant recap) stated "
-        "in THIS turn. If they only update height, omit weight — never clear or "
-        "rewrite unmentioned slots.\n"
+        "in THIS turn. If they only update height and do not mention weight, omit "
+        "weight — never clear or rewrite unmentioned slots.\n"
         "- attribution=self for the user's own default subject (e.g. 宝宝 / 我家孩子 / "
         "the Case already in context).\n"
         "- attribution=other when helping someone else's child or a third party.\n"
@@ -273,7 +392,13 @@ def schedule_case_extract(
         or run_id in _inflight
     ):
         return
-    if not user_message.strip() or not assistant_content.strip():
+    user_text = user_message.strip()
+    assistant_text = assistant_content.strip()
+    # Prefer user+assistant; still run when the user stated slot values even if
+    # the assistant reply is empty (e.g. cancelled mid-stream after user write).
+    if not user_text:
+        return
+    if not assistant_text and not slot_hints_from_user_message(user_text):
         return
     _inflight.add(run_id)
     extractor = extract_case or extract_case_via_ollama
@@ -289,7 +414,20 @@ def schedule_case_extract(
                 logger.info("case extraction skipped; model semaphore busy run=%s", run_id)
                 return
             try:
-                payload = await extractor(user_message, assistant_content, http_client)
+                if assistant_text:
+                    payload = await extractor(user_text, assistant_text, http_client)
+                else:
+                    # Deterministic path only — no model call without assistant context.
+                    payload = ExtractedCasePayload(attribution="unknown", updates=[])
+                payload = merge_user_slot_hints(user_text, payload)
+                if (
+                    not payload.updates
+                    and slot_hints_from_user_message(user_text)
+                ):
+                    logger.warning(
+                        "case extraction empty after merge despite user slot hints run=%s",
+                        run_id,
+                    )
             finally:
                 model_semaphore.release()
             async with session_factory() as session, session.begin():

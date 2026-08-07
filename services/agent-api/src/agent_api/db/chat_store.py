@@ -677,6 +677,7 @@ async def fail_run(
     session: AsyncSession,
     *,
     run_id: UUID,
+    error_message: str = "Agent model failed.",
 ) -> None:
     """Mark a running execution as failed without storing internal exception details."""
 
@@ -686,7 +687,7 @@ async def fail_run(
 
     completed_at = datetime.now(UTC)
     run.status = "failed"
-    run.error_message = "Agent model failed."
+    run.error_message = error_message
     run.completed_at = completed_at
 
     await append_run_event(
@@ -695,6 +696,44 @@ async def fail_run(
         event_type="run_failed",
         payload={"status": "failed"},
     )
+
+
+async def fail_orphaned_in_process_runs(
+    session: AsyncSession,
+    *,
+    error_message: str = "Agent process restarted before this run finished.",
+) -> int:
+    """Fail Runs left `running`/`queued` after a process restart (not waiting_approval).
+
+    In-process model tasks die with the API process; DB rows would otherwise block
+    the thread forever via the one-active-run constraint.
+    """
+
+    orphaned = list(
+        (
+            await session.scalars(
+                select(Run)
+                .where(Run.status.in_(("running", "queued")))
+                .with_for_update(),
+            )
+        ).all(),
+    )
+    if not orphaned:
+        return 0
+
+    completed_at = datetime.now(UTC)
+    for run in orphaned:
+        run.status = "failed"
+        run.error_message = error_message
+        run.completed_at = completed_at
+        await append_run_event(
+            session,
+            run_id=run.id,
+            event_type="run_failed",
+            payload={"status": "failed", "reason": "orphaned_on_startup"},
+        )
+    await session.flush()
+    return len(orphaned)
 
 
 async def cancel_run(

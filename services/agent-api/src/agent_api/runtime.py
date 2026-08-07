@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import AsyncGenerator, Coroutine
 from contextlib import asynccontextmanager
 from typing import Any
@@ -13,6 +14,8 @@ from agent_api.config import get_settings
 from agent_api.db.session import close_database
 from agent_api.tools.fetch.router import FetchRouter, build_fetch_router
 from agent_api.tools.search.router import SearchRouter, build_search_router
+
+logger = logging.getLogger(__name__)
 
 
 class AgentRuntime:
@@ -150,7 +153,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     app.state.runtime = runtime
 
+    from agent_api.db.chat_store import fail_orphaned_in_process_runs
+    from agent_api.db.session import session_factory
     from agent_api.hitl_timeout import hitl_timeout_loop
+
+    try:
+        async with session_factory() as session, session.begin():
+            orphaned = await fail_orphaned_in_process_runs(session)
+        if orphaned:
+            logger.info("failed %s orphaned in-process run(s) on startup", orphaned)
+    except Exception:
+        logger.exception("failed to sweep orphaned runs on startup")
 
     stop_hitl_timeout = asyncio.Event()
     hitl_timeout_task = asyncio.create_task(

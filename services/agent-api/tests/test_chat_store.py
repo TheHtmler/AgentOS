@@ -10,12 +10,15 @@ from agent_api.db.chat_store import (
     append_tool_call_event,
     append_tool_result_event,
     complete_run,
+    fail_orphaned_in_process_runs,
     list_completed_run_message_histories,
     list_thread_messages,
     list_thread_tool_calls,
     list_threads,
+    pause_run_for_approval,
     start_run,
 )
+from agent_api.hitl_types import ApprovalRequest
 from agent_api.db.models import Agent, Run, RunEvent, RunMessageHistory, Thread, User
 
 
@@ -444,5 +447,63 @@ async def test_existing_thread_ignores_requested_agent_id(database_session: Asyn
 
         assert thread is not None
         assert thread.agent_id == general_id
+    finally:
+        await transaction.rollback()
+
+
+@pytest.mark.anyio
+async def test_fail_orphaned_in_process_runs_spares_waiting_approval(
+    database_session: AsyncSession,
+) -> None:
+    session = database_session
+    transaction = await session.begin()
+
+    try:
+        orphaned = await start_run(
+            session,
+            thread_id=None,
+            user_content="重启前卡住",
+            model_name="gemma4:e4b",
+        )
+        waiting = await start_run(
+            session,
+            thread_id=None,
+            user_content="待审批",
+            model_name="gemma4:e4b",
+        )
+        await pause_run_for_approval(
+            session,
+            run_id=waiting.run_id,
+            approvals=[
+                ApprovalRequest(
+                    tool_call_id="call-1",
+                    tool_name="case_slot_collect",
+                    tool_args={"fields_json": "[]"},
+                ),
+            ],
+            model_messages=[{"kind": "model-request", "parts": []}],
+            expires_at=datetime.now(UTC) + timedelta(minutes=30),
+        )
+
+        count = await fail_orphaned_in_process_runs(session)
+        assert count == 1
+
+        orphaned_run = await session.get(Run, orphaned.run_id)
+        waiting_run = await session.get(Run, waiting.run_id)
+        assert orphaned_run is not None
+        assert orphaned_run.status == "failed"
+        assert orphaned_run.error_message is not None
+        assert "restarted" in orphaned_run.error_message
+        assert waiting_run is not None
+        assert waiting_run.status == "waiting_approval"
+
+        # Thread is free for a new run after orphan cleanup.
+        again = await start_run(
+            session,
+            thread_id=orphaned.thread_id,
+            user_content="可以再发",
+            model_name="gemma4:e4b",
+        )
+        assert again.thread_id == orphaned.thread_id
     finally:
         await transaction.rollback()
