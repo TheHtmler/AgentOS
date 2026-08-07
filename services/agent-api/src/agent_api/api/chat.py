@@ -236,11 +236,24 @@ async def persist_completed_run(
         )
 
 
-async def persist_failed_run(run_id: UUID) -> None:
+def format_run_failure_message(error: BaseException, *, limit: int = 500) -> str:
+    """Store a short, non-secret failure hint on the Run row for later diagnosis."""
+
+    text = f"{type(error).__name__}: {error}".strip()
+    if not text or text == ":":
+        return "Agent model failed."
+    return text[:limit]
+
+
+async def persist_failed_run(
+    run_id: UUID,
+    *,
+    error_message: str = "Agent model failed.",
+) -> None:
     """Commit a safe terminal state when model execution fails."""
 
     async with session_factory() as session, session.begin():
-        await fail_run(session, run_id=run_id)
+        await fail_run(session, run_id=run_id, error_message=error_message)
 
 
 async def persist_cancelled_run(run_id: UUID) -> None:
@@ -361,11 +374,14 @@ async def event_stream(
         except Exception:
             logger.exception("Unable to persist cancelled run %s", run_id)
         raise
-    except Exception:
+    except Exception as error:
         logger.exception("Chat stream failed for run %s", run_id)
 
         try:
-            await persist_failed_run(run_id)
+            await persist_failed_run(
+                run_id,
+                error_message=format_run_failure_message(error),
+            )
         except Exception:
             logger.exception("Unable to persist failed run %s", run_id)
 

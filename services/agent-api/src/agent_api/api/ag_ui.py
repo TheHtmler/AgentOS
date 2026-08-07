@@ -17,6 +17,7 @@ from pydantic_ai.ui.ag_ui import AGUIAdapter
 from agent_api.agent import AgentOutput
 from agent_api.api.auth import get_current_user
 from agent_api.api.chat import (
+    format_run_failure_message,
     load_thread_model_history,
     parse_model_messages_json,
     persist_cancelled_run,
@@ -270,7 +271,10 @@ async def stream_ag_ui_run(
             raise
         except Exception as error:
             logger.exception("AG-UI stream failed for run %s", started.run_id)
-            await persist_failed_run(started.run_id)
+            await persist_failed_run(
+                started.run_id,
+                error_message=format_run_failure_message(error),
+            )
             raise AGUIExecutionError("模型服务暂时不可用，请稍后重试。") from error
 
     async def persist_completed(result: AgentRunResult[AgentOutput]) -> None:
@@ -342,7 +346,10 @@ async def stream_ag_ui_run(
             raise
         except Exception as error:
             logger.exception("Unable to complete AG-UI run %s", started.run_id)
-            await persist_failed_run(started.run_id)
+            await persist_failed_run(
+                started.run_id,
+                error_message=format_run_failure_message(error),
+            )
             raise AGUIExecutionError("对话记录保存失败，请稍后重试。") from error
 
     async def produce_events() -> None:

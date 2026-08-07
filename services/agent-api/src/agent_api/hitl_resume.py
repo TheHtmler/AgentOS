@@ -15,6 +15,7 @@ from pydantic_ai.tools import (
 )
 
 from agent_api.api.chat import (
+    format_run_failure_message,
     parse_model_messages_json,
     persist_completed_run,
     persist_failed_run,
@@ -153,9 +154,12 @@ async def continue_run_after_approval(
                     http_client=runtime.ollama_http_client,
                 ),
             )
-    except Exception:
+    except Exception as error:
         logger.exception("HITL resume model run failed for run_id=%s", run_id)
-        await persist_failed_run(run_id)
+        await persist_failed_run(
+            run_id,
+            error_message=format_run_failure_message(error),
+        )
         return
 
     new_messages = result.new_messages()

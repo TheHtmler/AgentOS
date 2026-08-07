@@ -106,8 +106,9 @@ FETCH_INSTRUCTIONS = """\
 ## Capability: fetch_url
 When you need the full content of a specific public URL (including a search hit), call
 fetch_url — do not stop at snippets if the user needs the actual page text.
-The tool returns outline + a preview (`text`); when `truncated` is true or you need more,
-use the returned `artifact_id` with read_artifact (offset windows). Cite the URL.
+The tool returns outline + a short preview (`text`); long pages are stored as Artifacts.
+When `truncated` is true or you need more detail, call read_artifact with `artifact_id`
+(and next_offset) instead of raising max_chars. Cite the URL.
 Never pretend you opened a link if you did not.
 """
 
@@ -115,7 +116,8 @@ ARTIFACT_INSTRUCTIONS = """\
 ## Capability: read_artifact
 Use read_artifact with an artifact_id from fetch_url (or prior tool results) to read the
 next window of stored page text via offset/max_chars. Prefer this over re-fetching the URL
-when you already have an artifact_id. Do not invent artifact ids.
+or asking for a larger fetch preview. Keep windows modest; call again with next_offset if
+needed. Do not invent artifact ids.
 """
 
 GROWTH_INSTRUCTIONS = """\
