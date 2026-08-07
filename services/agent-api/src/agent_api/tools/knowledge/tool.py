@@ -1,4 +1,4 @@
-"""Built-in keyword knowledge search over curated disease chunks."""
+"""Built-in hybrid knowledge search over curated disease chunks."""
 
 from __future__ import annotations
 
@@ -12,13 +12,17 @@ from pydantic_ai import RunContext
 from sqlalchemy import ColumnElement, Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent_api.config import get_settings
 from agent_api.db.models import KnowledgeBase, KnowledgeChunk, KnowledgeDocument
 from agent_api.db.session import session_factory
+from agent_api.memory.embed import cosine_similarity, embed_text
 from agent_api.tools.search.tool import AgentDeps
 
 logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
+_VECTOR_WEIGHT = 10.0
+_MIN_VECTOR_KEEP = 0.28
 
 
 def _tokenize_query(query: str) -> list[str]:
@@ -31,16 +35,42 @@ def _parse_disease_tags(raw: str | None) -> list[str]:
     return [part.strip().lower() for part in raw.split(",") if part.strip()][:16]
 
 
-def _score_chunk(content: str, title: str, tags: list[str], tokens: list[str]) -> int:
+def _keyword_score(content: str, title: str, tags: list[str], tokens: list[str]) -> float:
     haystack = f"{title}\n{content}".lower()
     tag_blob = " ".join(tags).lower()
-    score = 0
+    score = 0.0
     for token in tokens:
         if token in haystack:
-            score += 3
+            score += 3.0
         if token in tag_blob:
-            score += 2
+            score += 2.0
     return score
+
+
+def score_knowledge_hit(
+    *,
+    content: str,
+    title: str,
+    tags: list[str],
+    tokens: list[str],
+    disease_tags: list[str],
+    query_embedding: list[float] | None,
+    chunk_embedding: list[float] | None,
+) -> float | None:
+    """Return combined keyword+vector score, or None when the hit should be dropped."""
+
+    keyword = _keyword_score(content, title, tags, tokens)
+    if disease_tags:
+        overlap = len(set(disease_tags) & {tag.lower() for tag in tags})
+        keyword += overlap * 4.0
+
+    vector = 0.0
+    if query_embedding and chunk_embedding:
+        vector = cosine_similarity(query_embedding, list(chunk_embedding))
+
+    if keyword <= 0 and vector < _MIN_VECTOR_KEEP:
+        return None
+    return keyword + vector * _VECTOR_WEIGHT
 
 
 async def search_knowledge_chunks(
@@ -50,11 +80,12 @@ async def search_knowledge_chunks(
     disease_tags: list[str],
     max_results: int,
     knowledge_base_slug: str | None = None,
+    query_embedding: list[float] | None = None,
 ) -> list[dict[str, Any]]:
-    """Keyword + optional tag filter over published knowledge chunks."""
+    """Hybrid keyword + optional embedding search over published knowledge chunks."""
 
     tokens = _tokenize_query(query)
-    if not tokens and not disease_tags:
+    if not tokens and not disease_tags and query_embedding is None:
         return []
 
     stmt: Select[tuple[KnowledgeChunk, KnowledgeDocument, KnowledgeBase]] = (
@@ -68,7 +99,9 @@ async def search_knowledge_chunks(
     if disease_tags:
         stmt = stmt.where(KnowledgeChunk.tags.overlap(disease_tags))
 
-    if tokens:
+    # When embeddings can rescue synonym queries, widen beyond ILIKE hits.
+    use_vector = query_embedding is not None
+    if tokens and not use_vector:
         like_clauses: list[ColumnElement[bool]] = []
         for token in tokens:
             pattern = f"%{token}%"
@@ -79,18 +112,26 @@ async def search_knowledge_chunks(
             )
         stmt = stmt.where(or_(*like_clauses))
 
-    # Pull a modest candidate set, then rank in Python for predictable MVP scoring.
-    stmt = stmt.order_by(KnowledgeDocument.slug, KnowledgeChunk.chunk_index).limit(80)
+    # Pull a modest candidate set, then rank in Python for predictable scoring.
+    stmt = stmt.order_by(KnowledgeDocument.slug, KnowledgeChunk.chunk_index).limit(200)
     rows = (await session.execute(stmt)).all()
 
-    scored: list[tuple[int, dict[str, Any]]] = []
+    scored: list[tuple[float, dict[str, Any]]] = []
     for chunk, document, base in rows:
         tags = [str(item) for item in cast(list[Any], chunk.tags or [])]
-        score = _score_chunk(chunk.content, chunk.title, tags, tokens)
-        if disease_tags:
-            overlap = len(set(disease_tags) & {tag.lower() for tag in tags})
-            score += overlap * 4
-        if score <= 0 and tokens:
+        chunk_embedding = (
+            list(cast(list[float], chunk.embedding)) if chunk.embedding else None
+        )
+        score = score_knowledge_hit(
+            content=chunk.content,
+            title=chunk.title,
+            tags=tags,
+            tokens=tokens,
+            disease_tags=disease_tags,
+            query_embedding=query_embedding,
+            chunk_embedding=chunk_embedding,
+        )
+        if score is None:
             continue
         scored.append(
             (
@@ -106,7 +147,7 @@ async def search_knowledge_chunks(
                     "source_label": document.source_label,
                     "version_label": document.version_label,
                     "knowledge_base": base.slug,
-                    "score": score,
+                    "score": round(score, 4),
                 },
             ),
         )
@@ -137,6 +178,7 @@ async def run_knowledge_search(
 
     limit = max(1, min(8, max_results if max_results is not None else 5))
     tags = _parse_disease_tags(disease_tags)
+    settings = get_settings()
     args: dict[str, object] = {
         "query": normalized[:200],
         "disease_tags": tags,
@@ -147,6 +189,15 @@ async def run_knowledge_search(
     if deps.persist_tool_events and deps.run_id is not None:
         await _persist_tool_call(deps.run_id, args)
 
+    query_embedding: list[float] | None = None
+    if settings.knowledge_embedding_enabled and deps.http_client is not None:
+        query_embedding = await embed_text(
+            normalized,
+            deps.http_client,
+            settings=settings,
+            enabled=True,
+        )
+
     try:
         async with session_factory() as session:
             hits = await search_knowledge_chunks(
@@ -155,6 +206,7 @@ async def run_knowledge_search(
                 disease_tags=tags,
                 max_results=limit,
                 knowledge_base_slug=knowledge_base_slug,
+                query_embedding=query_embedding,
             )
     except Exception as exc:
         logger.exception("knowledge_search failed")
@@ -167,6 +219,7 @@ async def run_knowledge_search(
         "disease_tags": tags,
         "count": len(hits),
         "results": hits,
+        "embedding_used": query_embedding is not None,
         "note": (
             "Curated educational summaries with citations. "
             "Not a clinical diagnosis; prefer source_url when explaining."

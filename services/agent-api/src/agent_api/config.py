@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     # Note-memory hybrid recall via OpenAI-compatible /embeddings (Ollama).
     memory_embedding_enabled: bool = True
     memory_embedding_model: str = "nomic-embed-text"
+    # Knowledge chunk hybrid search (reuses memory_embedding_model + ollama_base_url).
+    knowledge_embedding_enabled: bool = True
     # Injected into every Run as the authoritative "now" / language preference.
     runtime_timezone: str = "Asia/Shanghai"
     runtime_locale: str = "zh-CN"

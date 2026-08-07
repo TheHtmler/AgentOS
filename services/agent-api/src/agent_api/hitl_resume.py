@@ -148,6 +148,7 @@ async def continue_run_after_approval(
                     fetch_router=runtime.fetch_router,
                     run_id=run_id,
                     case_id=case_id,
+                    http_client=runtime.ollama_http_client,
                 ),
             )
     except Exception:

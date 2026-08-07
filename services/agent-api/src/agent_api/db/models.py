@@ -421,6 +421,8 @@ class KnowledgeChunk(Base):
         server_default=text("'{}'"),
         nullable=False,
     )
+    # Dense vector as JSON array (Ollama embeddings); null when embedding is off/failed.
+    embedding: Mapped[list[float] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

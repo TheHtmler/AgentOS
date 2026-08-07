@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid5
 
+import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent_api.config import get_settings
 from agent_api.db.models import KnowledgeBase, KnowledgeChunk, KnowledgeDocument
+from agent_api.memory.embed import embed_text
+
+logger = logging.getLogger(__name__)
 
 SERVICE_ROOT = Path(__file__).resolve().parents[3]
 SEED_PATH = SERVICE_ROOT / "seed" / "knowledge" / "mma_pa_chunks.json"
@@ -31,13 +37,23 @@ def load_mma_pa_seed(path: Path | None = None) -> dict[str, Any]:
 async def upsert_mma_pa_knowledge(
     session: AsyncSession,
     seed: dict[str, Any] | None = None,
+    *,
+    http_client: httpx.AsyncClient | None = None,
 ) -> int:
-    """Replace MMA/PA seed document chunks; return chunk count."""
+    """Replace MMA/PA seed document chunks; return chunk count.
+
+    When ``http_client`` is provided and knowledge embeddings are enabled, each
+    chunk is embedded at seed time (failures leave embedding=null).
+    """
 
     payload = seed if seed is not None else load_mma_pa_seed()
     base_spec = payload["knowledge_base"]
     doc_spec = payload["document"]
     chunks_spec = payload["chunks"]
+    settings = get_settings()
+    embed_enabled = (
+        http_client is not None and settings.knowledge_embedding_enabled
+    )
 
     base = await session.get(KnowledgeBase, KNOWLEDGE_BASE_ID)
     if base is None:
@@ -80,15 +96,29 @@ async def upsert_mma_pa_knowledge(
     await session.execute(
         delete(KnowledgeChunk).where(KnowledgeChunk.document_id == DOCUMENT_ID),
     )
+    embedded = 0
     for row in chunks_spec:
+        title = row["title"]
+        content = row["content"]
+        embedding: list[float] | None = None
+        if embed_enabled and http_client is not None:
+            embedding = await embed_text(
+                f"{title}\n{content}",
+                http_client,
+                settings=settings,
+                enabled=True,
+            )
+            if embedding is not None:
+                embedded += 1
         session.add(
             KnowledgeChunk(
                 id=chunk_id_for_index(int(row["chunk_index"])),
                 document_id=DOCUMENT_ID,
                 chunk_index=int(row["chunk_index"]),
-                title=row["title"],
-                content=row["content"],
+                title=title,
+                content=content,
                 tags=list(row.get("tags") or []),
+                embedding=embedding,
             ),
         )
 
@@ -101,4 +131,10 @@ async def upsert_mma_pa_knowledge(
     if clash is not None:
         raise RuntimeError(f"knowledge base slug conflict: {base_spec['slug']}")
 
+    if embed_enabled:
+        logger.info(
+            "seeded knowledge embeddings: %s/%s chunks",
+            embedded,
+            len(chunks_spec),
+        )
     return len(chunks_spec)

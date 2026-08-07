@@ -35,11 +35,18 @@ async def embed_text(
     http_client: httpx.AsyncClient,
     *,
     settings: Settings | None = None,
+    enabled: bool | None = None,
 ) -> list[float] | None:
-    """Embed one string via the configured OpenAI-compatible embeddings endpoint."""
+    """Embed one string via the configured OpenAI-compatible embeddings endpoint.
+
+    ``enabled`` overrides the default ``memory_embedding_enabled`` gate so knowledge
+    search can use the same helper under ``knowledge_embedding_enabled``.
+    """
 
     cfg = settings or get_settings()
-    if not cfg.memory_embedding_enabled:
+    if enabled is None:
+        enabled = cfg.memory_embedding_enabled
+    if not enabled:
         return None
     model = cfg.memory_embedding_model.strip()
     if not model:
@@ -62,7 +69,7 @@ async def embed_text(
             raw = payload.get("embedding")
             if isinstance(raw, list) and raw and isinstance(raw[0], (int, float)):
                 return [float(cast(int | float, value)) for value in cast(list[object], raw)]
-            logger.warning("memory embedding response missing data")
+            logger.warning("embedding response missing data")
             return None
         first = cast(dict[str, object], data[0])
         embedding = first.get("embedding")
@@ -72,5 +79,5 @@ async def embed_text(
             float(cast(int | float, value)) for value in cast(list[object], embedding)
         ]
     except Exception:
-        logger.exception("memory embedding request failed")
+        logger.exception("embedding request failed")
         return None

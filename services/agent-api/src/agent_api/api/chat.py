@@ -303,6 +303,7 @@ async def event_stream(
                     fetch_router=runtime.fetch_router,
                     run_id=run_id,
                     case_id=case_id,
+                    http_client=runtime.ollama_http_client,
                 ),
             )
 

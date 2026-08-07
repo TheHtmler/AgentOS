@@ -74,7 +74,7 @@ _BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         domain=ToolDomain.KNOWLEDGE,
         risk="read",
         default_action=PolicyAction.ALLOW,
-        description="Keyword search over curated disease knowledge chunks",
+        description="Hybrid keyword+embedding search over curated disease knowledge chunks",
         handler=knowledge_search,
     ),
     ToolSpec(

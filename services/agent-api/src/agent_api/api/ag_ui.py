@@ -256,6 +256,7 @@ async def stream_ag_ui_run(
                         fetch_router=runtime.fetch_router,
                         run_id=started.run_id,
                         case_id=case_id,
+                        http_client=runtime.ollama_http_client,
                     ),
                 ):
                     if text := text_from_native_event(event):
