@@ -54,6 +54,24 @@ async def list_confirmed_facts(
     return list(facts)
 
 
+async def list_proposed_facts(
+    session: AsyncSession,
+    *,
+    case_id: UUID,
+) -> list[CaseFact]:
+    """Return proposed facts (pending confirmation) for injection visibility."""
+
+    facts = await session.scalars(
+        select(CaseFact)
+        .where(
+            CaseFact.case_id == case_id,
+            CaseFact.status == "proposed",
+        )
+        .order_by(CaseFact.updated_at.desc(), CaseFact.created_at.desc()),
+    )
+    return list(facts)
+
+
 async def list_keyed_fact_history(
     session: AsyncSession,
     *,

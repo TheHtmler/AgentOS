@@ -8,7 +8,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_api.db.case_store import list_confirmed_facts, list_keyed_fact_history
+from agent_api.db.case_store import (
+    list_confirmed_facts,
+    list_keyed_fact_history,
+    list_proposed_facts,
+)
 from agent_api.db.models import CaseFact
 
 CASE_HEADER = "## Case profile (confirmed)"
@@ -63,13 +67,15 @@ def format_case_block(
     facts: list[CaseFact],
     *,
     history: list[CaseFact] | None = None,
+    proposed: list[CaseFact] | None = None,
     timezone_name: str = "Asia/Shanghai",
 ) -> str | None:
-    """Render current Case facts (+ prior keyed history) with recorded_at stamps."""
+    """Render current Case facts (+ prior history / proposed) with recorded_at stamps."""
 
     current = current_facts_by_key(facts)
     prior = history_excluding_current(history or [], current)
-    if not current and not prior:
+    pending = current_facts_by_key(proposed or [])
+    if not current and not prior and not pending:
         return None
 
     lines = [
@@ -78,9 +84,12 @@ def format_case_block(
         '- For "目前/现在/当前", use ### Current only (one value per key; newest).',
         '- For "什么时候记录/历史": if History section is empty, say 暂无更早记录 once;',
         "  do not repeat Current rows as History.",
+        "- ### Proposed rows are not confirmed yet — do not treat them as Current;",
+        "  mention 待确认 and prefer case_slot_collect / case_attribution_confirm.",
         "- Prefer Case over overlapping user_memories profile slots for the same key.",
         "- Keep factual replies short unless the user asks for analysis.",
-        "- Missing asked fields: one short line (e.g. 体重未记录), no long essay.",
+        "- Missing critical Case slots for the task: call case_slot_collect (HITL form),",
+        "  do not write a long essay ask.",
         "### Current",
     ]
     if not current:
@@ -102,6 +111,16 @@ def format_case_block(
             )
             state = fact.status
             lines.append(f"- [{label}] {fact.content} @ {recorded} [{state}]")
+
+    if pending:
+        lines.append("### Proposed (pending confirmation; not Current)")
+        for fact in pending:
+            label = fact.key or (", ".join(fact.tags) if fact.tags else "fact")
+            recorded = format_recorded_at(
+                fact.updated_at or fact.created_at,
+                timezone_name=timezone_name,
+            )
+            lines.append(f"- [{label}] {fact.content} (recorded_at: {recorded})")
 
     return "\n".join(lines)
 
@@ -136,7 +155,13 @@ async def load_case_injection(
         case_id=case_id,
         keys=_HISTORY_KEYS,
     )
-    block = format_case_block(facts, history=history, timezone_name=timezone_name)
+    proposed = await list_proposed_facts(session, case_id=case_id)
+    block = format_case_block(
+        facts,
+        history=history,
+        proposed=proposed,
+        timezone_name=timezone_name,
+    )
     return block, case_keys_from_facts(facts)
 
 

@@ -130,5 +130,8 @@ async def test_load_case_block_only_confirmed_current(database_session: AsyncSes
     block = await load_case_block(database_session, case_id=case_id)
     assert block is not None
     assert "80" in block
-    assert "10 kg" not in block
-    assert "weight_kg" not in block
+    assert "### Proposed" in block
+    assert "10 kg" in block
+    assert "weight_kg" in block
+    current_section = block.split("### History", 1)[0]
+    assert "10 kg" not in current_section

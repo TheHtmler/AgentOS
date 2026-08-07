@@ -22,3 +22,4 @@ class InterruptDecision:
     tool_call_id: str
     decision: Literal["approve", "deny"]
     message: str | None = None
+    override_args: dict[str, object] | None = None

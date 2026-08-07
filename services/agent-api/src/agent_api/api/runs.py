@@ -58,6 +58,7 @@ class ResumeDecisionBody(BaseModel):
     tool_call_id: str
     decision: Literal["approve", "deny"]
     message: str | None = None
+    override_args: dict[str, object] | None = None
 
 
 class ResumeRunBody(BaseModel):
@@ -155,6 +156,7 @@ async def resume_run_execution(
             tool_call_id=item.tool_call_id,
             decision=item.decision,
             message=item.message,
+            override_args=item.override_args,
         )
         for item in body.decisions
     ]

@@ -1148,13 +1148,28 @@ body {
   color: var(--text-muted);
 }
 
-.agentos-approval-reason input {
+.agentos-approval-reason input,
+.agentos-approval-field input {
   min-height: 2.25rem;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: var(--bg);
   padding: 0.4rem 0.65rem;
   color: var(--text);
+}
+
+.agentos-approval-field-label {
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.agentos-approval-field-reason {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 
 .agentos-approval-actions {

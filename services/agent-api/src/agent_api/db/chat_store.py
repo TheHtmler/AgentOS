@@ -880,6 +880,11 @@ async def apply_interrupt_decisions(
         interrupt = by_id[decision.tool_call_id]
         if decision.decision == "approve":
             interrupt.status = "approved"
+            # Merge form values into tool_args so resume can ToolApproved(override_args=...).
+            if decision.override_args:
+                merged = dict(interrupt.tool_args or {})
+                merged.update(decision.override_args)
+                interrupt.tool_args = merged
         else:
             interrupt.status = "denied"
             interrupt.decision_message = decision.message

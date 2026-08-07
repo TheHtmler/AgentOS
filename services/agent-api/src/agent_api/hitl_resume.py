@@ -44,7 +44,9 @@ def deferred_results_from_interrupts(interrupts: list[Interrupt]) -> DeferredToo
     approvals: dict[str, DeferredToolApprovalResult | bool] = {}
     for item in interrupts:
         if item.status == "approved":
-            approvals[item.tool_call_id] = ToolApproved()
+            # tool_args may include merged override values from the approve path.
+            override = dict(item.tool_args) if item.tool_args else None
+            approvals[item.tool_call_id] = ToolApproved(override_args=override)
         else:
             message = item.decision_message or "The tool call was denied."
             approvals[item.tool_call_id] = ToolDenied(message=message)

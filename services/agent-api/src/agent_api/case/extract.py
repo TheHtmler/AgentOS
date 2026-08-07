@@ -103,14 +103,19 @@ async def extract_case_via_ollama(
         "Return JSON only:\n"
         "{\n"
         '  "attribution": "self"|"other"|"hypothetical"|"unknown",\n'
-        '  "updates": [{"key":"height_cm"|null,"content":"fact","tags":["身高"]}]\n'
+        '  "updates": [{"key":"height_cm","content":"身高 82.5 cm","tags":["身高"]}]\n'
         "}\n"
         "Rules:\n"
-        "- attribution=self when facts clearly refer to the user's own default subject "
-        "(e.g. their child / the Case already in context).\n"
+        "- Prefer stable keys when applicable: height_cm, weight_kg, sex, "
+        "date_of_birth, age_months (one update object per key).\n"
+        "- Only include keys the user (or clearly confirmed assistant recap) stated "
+        "in THIS turn. If they only update height, omit weight — never clear or "
+        "rewrite unmentioned slots.\n"
+        "- attribution=self for the user's own default subject (e.g. 宝宝 / 我家孩子 / "
+        "the Case already in context).\n"
         "- attribution=other when helping someone else's child or a third party.\n"
         "- attribution=hypothetical for examples, what-if, or textbook scenarios.\n"
-        "- attribution=unknown when unclear who the facts belong to.\n"
+        "- attribution=unknown only when ownership is truly unclear.\n"
         "- Do not invent values. Empty updates when nothing durable is present.\n\n"
         f"User:\n{user_message[:2_000]}\n\nAssistant:\n{assistant_content[:2_000]}"
     )

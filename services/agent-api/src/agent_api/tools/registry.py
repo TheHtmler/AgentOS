@@ -11,6 +11,7 @@ from pydantic_ai import Tool
 
 from agent_api.config import Settings, get_settings
 from agent_api.tools.case.attribution import case_attribution_confirm
+from agent_api.tools.case.collect import case_slot_collect
 from agent_api.tools.case.tool import case_context_read
 from agent_api.tools.fetch.tool import fetch_url
 from agent_api.tools.growth.tool import growth_assess
@@ -91,6 +92,14 @@ _BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         default_action=PolicyAction.ASK,
         description="Confirm writing Case facts to the bound archive (HITL)",
         handler=case_attribution_confirm,
+    ),
+    ToolSpec(
+        name="case_slot_collect",
+        domain=ToolDomain.CASE,
+        risk="write",
+        default_action=PolicyAction.ASK,
+        description="Collect missing Case slot values from the user via HITL form",
+        handler=case_slot_collect,
     ),
 )
 

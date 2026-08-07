@@ -131,3 +131,53 @@ async def test_unknown_writes_proposed(database_session: AsyncSession) -> None:
         ),
     )
     assert proposed is not None
+
+
+@pytest.mark.anyio
+async def test_height_update_preserves_weight(database_session: AsyncSession) -> None:
+    user = User(email=f"case-preserve-{uuid4().hex}@example.com", status="active")
+    database_session.add(user)
+    await database_session.flush()
+    case_id = await ensure_default_case(
+        database_session,
+        user_id=user.id,
+        agent_id=IMD_AGENT_ID,
+    )
+    await apply_case_extract(
+        database_session,
+        case_id=case_id,
+        payload=ExtractedCasePayload(
+            attribution="self",
+            updates=[
+                CaseFactUpdate(key="height_cm", content="身高 82 cm", tags=["身高"]),
+                CaseFactUpdate(key="weight_kg", content="体重 15.2 kg", tags=["体重"]),
+            ],
+        ),
+        source_thread_id=None,
+        source_run_id=None,
+    )
+    await apply_case_extract(
+        database_session,
+        case_id=case_id,
+        payload=ExtractedCasePayload(
+            attribution="self",
+            updates=[
+                CaseFactUpdate(key="height_cm", content="身高 82.5 cm", tags=["身高"]),
+            ],
+        ),
+        source_thread_id=None,
+        source_run_id=None,
+    )
+    await database_session.flush()
+
+    confirmed = {
+        fact.key: fact.content
+        for fact in await database_session.scalars(
+            select(CaseFact).where(
+                CaseFact.case_id == case_id,
+                CaseFact.status == "confirmed",
+            ),
+        )
+    }
+    assert "82.5" in confirmed["height_cm"]
+    assert "15.2" in confirmed["weight_kg"]
