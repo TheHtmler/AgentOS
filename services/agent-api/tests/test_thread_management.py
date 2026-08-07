@@ -129,7 +129,11 @@ async def test_chat_binds_requested_agent_for_new_thread(
         history_response = await client.get(f"/v1/threads/{thread_id}/messages")
 
     assert history_response.status_code == 200
-    assert history_response.json()["agent_id"] == str(parenting_id)
+    history_payload = history_response.json()
+    assert history_payload["agent_id"] == str(parenting_id)
+    assert history_payload["latest_run"] is not None
+    assert history_payload["latest_run"]["status"] == "completed"
+    assert isinstance(history_payload["latest_run"]["id"], str)
     async with session_factory() as session:
         thread = await session.get(Thread, thread_id)
     assert thread is not None

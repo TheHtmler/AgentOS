@@ -200,6 +200,23 @@ async def list_thread_messages(
     return list(messages)
 
 
+async def get_thread_latest_run(
+    session: AsyncSession,
+    *,
+    thread_id: UUID,
+    user_id: UUID | None = None,
+) -> Run | None:
+    """Return the newest Run for a Thread the user can access (or None)."""
+
+    thread = await _get_active_thread(session, thread_id=thread_id, user_id=user_id)
+    return await session.scalar(
+        select(Run)
+        .where(Run.thread_id == thread.id)
+        .order_by(Run.created_at.desc())
+        .limit(1),
+    )
+
+
 async def list_thread_tool_calls(
     session: AsyncSession,
     *,

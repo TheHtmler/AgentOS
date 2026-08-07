@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from agent_api.api.auth import get_current_user
 from agent_api.db.chat_store import (
     ThreadNotFoundError,
+    get_thread_latest_run,
     list_thread_messages,
     list_thread_tool_calls,
     list_threads,
@@ -57,6 +58,13 @@ class ThreadToolCallResponse(BaseModel):
     after_message_id: UUID
 
 
+class ThreadLatestRunResponse(BaseModel):
+    """Newest Run on the Thread so the client can resume after a full reload."""
+
+    id: UUID
+    status: str
+
+
 class ThreadMessagesResponse(BaseModel):
     """Ordered durable messages belonging to one existing Thread."""
 
@@ -64,6 +72,7 @@ class ThreadMessagesResponse(BaseModel):
     agent_id: UUID
     messages: list[ThreadMessageResponse]
     tool_calls: list[ThreadToolCallResponse] = []
+    latest_run: ThreadLatestRunResponse | None = None
 
 
 class ThreadUpdateRequest(BaseModel):
@@ -181,6 +190,11 @@ async def get_thread_messages(
                 thread_id=thread_id,
                 user_id=user.id,
             )
+            latest_run = await get_thread_latest_run(
+                session,
+                thread_id=thread_id,
+                user_id=user.id,
+            )
             thread = await session.get(Thread, thread_id)
     except ThreadNotFoundError as error:
         raise HTTPException(status_code=404, detail="Thread not found") from error
@@ -212,4 +226,9 @@ async def get_thread_messages(
             )
             for tool_call in tool_calls
         ],
+        latest_run=(
+            ThreadLatestRunResponse(id=latest_run.id, status=latest_run.status)
+            if latest_run is not None
+            else None
+        ),
     )

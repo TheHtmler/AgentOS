@@ -37,11 +37,17 @@ type ToolTimelineStep = ToolCallState & { kind: "tool" };
 
 type TimelineStep = ThinkingStepState | ToolTimelineStep;
 
+type ThreadLatestRun = {
+  id: string;
+  status: string;
+};
+
 type ThreadHistory = {
   thread_id: string;
   agent_id: string;
   messages: ChatMessage[];
   toolCalls: ToolCallState[];
+  latestRun: ThreadLatestRun | null;
 };
 
 function parsePendingInterrupts(value: unknown): PendingInterrupt[] {
@@ -219,7 +225,26 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
     return null;
   }
 
-  return { thread_id: value.thread_id, agent_id: value.agent_id, messages, toolCalls };
+  let latestRun: ThreadLatestRun | null = null;
+  if (value.latest_run !== undefined && value.latest_run !== null) {
+    if (
+      !isRecord(value.latest_run) ||
+      typeof value.latest_run.id !== "string" ||
+      !isUuid(value.latest_run.id) ||
+      typeof value.latest_run.status !== "string"
+    ) {
+      return null;
+    }
+    latestRun = { id: value.latest_run.id, status: value.latest_run.status };
+  }
+
+  return {
+    thread_id: value.thread_id,
+    agent_id: value.agent_id,
+    messages,
+    toolCalls,
+    latestRun,
+  };
 }
 
 function toAgentMessages(messages: ChatMessage[]): Message[] {
@@ -745,6 +770,24 @@ export function ChatPanel({
             updateThreadInUrl(history.thread_id);
           }
           onThreadChanged(history.thread_id, history.agent_id);
+
+          // Full page reload clears in-memory run refs; resume from durable latest_run.
+          const latest = history.latestRun;
+          if (latest !== null) {
+            lastRunIdRef.current = latest.id;
+            lastRunThreadIdRef.current = history.thread_id;
+            if (isActiveRunStatus(latest.status)) {
+              onRunStarted(latest.id);
+              void settleRunAfterStreamLoss(latest.id);
+            } else {
+              const lastMessage = history.messages.at(-1);
+              if (lastMessage?.role === "user" && latest.status === "failed") {
+                setError("上次生成失败或中断，可重新发送。");
+              } else if (lastMessage?.role === "user" && latest.status === "cancelled") {
+                setError("上次生成已取消，可重新发送。");
+              }
+            }
+          }
         }
       } catch (caughtError: unknown) {
         if (isCurrent && !controller.signal.aborted) {
@@ -762,7 +805,15 @@ export function ChatPanel({
       isCurrent = false;
       controller.abort();
     };
-  }, [agentId, historyRefreshKey, onThreadChanged, selectedThreadId, threadId]);
+  }, [
+    agentId,
+    historyRefreshKey,
+    onRunStarted,
+    onThreadChanged,
+    selectedThreadId,
+    settleRunAfterStreamLoss,
+    threadId,
+  ]);
 
   function scrollMessagesToBottom(behavior: ScrollBehavior = "auto") {
     const viewport = messagesViewportRef.current;
