@@ -76,7 +76,7 @@ def format_case_block(
         CASE_HEADER,
         "Rules for answering from this block:",
         '- For "目前/现在/当前", use ### Current only (one value per key; newest).',
-        '- For "什么时候记录/历史": if ### History is empty, say 暂无更早记录 once;',
+        '- For "什么时候记录/历史": if History section is empty, say 暂无更早记录 once;',
         "  do not repeat Current rows as History.",
         "- Prefer Case over overlapping user_memories profile slots for the same key.",
         "- Keep factual replies short unless the user asks for analysis.",

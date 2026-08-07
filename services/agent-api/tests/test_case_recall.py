@@ -54,7 +54,7 @@ def test_format_case_block_current_and_history_with_timestamps() -> None:
     assert "recorded_at:" in block
     assert "82 cm" in block
     # Current row must not be re-listed under History
-    history_section = block.split("### History", 1)[1]
+    history_section = block.split("### History (prior values only", 1)[1]
     assert "身高 82.5" not in history_section
     assert "身高 82 cm" in history_section
     assert history_excluding_current([newer, older], [newer]) == [older]
@@ -75,7 +75,7 @@ def test_format_case_block_history_empty_when_only_current() -> None:
     )
     block = format_case_block([only], history=[only])
     assert block is not None
-    assert "(none)" in block.split("### History", 1)[1]
+    assert "(none)" in block.split("### History (prior values only", 1)[1]
 
 
 def test_memory_excludes_case_keys() -> None:
