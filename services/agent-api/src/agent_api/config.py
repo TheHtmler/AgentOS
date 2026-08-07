@@ -46,7 +46,10 @@ class Settings(BaseSettings):
     artifact_enabled: bool = True
     artifact_persist_on_fetch: bool = True
     artifact_max_chars: int = 200_000
-    read_artifact_max_chars: int = 2_000
+    # Model-facing window after Artifact persist (stricter than fetch_url_max_chars).
+    fetch_url_artifact_preview_chars: int = 1_000
+    fetch_url_artifact_outline_chars: int = 600
+    read_artifact_max_chars: int = 1_500
     # Built-in WHO growth assessment (anthro); no external router required.
     growth_assess_enabled: bool = True
     # Built-in keyword search over curated knowledge_chunks.

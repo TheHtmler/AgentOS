@@ -82,7 +82,13 @@ async def run_fetch_url(
             summary=_summarize_response(response),
         )
 
-    return json.dumps(response.to_tool_payload(), ensure_ascii=False)
+    return json.dumps(
+        response.to_tool_payload(
+            artifact_preview_chars=settings.fetch_url_artifact_preview_chars,
+            artifact_outline_chars=settings.fetch_url_artifact_outline_chars,
+        ),
+        ensure_ascii=False,
+    )
 
 
 async def fetch_url(
