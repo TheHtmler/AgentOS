@@ -7,7 +7,9 @@ import logging
 
 from pydantic_ai import RunContext
 
-from agent_api.db.case_store import list_confirmed_facts
+from agent_api.case.recall import format_recorded_at
+from agent_api.config import get_settings
+from agent_api.db.case_store import list_confirmed_facts, list_keyed_fact_history
 from agent_api.db.session import session_factory
 from agent_api.tools.search.tool import AgentDeps
 
@@ -18,8 +20,9 @@ async def run_case_context_read(
     deps: AgentDeps,
     *,
     query: str | None = None,
+    include_history: bool = True,
 ) -> str:
-    """Return confirmed Case facts; optional query filters by substring/key/tag."""
+    """Return Case facts with recorded_at; optional history for keyed slots."""
 
     from agent_api.tools.policy import gate_or_none
 
@@ -33,9 +36,15 @@ async def run_case_context_read(
             ensure_ascii=False,
         )
 
+    settings = get_settings()
     try:
         async with session_factory() as session:
             facts = await list_confirmed_facts(session, case_id=deps.case_id)
+            history = (
+                await list_keyed_fact_history(session, case_id=deps.case_id)
+                if include_history
+                else []
+            )
     except Exception as exc:
         logger.exception("case_context_read failed")
         return json.dumps(
@@ -44,31 +53,65 @@ async def run_case_context_read(
         )
 
     needle = (query or "").strip().lower()
-    items: list[dict[str, object]] = []
+
+    def _match(content: str, key: str | None, tags: list[str]) -> bool:
+        if not needle:
+            return True
+        haystack = " ".join([key or "", content, " ".join(tags)]).lower()
+        return needle in haystack
+
+    current_items: list[dict[str, object]] = []
+    seen_keys: set[str] = set()
     for fact in facts:
-        payload = {
-            "key": fact.key,
-            "content": fact.content,
-            "tags": list(fact.tags or []),
-        }
-        if needle:
-            haystack = " ".join(
-                [
-                    fact.key or "",
-                    fact.content,
-                    " ".join(fact.tags or []),
-                ],
-            ).lower()
-            if needle not in haystack:
-                continue
-        items.append(payload)
+        if fact.key and fact.key in seen_keys:
+            continue
+        if fact.key:
+            seen_keys.add(fact.key)
+        tags = list(fact.tags or [])
+        if not _match(fact.content, fact.key, tags):
+            continue
+        current_items.append(
+            {
+                "key": fact.key,
+                "content": fact.content,
+                "tags": tags,
+                "status": fact.status,
+                "recorded_at": format_recorded_at(
+                    fact.updated_at or fact.created_at,
+                    timezone_name=settings.runtime_timezone,
+                ),
+            },
+        )
+
+    history_items: list[dict[str, object]] = []
+    for fact in history:
+        tags = list(fact.tags or [])
+        if not _match(fact.content, fact.key, tags):
+            continue
+        history_items.append(
+            {
+                "key": fact.key,
+                "content": fact.content,
+                "tags": tags,
+                "status": fact.status,
+                "recorded_at": format_recorded_at(
+                    fact.updated_at or fact.created_at,
+                    timezone_name=settings.runtime_timezone,
+                ),
+            },
+        )
 
     return json.dumps(
         {
             "case_id": str(deps.case_id),
-            "count": len(items),
-            "facts": items,
-            "note": "Confirmed Case facts only; do not invent missing slots.",
+            "current_count": len(current_items),
+            "current": current_items,
+            "history_count": len(history_items),
+            "history": history_items,
+            "note": (
+                "Use current for 目前/现在. Use history+recorded_at for 什么时候记录. "
+                "Do not invent missing timestamps."
+            ),
         },
         ensure_ascii=False,
     )
@@ -77,10 +120,15 @@ async def run_case_context_read(
 async def case_context_read(
     ctx: RunContext[AgentDeps],
     query: str | None = None,
+    include_history: bool = True,
 ) -> str:
-    """Read confirmed facts from the Case archive bound to this conversation.
+    """Read Case facts for this conversation (current + optional keyed history).
 
     Optional query filters by key, tag, or content substring.
     """
 
-    return await run_case_context_read(ctx.deps, query=query)
+    return await run_case_context_read(
+        ctx.deps,
+        query=query,
+        include_history=include_history,
+    )

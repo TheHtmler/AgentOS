@@ -71,12 +71,25 @@ def score_memories(message: str, memories: list[UserMemory]) -> list[UserMemory]
     return [memory for memory, _ in scored]
 
 
-def format_memory_block(memories: list[UserMemory]) -> str | None:
-    """Render profile then notes as a compact instruction block."""
+def format_memory_block(
+    memories: list[UserMemory],
+    *,
+    exclude_keys: set[str] | None = None,
+) -> str | None:
+    """Render profile then notes as a compact instruction block.
+
+    ``exclude_keys`` drops profile slots already covered by Case facts so the
+    model does not see conflicting height/weight values.
+    """
 
     if not memories:
         return None
-    profiles = [memory for memory in memories if memory.kind == "profile"]
+    skip = exclude_keys or set()
+    profiles = [
+        memory
+        for memory in memories
+        if memory.kind == "profile" and (memory.key is None or memory.key not in skip)
+    ]
     notes = [memory for memory in memories if memory.kind != "profile"]
     lines = [MEMORY_HEADER]
     if profiles:

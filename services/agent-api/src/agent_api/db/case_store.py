@@ -54,6 +54,30 @@ async def list_confirmed_facts(
     return list(facts)
 
 
+async def list_keyed_fact_history(
+    session: AsyncSession,
+    *,
+    case_id: UUID,
+    keys: tuple[str, ...] = ("height_cm", "weight_kg", "sex", "date_of_birth", "age_months"),
+    limit: int = 24,
+) -> list[CaseFact]:
+    """Return recent confirmed+archived rows for keyed slots (timeline answers)."""
+
+    if not keys:
+        return []
+    facts = await session.scalars(
+        select(CaseFact)
+        .where(
+            CaseFact.case_id == case_id,
+            CaseFact.key.in_(keys),
+            CaseFact.status.in_(("confirmed", "archived")),
+        )
+        .order_by(CaseFact.updated_at.desc(), CaseFact.created_at.desc())
+        .limit(limit),
+    )
+    return list(facts)
+
+
 async def _set_default_case(
     session: AsyncSession,
     *,

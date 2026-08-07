@@ -61,8 +61,9 @@ async def test_case_context_read_filters_and_requires_case(
             query="身高",
         ),
     )
-    assert payload["count"] == 1
-    assert payload["facts"][0]["key"] == "height_cm"
+    assert payload["current_count"] == 1
+    assert payload["current"][0]["key"] == "height_cm"
+    assert "recorded_at" in payload["current"][0]
 
     empty = json.loads(
         await run_case_context_read(
@@ -70,4 +71,4 @@ async def test_case_context_read_filters_and_requires_case(
             query="不存在的标签",
         ),
     )
-    assert empty["count"] == 0
+    assert empty["current_count"] == 0

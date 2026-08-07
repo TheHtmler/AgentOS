@@ -27,7 +27,7 @@ from agent_api.db.models import Interrupt, Thread
 from agent_api.db.session import session_factory
 from agent_api.hitl_pause import persist_deferred_approvals
 from agent_api.case.extract import schedule_case_extract
-from agent_api.case.recall import load_case_block
+from agent_api.case.recall import load_case_injection
 from agent_api.memory.extract import schedule_memory_extract
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.output_limits import with_truncation_notice_if_needed
@@ -70,7 +70,9 @@ async def continue_run_after_approval(
         prompt = ""
         memory_block = None
         case_block = None
+        case_keys: set[str] = set()
         case_id = thread.case_id if thread is not None else None
+        settings = get_settings()
         if thread is not None and version is not None:
             messages = await list_thread_messages(
                 session,
@@ -81,6 +83,15 @@ async def continue_run_after_approval(
                 (message.content for message in reversed(messages) if message.role == "user"),
                 "",
             )
+            if version.case_enabled and case_id is not None:
+                try:
+                    case_block, case_keys = await load_case_injection(
+                        session,
+                        case_id=case_id,
+                        timezone_name=settings.runtime_timezone,
+                    )
+                except Exception:
+                    logger.exception("case recall failed; continuing without case block")
             if version.memory_enabled:
                 try:
                     memories = await load_relevant_memories(
@@ -88,18 +99,13 @@ async def continue_run_after_approval(
                         user_id=user_id,
                         agent_id=thread.agent_id,
                         message=prompt,
-                        top_k=get_settings().memory_recall_top_k,
-                        max_chars=get_settings().memory_recall_max_chars,
+                        top_k=settings.memory_recall_top_k,
+                        max_chars=settings.memory_recall_max_chars,
                         http_client=runtime.ollama_http_client,
                     )
-                    memory_block = format_memory_block(memories)
+                    memory_block = format_memory_block(memories, exclude_keys=case_keys)
                 except Exception:
                     logger.exception("memory recall failed; continuing without memories")
-            if version.case_enabled and case_id is not None:
-                try:
-                    case_block = await load_case_block(session, case_id=case_id)
-                except Exception:
-                    logger.exception("case recall failed; continuing without case block")
 
     if thread is None or version is None:
         logger.error("Missing thread for resume run_id=%s", run_id)
