@@ -3,18 +3,29 @@
 from __future__ import annotations
 
 import json
-from uuid import uuid4
+from collections.abc import AsyncIterator
+from uuid import UUID, uuid4
 
 import pytest
 
 from agent_api.config import Settings
 from agent_api.db.artifact_store import create_artifact, get_owned_artifact
-from agent_api.db.session import session_factory
+from agent_api.db.session import close_database, session_factory
 from agent_api.tools.artifact.tool import run_read_artifact
 from agent_api.tools.fetch.tool import run_fetch_url
 from agent_api.tools.fetch.types import FetchResponse
 from agent_api.tools.registry import mounted_tool_names
 from agent_api.tools.search.tool import AgentDeps
+
+
+@pytest.fixture(autouse=True)
+async def dispose_database_pool() -> AsyncIterator[None]:
+    """Prevent asyncpg pooled connections from crossing pytest event loops."""
+
+    try:
+        yield
+    finally:
+        await close_database()
 
 
 class _FakeRouter:
@@ -74,11 +85,9 @@ def test_read_artifact_hidden_when_disabled() -> None:
 
 @pytest.mark.anyio
 async def test_fetch_persists_artifact_and_read_window(
-    authenticated_api_user: object,
+    authenticated_api_user: UUID,
 ) -> None:
-    from uuid import UUID
-
-    user_id = UUID(str(authenticated_api_user))
+    user_id = authenticated_api_user
     body = ("ABCDEFGHIJ" * 200) + "TAIL"
     payload = await run_fetch_url(
         AgentDeps(
@@ -124,11 +133,9 @@ async def test_fetch_persists_artifact_and_read_window(
 
 @pytest.mark.anyio
 async def test_read_artifact_denies_other_user(
-    authenticated_api_user: object,
+    authenticated_api_user: UUID,
 ) -> None:
-    from uuid import UUID
-
-    owner_id = UUID(str(authenticated_api_user))
+    owner_id = authenticated_api_user
     async with session_factory() as session, session.begin():
         row = await create_artifact(
             session,
