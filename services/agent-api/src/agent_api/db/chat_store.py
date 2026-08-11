@@ -210,10 +210,7 @@ async def get_thread_latest_run(
 
     thread = await _get_active_thread(session, thread_id=thread_id, user_id=user_id)
     return await session.scalar(
-        select(Run)
-        .where(Run.thread_id == thread.id)
-        .order_by(Run.created_at.desc())
-        .limit(1),
+        select(Run).where(Run.thread_id == thread.id).order_by(Run.created_at.desc()).limit(1),
     )
 
 
@@ -524,6 +521,7 @@ async def start_run(
     )
     run = Run(
         thread_id=thread.id,
+        case_id=thread.case_id,
         status="running",
         model_name=model_name,
         started_at=datetime.now(UTC),
@@ -712,9 +710,7 @@ async def fail_orphaned_in_process_runs(
     orphaned = list(
         (
             await session.scalars(
-                select(Run)
-                .where(Run.status.in_(("running", "queued")))
-                .with_for_update(),
+                select(Run).where(Run.status.in_(("running", "queued"))).with_for_update(),
             )
         ).all(),
     )

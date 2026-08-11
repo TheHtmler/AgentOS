@@ -7,7 +7,7 @@ AgentOS is a work-in-progress runtime platform for building controllable, durabl
 The project is being built in public from a small, verifiable core toward tool execution, human approval, isolated sandboxes, and multi-tenant operation.
 
 > [!WARNING]
-> AgentOS is under active development and is not production-ready. Invite-only authentication, per-user Thread isolation, and the core Human-in-the-Loop (HITL) approval flow are implemented; organization tenancy, MCP tools, and sandbox execution are not implemented yet.
+> AgentOS is under active development and is not production-ready. Invite-only authentication, per-user Thread isolation, the core Human-in-the-Loop (HITL) approval flow, and optional read-only MCP support are implemented; organization tenancy and sandbox execution are not implemented yet.
 
 ## Available Today
 
@@ -24,6 +24,8 @@ The project is being built in public from a small, verifiable core toward tool e
 - Read-only `web_search` with Tavily-first and DuckDuckGo fallback routing.
 - Read-only `fetch_url` with Firecrawl/local fallback, SSRF checks, truncation, and outlines.
 - Tool Registry with `allow`, `ask`, and `deny` policy decisions.
+- Multi-Agent selection, generic Case records, and Case-scoped Run, Artifact, and memory boundaries.
+- Curated MMA/PA `knowledge_search`, growth assessment, and an optional read-only PubMed MCP toolset (disabled by default).
 - Persistent HITL interrupts with approval, denial, idempotent resume, cancellation, and timeout auto-denial.
 - Tool-call timeline cards, approval cards, thread rename/delete, and automatic thread titles.
 - Typed backend checks with pytest, Ruff, and Pyright, plus ESLint and Prettier for the web app.
@@ -151,7 +153,7 @@ Start with the [documentation index](docs/README.md) for the architecture baseli
 
 ## Roadmap
 
-- Read-only MCP integration and controlled local tools.
+- Broader read-only MCP integration and controlled local tools.
 - Per-user Docker sandboxes with resource limits, timeouts, and network isolation.
 - Artifact persistence and audit records.
 - Organization-level tenancy, invitation delivery, user disablement, and administrator audit.

@@ -185,6 +185,7 @@ async def stream_ag_ui_run(
                         session,
                         user_id=user.id,
                         agent_id=thread.agent_id,
+                        case_id=case_id,
                         message=prompt,
                         top_k=settings.memory_recall_top_k,
                         max_chars=settings.memory_recall_max_chars,
@@ -331,6 +332,7 @@ async def stream_ag_ui_run(
                     model_semaphore=runtime.model_semaphore,
                     http_client=runtime.ollama_http_client,
                     memory_enabled=version.memory_enabled,
+                    case_id=case_id,
                 )
                 schedule_case_extract(
                     case_id=case_id,

@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent_api.db.case_store import create_case
 from agent_api.db.models import Agent, User, UserMemory
 from agent_api.memory.extract import (
     ExtractedMemoryPayload,
@@ -158,3 +159,85 @@ async def test_recall_isolates_user_and_agent_and_always_loads_profile(
     assert other_user == []
     assert other_agent == []
     assert any(memory.key == "height_cm" for memory in new_thread)
+
+
+@pytest.mark.anyio
+async def test_case_memories_are_isolated_between_cases(
+    database_session: AsyncSession,
+) -> None:
+    user = User(email=f"memory-case-{uuid4().hex}@example.com", status="active")
+    database_session.add(user)
+    imd = await database_session.scalar(select(Agent).where(Agent.slug == "imd"))
+    assert imd is not None
+    await database_session.flush()
+
+    first_case = await create_case(
+        database_session,
+        user_id=user.id,
+        agent_id=imd.id,
+        display_name="第一位患者",
+        make_default=False,
+    )
+    second_case = await create_case(
+        database_session,
+        user_id=user.id,
+        agent_id=imd.id,
+        display_name="第二位患者",
+        make_default=False,
+    )
+    await upsert_extracted_memory(
+        database_session,
+        user_id=user.id,
+        agent_id=imd.id,
+        case_id=first_case.id,
+        payload=ExtractedMemoryPayload(
+            profile={"height_cm": 75},
+            notes=[{"content": "第一位患者对花生过敏", "tags": ["过敏"]}],
+        ),
+        source_thread_id=None,
+        source_run_id=None,
+    )
+    await upsert_extracted_memory(
+        database_session,
+        user_id=user.id,
+        agent_id=imd.id,
+        case_id=second_case.id,
+        payload=ExtractedMemoryPayload(
+            profile={"height_cm": 90},
+            notes=[{"content": "第二位患者对牛奶过敏", "tags": ["过敏"]}],
+        ),
+        source_thread_id=None,
+        source_run_id=None,
+    )
+
+    first_memories = await load_relevant_memories(
+        database_session,
+        user_id=user.id,
+        agent_id=imd.id,
+        case_id=first_case.id,
+        message="患者身高和过敏情况",
+    )
+    second_memories = await load_relevant_memories(
+        database_session,
+        user_id=user.id,
+        agent_id=imd.id,
+        case_id=second_case.id,
+        message="患者身高和过敏情况",
+    )
+    global_memories = await load_relevant_memories(
+        database_session,
+        user_id=user.id,
+        agent_id=imd.id,
+        message="患者身高和过敏情况",
+    )
+
+    first_block = format_memory_block(first_memories) or ""
+    second_block = format_memory_block(second_memories) or ""
+    assert "75" in first_block
+    assert "第一位患者对花生过敏" in first_block
+    assert "90" not in first_block
+    assert "第二位患者对牛奶过敏" not in first_block
+    assert "90" in second_block
+    assert "第二位患者对牛奶过敏" in second_block
+    assert "75" not in second_block
+    assert global_memories == []

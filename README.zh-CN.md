@@ -7,7 +7,7 @@ AgentOS 是一个正在开发中的可控、可持久化 AI Agent Runtime 平台
 项目从一个小而可验证的核心开始公开构建，逐步扩展到工具执行、人工审批、隔离 Sandbox 和多租户运行。
 
 > [!WARNING]
-> AgentOS 仍在积极开发中，尚未达到生产可用状态。invite-only 认证与用户级 Thread 隔离已实现；组织级租户、MCP 工具、Human-in-the-Loop (HITL) 和 Sandbox 执行仍未实现。
+> AgentOS 仍在积极开发中，尚未达到生产可用状态。invite-only 认证、用户级 Thread 隔离、Human-in-the-Loop (HITL) 核心流程和可选只读 MCP 支持已实现；组织级租户和 Sandbox 执行仍未实现。
 
 ## 当前能力
 
@@ -21,6 +21,8 @@ AgentOS 是一个正在开发中的可控、可持久化 AI Agent Runtime 平台
 - 记录已完成 Run 的模型 token 用量和请求次数。
 - invite-only 身份认证、可撤销 HttpOnly session，以及用户级 Thread、Run 与历史隔离。
 - 管理员在页面生成邀请链接；首次管理员可通过受控 CLI 生成链接。
+- 多 Agent 选择、通用 Case 档案，以及 Run、Artifact 和用户记忆的 Case 作用域隔离。
+- 策展版 MMA/PA `knowledge_search`、生长评估，以及默认关闭的只读 PubMed MCP 工具集。
 - 后端使用 pytest、Ruff 和 Pyright，前端使用 ESLint 和 Prettier 进行质量检查。
 
 ## 架构
@@ -147,7 +149,7 @@ AgentOS/
 ## 路线图
 
 - Tool Registry 和策略执行。
-- 只读 MCP 集成和受控本地工具。
+- 更完整的只读 MCP 集成和受控本地工具。
 - 可持久化的 HITL 中断、批准、拒绝和幂等恢复。
 - 具有资源限制、超时和网络隔离的用户级 Docker Sandbox。
 - 邀请邮件送达、再登录和组织级租户隔离。

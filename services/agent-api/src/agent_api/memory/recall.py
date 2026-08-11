@@ -51,8 +51,7 @@ def _keyword_score(message: str, memory: UserMemory) -> float:
     expanded = _expanded_tokens(message)
     lowered_message = message.lower()
     tag_hits = sum(
-        tag.lower() in expanded
-        or (len(tag) >= 2 and tag.lower() in lowered_message)
+        tag.lower() in expanded or (len(tag) >= 2 and tag.lower() in lowered_message)
         for tag in memory.tags
     )
     overlap = sum(token in memory.content.lower() for token in expanded)
@@ -159,14 +158,20 @@ async def load_relevant_memories(
     *,
     user_id: UUID,
     agent_id: UUID,
+    case_id: UUID | None = None,
     message: str,
     top_k: int = 8,
     max_chars: int = 2_000,
     http_client: httpx.AsyncClient | None = None,
 ) -> list[UserMemory]:
-    """Load profile + hybrid-ranked notes for one user/Agent conversation."""
+    """Load profile + hybrid-ranked notes for one user/Agent/Case scope."""
 
-    memories = await list_active_memories(session, user_id=user_id, agent_id=agent_id)
+    memories = await list_active_memories(
+        session,
+        user_id=user_id,
+        agent_id=agent_id,
+        case_id=case_id,
+    )
     query_embedding: list[float] | None = None
     settings = get_settings()
     if (

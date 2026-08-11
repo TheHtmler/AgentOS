@@ -61,9 +61,7 @@ def _valid_notes(notes: object) -> list[dict[str, object]]:
             or not content.strip()
             or not isinstance(tags, list)
             or not tags
-            or not all(
-                isinstance(tag, str) and tag.strip() for tag in cast(list[object], tags)
-            )
+            or not all(isinstance(tag, str) and tag.strip() for tag in cast(list[object], tags))
         ):
             continue
         valid.append(
@@ -125,9 +123,7 @@ async def extract_memory_via_ollama(
             "messages": [
                 {
                     "role": "system",
-                    "content": (
-                        "You extract structured user memory. Output valid JSON only."
-                    ),
+                    "content": ("You extract structured user memory. Output valid JSON only."),
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -153,6 +149,7 @@ async def upsert_profile_slots(
     *,
     user_id: UUID,
     agent_id: UUID,
+    case_id: UUID | None,
     profile: dict[str, object],
     source_thread_id: UUID | None,
     source_run_id: UUID | None,
@@ -165,15 +162,18 @@ async def upsert_profile_slots(
         if rendered is None:
             continue
         slot_key, tags, content = rendered
-        existing = await session.scalar(
-            select(UserMemory).where(
-                UserMemory.user_id == user_id,
-                UserMemory.agent_id == agent_id,
-                UserMemory.kind == "profile",
-                UserMemory.key == slot_key,
-                UserMemory.status == "active",
-            ),
+        statement = select(UserMemory).where(
+            UserMemory.user_id == user_id,
+            UserMemory.agent_id == agent_id,
+            UserMemory.kind == "profile",
+            UserMemory.key == slot_key,
+            UserMemory.status == "active",
         )
+        if case_id is None:
+            statement = statement.where(UserMemory.case_id.is_(None))
+        else:
+            statement = statement.where(UserMemory.case_id == case_id)
+        existing = await session.scalar(statement)
         if existing is not None:
             if _normalize_content(existing.content) == _normalize_content(content):
                 existing.updated_at = datetime.now(UTC)
@@ -189,6 +189,7 @@ async def upsert_profile_slots(
             UserMemory(
                 user_id=user_id,
                 agent_id=agent_id,
+                case_id=case_id,
                 source_thread_id=source_thread_id,
                 source_run_id=source_run_id,
                 kind="profile",
@@ -207,6 +208,7 @@ async def upsert_note_facts(
     *,
     user_id: UUID,
     agent_id: UUID,
+    case_id: UUID | None,
     notes: list[dict[str, object]],
     source_thread_id: UUID | None,
     source_run_id: UUID | None,
@@ -220,7 +222,12 @@ async def upsert_note_facts(
         content = cast(str, note["content"])
         tags = cast(list[str], note["tags"])
         primary_tag = tags[0]
-        active = await list_active_memories(session, user_id=user_id, agent_id=agent_id)
+        active = await list_active_memories(
+            session,
+            user_id=user_id,
+            agent_id=agent_id,
+            case_id=case_id,
+        )
         matching = [
             memory
             for memory in active
@@ -228,11 +235,7 @@ async def upsert_note_facts(
         ]
         normalized = _normalize_content(content)
         duplicate = next(
-            (
-                memory
-                for memory in matching
-                if _normalize_content(memory.content) == normalized
-            ),
+            (memory for memory in matching if _normalize_content(memory.content) == normalized),
             None,
         )
         if duplicate is not None:
@@ -250,6 +253,7 @@ async def upsert_note_facts(
             UserMemory(
                 user_id=user_id,
                 agent_id=agent_id,
+                case_id=case_id,
                 source_thread_id=source_thread_id,
                 source_run_id=source_run_id,
                 kind="note",
@@ -272,6 +276,7 @@ async def upsert_extracted_memory(
     payload: ExtractedMemoryPayload,
     source_thread_id: UUID | None,
     source_run_id: UUID | None,
+    case_id: UUID | None = None,
     http_client: httpx.AsyncClient | None = None,
 ) -> int:
     """Persist profile slots and notes; embed notes when enabled."""
@@ -280,6 +285,7 @@ async def upsert_extracted_memory(
         session,
         user_id=user_id,
         agent_id=agent_id,
+        case_id=case_id,
         profile=payload.profile,
         source_thread_id=source_thread_id,
         source_run_id=source_run_id,
@@ -293,6 +299,7 @@ async def upsert_extracted_memory(
         session,
         user_id=user_id,
         agent_id=agent_id,
+        case_id=case_id,
         notes=payload.notes,
         source_thread_id=source_thread_id,
         source_run_id=source_run_id,
@@ -310,6 +317,7 @@ async def upsert_extracted_facts(
     facts: list[dict[str, object]],
     source_thread_id: UUID | None,
     source_run_id: UUID | None,
+    case_id: UUID | None = None,
 ) -> int:
     """Upsert a legacy fact list as notes (or profile when tags map to slots)."""
 
@@ -337,6 +345,7 @@ async def upsert_extracted_facts(
         session,
         user_id=user_id,
         agent_id=agent_id,
+        case_id=case_id,
         payload=ExtractedMemoryPayload(profile=profile, notes=notes),
         source_thread_id=source_thread_id,
         source_run_id=source_run_id,
@@ -355,6 +364,7 @@ def schedule_memory_extract(
     model_semaphore: asyncio.Semaphore,
     http_client: httpx.AsyncClient,
     memory_enabled: bool,
+    case_id: UUID | None = None,
     extract_memory: ExtractMemoryFn | None = None,
     extract_facts: ExtractMemoryFn | None = None,
 ) -> None:
@@ -389,6 +399,7 @@ def schedule_memory_extract(
                     session,
                     user_id=user_id,
                     agent_id=agent_id,
+                    case_id=case_id,
                     payload=payload,
                     source_thread_id=thread_id,
                     source_run_id=run_id,

@@ -437,7 +437,7 @@ class KnowledgeChunk(Base):
 
 
 class UserMemory(Base):
-    """A user fact scoped to one Agent's memory policy.
+    """A user or Case fact scoped to one Agent's memory policy.
 
     ``profile`` rows are keyed slots (height/weight/…) always injected.
     ``note`` rows are free-text facts retrieved by keyword + embedding hybrid.
@@ -462,13 +462,32 @@ class UserMemory(Base):
             "status",
         ),
         Index(
-            "uq_user_memories_active_profile_key",
+            "ix_user_memories_user_agent_case_status",
+            "user_id",
+            "agent_id",
+            "case_id",
+            "status",
+        ),
+        Index(
+            "uq_user_memories_active_global_profile_key",
             "user_id",
             "agent_id",
             "key",
             unique=True,
             postgresql_where=text(
-                "kind = 'profile' AND status = 'active' AND key IS NOT NULL",
+                "kind = 'profile' AND status = 'active' AND key IS NOT NULL AND case_id IS NULL",
+            ),
+        ),
+        Index(
+            "uq_user_memories_active_case_profile_key",
+            "user_id",
+            "agent_id",
+            "case_id",
+            "key",
+            unique=True,
+            postgresql_where=text(
+                "kind = 'profile' AND status = 'active' AND key IS NOT NULL "
+                "AND case_id IS NOT NULL",
             ),
         ),
     )
@@ -483,6 +502,10 @@ class UserMemory(Base):
         ForeignKey("agents.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
+    )
+    case_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("cases.id", ondelete="SET NULL"),
+        index=True,
     )
     source_thread_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("threads.id", ondelete="SET NULL"),
@@ -612,6 +635,11 @@ class Run(Base):
         ForeignKey("threads.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
+    )
+    # Snapshot the Thread's Case scope so downstream events and artifacts retain it.
+    case_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("cases.id", ondelete="CASCADE"),
+        index=True,
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     model_name: Mapped[str] = mapped_column(String(255), nullable=False)

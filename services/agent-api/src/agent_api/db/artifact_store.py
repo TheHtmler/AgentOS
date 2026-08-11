@@ -7,7 +7,11 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_api.db.models import Artifact
+from agent_api.db.models import Artifact, CaseMembership
+
+
+class ArtifactScopeError(ValueError):
+    """Raised when an Artifact is written outside the caller's Case scope."""
 
 
 async def create_artifact(
@@ -25,6 +29,16 @@ async def create_artifact(
     run_id: UUID | None = None,
     meta: dict[str, object] | None = None,
 ) -> Artifact:
+    if case_id is not None:
+        membership_id = await session.scalar(
+            select(CaseMembership.id).where(
+                CaseMembership.case_id == case_id,
+                CaseMembership.user_id == owner_user_id,
+            ),
+        )
+        if membership_id is None:
+            raise ArtifactScopeError("Artifact Case is not accessible to the owner")
+
     row = Artifact(
         id=uuid4(),
         owner_user_id=owner_user_id,
@@ -50,13 +64,25 @@ async def get_owned_artifact(
     *,
     artifact_id: UUID,
     owner_user_id: UUID,
+    case_id: UUID | None,
 ) -> Artifact | None:
-    """Return the artifact only when owned by ``owner_user_id`` (no existence leak)."""
+    """Return an Artifact only inside the current user's Case scope."""
 
-    result = await session.execute(
-        select(Artifact).where(
-            Artifact.id == artifact_id,
-            Artifact.owner_user_id == owner_user_id,
-        ),
+    statement = select(Artifact).where(
+        Artifact.id == artifact_id,
+        Artifact.owner_user_id == owner_user_id,
     )
+    if case_id is None:
+        # A general Agent must not read an Artifact belonging to any Case.
+        statement = statement.where(Artifact.case_id.is_(None))
+    else:
+        statement = statement.join(
+            CaseMembership,
+            CaseMembership.case_id == Artifact.case_id,
+        ).where(
+            Artifact.case_id == case_id,
+            CaseMembership.user_id == owner_user_id,
+        )
+
+    result = await session.execute(statement)
     return result.scalar_one_or_none()

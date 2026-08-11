@@ -15,16 +15,18 @@ async def list_active_memories(
     *,
     user_id: UUID,
     agent_id: UUID,
+    case_id: UUID | None = None,
 ) -> list[UserMemory]:
-    """Return active facts for exactly one user and Agent."""
+    """Return active facts for one user, Agent, and optional Case scope."""
 
-    memories = await session.scalars(
-        select(UserMemory)
-        .where(
-            UserMemory.user_id == user_id,
-            UserMemory.agent_id == agent_id,
-            UserMemory.status == "active",
-        )
-        .order_by(UserMemory.updated_at.desc()),
+    statement = select(UserMemory).where(
+        UserMemory.user_id == user_id,
+        UserMemory.agent_id == agent_id,
+        UserMemory.status == "active",
     )
+    if case_id is None:
+        statement = statement.where(UserMemory.case_id.is_(None))
+    else:
+        statement = statement.where(UserMemory.case_id == case_id)
+    memories = await session.scalars(statement.order_by(UserMemory.updated_at.desc()))
     return list(memories)

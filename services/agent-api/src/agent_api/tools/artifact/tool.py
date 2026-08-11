@@ -72,6 +72,7 @@ async def run_read_artifact(
                 session,
                 artifact_id=artifact_uuid,
                 owner_user_id=deps.user_id,
+                case_id=deps.case_id,
             )
     except Exception as exc:
         logger.exception("read_artifact failed for %s", normalized)

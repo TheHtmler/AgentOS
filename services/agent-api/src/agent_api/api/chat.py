@@ -435,6 +435,7 @@ async def event_stream(
             model_semaphore=runtime.model_semaphore,
             http_client=runtime.ollama_http_client,
             memory_enabled=memory_enabled,
+            case_id=case_id,
         )
         schedule_case_extract(
             case_id=case_id,
@@ -461,9 +462,7 @@ async def stream_chat(
     try:
         async with session_factory() as session, session.begin():
             agent_id = requested_agent_id(request) if payload.thread_id is None else None
-            case_id_header = (
-                requested_case_id(request) if payload.thread_id is None else None
-            )
+            case_id_header = requested_case_id(request) if payload.thread_id is None else None
             started = await start_run(
                 session,
                 thread_id=payload.thread_id,
@@ -510,6 +509,7 @@ async def stream_chat(
                         session,
                         user_id=user.id,
                         agent_id=thread.agent_id,
+                        case_id=case_id,
                         message=payload.message,
                         top_k=settings.memory_recall_top_k,
                         max_chars=settings.memory_recall_max_chars,

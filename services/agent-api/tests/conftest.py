@@ -8,7 +8,7 @@ from sqlalchemy.pool import NullPool
 from agent_api.api.auth import get_current_user
 from agent_api.config import get_settings
 from agent_api.db.models import User
-from agent_api.db.session import session_factory
+from agent_api.db.session import close_database, session_factory
 from agent_api.main import app
 
 
@@ -34,6 +34,8 @@ async def database_session() -> AsyncIterator[AsyncSession]:
 async def authenticated_api_user() -> AsyncIterator[UUID]:
     """Provide a persisted identity for protected API tests without bypassing production code."""
 
+    # Reset the process-scoped pool before each AnyIO loop uses the fixture.
+    await close_database()
     async with session_factory() as session, session.begin():
         user = User(email=f"test-user-{uuid4().hex}@example.com", status="active")
         session.add(user)
@@ -51,3 +53,4 @@ async def authenticated_api_user() -> AsyncIterator[UUID]:
             persisted_user = await session.get(User, user_id)
             if persisted_user is not None:
                 await session.delete(persisted_user)
+        await close_database()

@@ -7,9 +7,12 @@ from collections.abc import AsyncIterator
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.config import Settings
 from agent_api.db.artifact_store import create_artifact, get_owned_artifact
+from agent_api.db.case_store import create_case
+from agent_api.db.models import User
 from agent_api.db.session import close_database, session_factory
 from agent_api.tools.artifact.tool import run_read_artifact
 from agent_api.tools.fetch.tool import run_fetch_url
@@ -158,5 +161,73 @@ async def test_fetch_persist_read_and_owner_isolation(
             session,
             artifact_id=UUID(secret_id),
             owner_user_id=uuid4(),
+            case_id=None,
         )
         assert missing is None
+
+
+@pytest.mark.anyio
+async def test_artifact_case_scope_blocks_same_user_cross_case_reads(
+    database_session: AsyncSession,
+    dispose_database_pool: None,
+) -> None:
+    user = User(email=f"artifact-case-{uuid4().hex}@example.com", status="active")
+    database_session.add(user)
+    await database_session.flush()
+    user_id = user.id
+    imd_agent_id = UUID("00000000-0000-0000-0000-000000000002")
+
+    first_case = await create_case(
+        database_session,
+        user_id=user_id,
+        agent_id=imd_agent_id,
+        display_name="第一位患者",
+        make_default=False,
+    )
+    second_case = await create_case(
+        database_session,
+        user_id=user_id,
+        agent_id=imd_agent_id,
+        display_name="第二位患者",
+        make_default=False,
+    )
+    first_artifact = await create_artifact(
+        database_session,
+        owner_user_id=user_id,
+        case_id=first_case.id,
+        kind="upload",
+        title="first",
+        content="first-private-body",
+    )
+    second_artifact = await create_artifact(
+        database_session,
+        owner_user_id=user_id,
+        case_id=second_case.id,
+        kind="upload",
+        title="second",
+        content="second-private-body",
+    )
+
+    visible = await get_owned_artifact(
+        database_session,
+        artifact_id=first_artifact.id,
+        owner_user_id=user_id,
+        case_id=first_case.id,
+    )
+    cross_case = await get_owned_artifact(
+        database_session,
+        artifact_id=second_artifact.id,
+        owner_user_id=user_id,
+        case_id=first_case.id,
+    )
+    unbound = await get_owned_artifact(
+        database_session,
+        artifact_id=first_artifact.id,
+        owner_user_id=user_id,
+        case_id=None,
+    )
+
+    assert visible is not None
+    assert visible.content == "first-private-body"
+    assert cross_case is None
+    assert unbound is None

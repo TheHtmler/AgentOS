@@ -1,10 +1,10 @@
 # 实施进度
 
-最后更新：2026-08-06（Case 档案 + 知识扩充 + NHC 生长对照）
+最后更新：2026-08-11（Case / 患者数据边界）
 
 ## 当前状态
 
-前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与关键词 `knowledge_search`（扩充后的 MMA/PA 策展切片）已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。向量 RAG 与复杂多看护人 ACL 仍属后续增量。
+前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与关键词 `knowledge_search`（扩充后的 MMA/PA 策展切片）已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。本轮进一步将 Run、Artifact 和用户记忆绑定到 Case 作用域；同一用户的不同 Case 不能互相读取资料。公共知识库的完整向量检索与复杂多看护人 ACL 仍属后续增量。
 
 已完成：
 
@@ -82,6 +82,7 @@
 - Case 档案（平台通用）：`cases` / `case_memberships` / `case_facts` / `user_agent_default_cases`；`threads.case_id`；`agent_versions.case_enabled`（`imd` 开启）；迁移 `f2a3b4c5d6e7`。
 - Case 读写：新建 Thread 自动绑定默认 Case；Run 注入 confirmed facts；`case_context_read`；完成后异步抽取（`self`→confirmed，`other`/`hypothetical` 不写，`unknown`→proposed）；`case_attribution_confirm`（ASK/HITL）。
 - Case API：`GET/POST /v1/cases`、设默认、facts/confirm；可选 `X-AgentOS-Case-Id`（API 级）。Web **不展示**档案切换——默认 Case 全隐式；额外主体靠对话归因 + HITL。
+- Case 数据边界：`runs.case_id` 从 Thread 作用域快照；带 Case 的 Artifact 创建与读取要求当前用户属于该 Case；`user_memories.case_id` 区分全局记忆与 Case 记忆，召回和抽取均按 Case 隔离。迁移 `i5j6k7l8m9n0`，并增加跨 Case 安全测试。
 - `knowledge_search` seed 扩充至 16 条 MMA/PA 教育切片（含 B12 反应型、肾/神经并发症、监测与感染/禁食家庭指导）。
 - `growth_assess` 支持 `who-2006` 与 `nhc-wst-423-2022`（别名 `nhc`）；NHC SD 表分段线性插值；数据在 `seed/growth/nhc/`。
 - Runtime Context Pack：每次 Run 注入当前本地时间、时区、`RUNTIME_LOCALE` 与能力边界（不以模型内建「现在」为准）。
@@ -106,15 +107,16 @@
 - `pnpm build:web` 通过；构建不再依赖 Google Fonts 网络访问。
 - `curl --noproxy '*' http://127.0.0.1:3000/api/health` 返回 `{ "status": "ok" }`。
 - 浏览器手动验证聊天页面可向本地 Agent API 发送消息并接收模型回复。
+- 本轮 Case 边界变更的定向 Ruff、格式检查和 Pyright 通过；完整后端 pytest 为 `185 passed`，仅有 1 条 asyncpg 资源警告。当前全量 Pyright 仍有 17 个既有 Case/Growth 类型错误，不在本轮修改范围内。
 
 ## 未完成
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
-- Artifact 落库 / `read_artifact`、完整 `messages.role=tool` 模型历史对齐。
-- 知识库向量检索 / 嵌入召回（公共知识当前为关键词 MVP；Case 笔记记忆已有 embedding）。
-- 多看护人 Case ACL、领域扩展表（如护理计划/化验时间线）；MCP 和 Sandbox；侧栏按工具类型的富展示。
+- Artifact 文件上传/下载、完整 `messages.role=tool` 模型历史对齐，以及 Artifact 审计记录。
+- 公共知识库完整文档导入、审核、版本快照和向量检索（当前已有策展切片的关键词检索与 Case 笔记 embedding 召回）。
+- 多看护人 Case ACL、领域扩展表（如护理计划/化验时间线）；Sandbox；侧栏按工具类型的富展示。
 - 参数级 Tool Policy（如按 URL/命令细规则）、审计表落库。
 
 ## 下一步
 
-平台基础能力：通用基础工具（时间差/计算）与基础能力评测集；模型/Provider 档位。领域侧在 Case 之上挂医疗扩展，并按 `docs/13` 推进可选只读医学 MCP / 向量知识检索。
+平台基础能力：通用基础工具（时间差/计算）与基础能力评测集；模型/Provider 档位。领域侧在 Case 之上挂医疗扩展，并推进公共知识库版本化检索、评测集和多看护人授权。

@@ -2,6 +2,7 @@ from agent_api.db.base import Base
 from agent_api.db.models import (
     Agent,
     AgentVersion,
+    Artifact,
     AuthToken,
     Case,
     CaseFact,
@@ -31,6 +32,7 @@ def test_core_model_tables_are_registered() -> None:
         "user_sessions",
         "agents",
         "agent_versions",
+        "artifacts",
         "cases",
         "case_memberships",
         "case_facts",
@@ -53,6 +55,7 @@ def test_core_model_tables_are_registered() -> None:
         UserSession.__tablename__,
         Agent.__tablename__,
         AgentVersion.__tablename__,
+        Artifact.__tablename__,
         Case.__tablename__,
         CaseMembership.__tablename__,
         CaseFact.__tablename__,

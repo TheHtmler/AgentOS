@@ -11,8 +11,7 @@ from agent_api.db.case_store import (
     user_can_access_case,
 )
 from agent_api.db.chat_store import start_run
-from agent_api.db.models import Agent, Case, CaseMembership, Thread, User, UserAgentDefaultCase
-
+from agent_api.db.models import Agent, Case, CaseMembership, Run, Thread, User, UserAgentDefaultCase
 
 IMD_AGENT_ID = UUID("00000000-0000-0000-0000-000000000002")
 GENERAL_AGENT_ID = UUID("00000000-0000-0000-0000-000000000001")
@@ -111,8 +110,11 @@ async def test_start_run_binds_case_for_imd(database_session: AsyncSession) -> N
         agent_id=IMD_AGENT_ID,
     )
     thread = await database_session.get(Thread, started.thread_id)
+    run = await database_session.get(Run, started.run_id)
     assert thread is not None
+    assert run is not None
     assert thread.case_id is not None
+    assert run.case_id == thread.case_id
     assert await user_can_access_case(
         database_session,
         user_id=user.id,
