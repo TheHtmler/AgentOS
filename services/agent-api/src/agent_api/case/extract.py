@@ -17,6 +17,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.config import get_settings
+from agent_api.db.case_store import user_can_write_case
 from agent_api.db.models import CaseFact
 from agent_api.db.session import session_factory
 
@@ -55,7 +56,7 @@ class CaseFactUpdate:
 @dataclass
 class ExtractedCasePayload:
     attribution: Attribution = "unknown"
-    updates: list[CaseFactUpdate] = field(default_factory=list)
+    updates: list[CaseFactUpdate] = field(default_factory=list[CaseFactUpdate])
 
 
 def _normalize_content(content: str) -> str:
@@ -91,10 +92,9 @@ def slot_hints_from_user_message(user_message: str) -> list[CaseFactUpdate]:
 
     hints: list[CaseFactUpdate] = []
     height_match = _HEIGHT_RE.search(text)
-    if height_match is None:
-        # Fallback: bare "82 cm" only when 身高/身长 also appears nearby in the turn.
-        if re.search(r"身高|身长", text):
-            height_match = _HEIGHT_UNIT_RE.search(text)
+    # Fallback: bare "82 cm" only when 身高/身长 also appears nearby in the turn.
+    if height_match is None and re.search(r"身高|身长", text):
+        height_match = _HEIGHT_UNIT_RE.search(text)
     if height_match is not None:
         value = height_match.group(1)
         hints.append(
@@ -139,9 +139,13 @@ def merge_user_slot_hints(
 
     # Prefer self when the user stated anthropometrics about 宝宝 / 我家孩子.
     attribution = payload.attribution
-    if attribution == "unknown" and merged and re.search(
-        r"宝宝|我家|我儿|我女|我的孩子|小孩",
-        user_message,
+    if (
+        attribution == "unknown"
+        and merged
+        and re.search(
+            r"宝宝|我家|我儿|我女|我的孩子|小孩",
+            user_message,
+        )
     ):
         attribution = "self"
 
@@ -246,8 +250,7 @@ async def extract_case_via_ollama(
                 {
                     "role": "system",
                     "content": (
-                        "You extract Case archive facts with attribution. "
-                        "Output valid JSON only."
+                        "You extract Case archive facts with attribution. Output valid JSON only."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -294,8 +297,7 @@ async def upsert_case_fact(
         if (
             existing is not None
             and existing.status == status
-            and _normalize_content(existing.content)
-            == _normalize_content(fact_update.content)
+            and _normalize_content(existing.content) == _normalize_content(fact_update.content)
         ):
             existing.updated_at = datetime.now(UTC)
             return False
@@ -345,6 +347,7 @@ def apply_attribution_policy(
 async def apply_case_extract(
     session: AsyncSession,
     *,
+    user_id: UUID,
     case_id: UUID,
     payload: ExtractedCasePayload,
     source_thread_id: UUID | None,
@@ -352,6 +355,8 @@ async def apply_case_extract(
 ) -> int:
     """Apply attribution policy and persist updates. Returns rows written."""
 
+    if not await user_can_write_case(session, user_id=user_id, case_id=case_id):
+        return 0
     action = apply_attribution_policy(payload)
     if action == "skip":
         return 0
@@ -372,6 +377,7 @@ async def apply_case_extract(
 
 def schedule_case_extract(
     *,
+    user_id: UUID,
     case_id: UUID | None,
     case_enabled: bool,
     thread_id: UUID,
@@ -420,10 +426,7 @@ def schedule_case_extract(
                     # Deterministic path only — no model call without assistant context.
                     payload = ExtractedCasePayload(attribution="unknown", updates=[])
                 payload = merge_user_slot_hints(user_text, payload)
-                if (
-                    not payload.updates
-                    and slot_hints_from_user_message(user_text)
-                ):
+                if not payload.updates and slot_hints_from_user_message(user_text):
                     logger.warning(
                         "case extraction empty after merge despite user slot hints run=%s",
                         run_id,
@@ -433,6 +436,7 @@ def schedule_case_extract(
             async with session_factory() as session, session.begin():
                 count = await apply_case_extract(
                     session,
+                    user_id=user_id,
                     case_id=case_id,
                     payload=payload,
                     source_thread_id=thread_id,

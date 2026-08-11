@@ -25,6 +25,7 @@ The project is being built in public from a small, verifiable core toward tool e
 - Read-only `fetch_url` with Firecrawl/local fallback, SSRF checks, truncation, and outlines.
 - Tool Registry with `allow`, `ask`, and `deny` policy decisions.
 - Multi-Agent selection, generic Case records, and Case-scoped Run, Artifact, and memory boundaries.
+- Basic Case membership roles (`owner`, `editor`, `viewer`) with same-origin member management for existing active users.
 - Curated MMA/PA `knowledge_search`, growth assessment, and an optional read-only PubMed MCP toolset (disabled by default).
 - Persistent HITL interrupts with approval, denial, idempotent resume, cancellation, and timeout auto-denial.
 - Tool-call timeline cards, approval cards, thread rename/delete, and automatic thread titles.

@@ -1,8 +1,8 @@
 """Case archive persistence: membership, defaults, and thread binding."""
 
-from uuid import UUID, uuid4
-
 from datetime import UTC, datetime
+from typing import Literal
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,12 +11,36 @@ from agent_api.db.models import (
     Case,
     CaseFact,
     CaseMembership,
+    User,
     UserAgentDefaultCase,
 )
 
 
 class CaseNotFoundError(LookupError):
     """Raised when a Case is missing or the user cannot access it."""
+
+
+class CasePermissionError(PermissionError):
+    """Raised when a Case member lacks permission for a management action."""
+
+
+type CaseRole = Literal["owner", "editor", "viewer"]
+
+
+async def get_case_membership(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    case_id: UUID,
+) -> CaseMembership | None:
+    """Return one user's membership without exposing Case existence."""
+
+    return await session.scalar(
+        select(CaseMembership).where(
+            CaseMembership.case_id == case_id,
+            CaseMembership.user_id == user_id,
+        ),
+    )
 
 
 async def user_can_access_case(
@@ -27,13 +51,31 @@ async def user_can_access_case(
 ) -> bool:
     """Return True when the user has a membership row for the Case."""
 
-    membership_id = await session.scalar(
-        select(CaseMembership.id).where(
-            CaseMembership.case_id == case_id,
-            CaseMembership.user_id == user_id,
-        ),
-    )
-    return membership_id is not None
+    return await get_case_membership(session, user_id=user_id, case_id=case_id) is not None
+
+
+async def user_can_write_case(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    case_id: UUID,
+) -> bool:
+    """Return True for owner/editor memberships that may change Case data."""
+
+    membership = await get_case_membership(session, user_id=user_id, case_id=case_id)
+    return membership is not None and membership.role in ("owner", "editor")
+
+
+async def user_can_manage_case(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    case_id: UUID,
+) -> bool:
+    """Return True only for the Case owner, who may manage memberships."""
+
+    membership = await get_case_membership(session, user_id=user_id, case_id=case_id)
+    return membership is not None and membership.role == "owner"
 
 
 async def list_confirmed_facts(
@@ -137,10 +179,13 @@ async def ensure_default_case(
             UserAgentDefaultCase.agent_id == agent_id,
         ),
     )
-    if default_case_id is not None:
-        # Membership may have been revoked; fall through to recreate if needed.
-        if await user_can_access_case(session, user_id=user_id, case_id=default_case_id):
-            return default_case_id
+    # Membership may have been revoked; fall through to recreate if needed.
+    if default_case_id is not None and await user_can_access_case(
+        session,
+        user_id=user_id,
+        case_id=default_case_id,
+    ):
+        return default_case_id
 
     active_case_ids = list(
         await session.scalars(
@@ -270,6 +315,114 @@ async def list_cases_for_user(
     return [(case, case.id == default_case_id) for case in cases]
 
 
+async def list_case_members(
+    session: AsyncSession,
+    *,
+    requester_user_id: UUID,
+    case_id: UUID,
+) -> list[tuple[CaseMembership, User]]:
+    """List member identities only after the requester passes Case access."""
+
+    if not await user_can_access_case(
+        session,
+        user_id=requester_user_id,
+        case_id=case_id,
+    ):
+        raise CaseNotFoundError(f"Case {case_id} is not accessible")
+    result = await session.execute(
+        select(CaseMembership, User)
+        .join(User, User.id == CaseMembership.user_id)
+        .where(CaseMembership.case_id == case_id)
+        .order_by(CaseMembership.created_at.asc()),
+    )
+    return [(membership, user) for membership, user in result.all()]
+
+
+async def add_case_member(
+    session: AsyncSession,
+    *,
+    requester_user_id: UUID,
+    case_id: UUID,
+    member_user_id: UUID,
+    role: Literal["editor", "viewer"],
+) -> tuple[CaseMembership, User]:
+    """Add or update an existing active user under an owner-managed Case."""
+
+    if not await user_can_access_case(
+        session,
+        user_id=requester_user_id,
+        case_id=case_id,
+    ):
+        raise CaseNotFoundError(f"Case {case_id} is not accessible")
+    if not await user_can_manage_case(
+        session,
+        user_id=requester_user_id,
+        case_id=case_id,
+    ):
+        raise CasePermissionError("Only the Case owner may manage members")
+
+    member = await session.get(User, member_user_id)
+    case = await session.get(Case, case_id)
+    if member is None or member.status != "active" or case is None:
+        raise CaseNotFoundError("Active member user not found")
+    if member.id == case.owner_user_id:
+        raise ValueError("The Case owner already has owner access")
+
+    membership = await get_case_membership(
+        session,
+        user_id=member_user_id,
+        case_id=case_id,
+    )
+    if membership is None:
+        membership = CaseMembership(
+            id=uuid4(),
+            case_id=case_id,
+            user_id=member_user_id,
+            role=role,
+        )
+        session.add(membership)
+    else:
+        membership.role = role
+    await session.flush()
+    return membership, member
+
+
+async def remove_case_member(
+    session: AsyncSession,
+    *,
+    requester_user_id: UUID,
+    case_id: UUID,
+    member_user_id: UUID,
+) -> None:
+    """Remove a non-owner member; ownership transfer is intentionally separate."""
+
+    if not await user_can_access_case(
+        session,
+        user_id=requester_user_id,
+        case_id=case_id,
+    ):
+        raise CaseNotFoundError(f"Case {case_id} is not accessible")
+    if not await user_can_manage_case(
+        session,
+        user_id=requester_user_id,
+        case_id=case_id,
+    ):
+        raise CasePermissionError("Only the Case owner may manage members")
+
+    case = await session.get(Case, case_id)
+    if case is None or member_user_id == case.owner_user_id:
+        raise ValueError("The Case owner cannot be removed")
+    membership = await get_case_membership(
+        session,
+        user_id=member_user_id,
+        case_id=case_id,
+    )
+    if membership is None:
+        raise CaseNotFoundError("Case member not found")
+    await session.delete(membership)
+    await session.flush()
+
+
 async def create_case(
     session: AsyncSession,
     *,
@@ -357,9 +510,9 @@ async def confirm_case_fact(
     case_id: UUID,
     fact_id: UUID,
 ) -> CaseFact:
-    """Promote a proposed fact to confirmed after membership check."""
+    """Promote a proposed fact to confirmed after write-permission check."""
 
-    if not await user_can_access_case(session, user_id=user_id, case_id=case_id):
+    if not await user_can_write_case(session, user_id=user_id, case_id=case_id):
         raise CaseNotFoundError(f"Case {case_id} is not accessible")
     fact = await session.get(CaseFact, fact_id)
     if fact is None or fact.case_id != case_id:

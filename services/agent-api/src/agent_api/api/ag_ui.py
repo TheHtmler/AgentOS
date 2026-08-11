@@ -335,6 +335,7 @@ async def stream_ag_ui_run(
                     case_id=case_id,
                 )
                 schedule_case_extract(
+                    user_id=user.id,
                     case_id=case_id,
                     case_enabled=version.case_enabled,
                     thread_id=started.thread_id,

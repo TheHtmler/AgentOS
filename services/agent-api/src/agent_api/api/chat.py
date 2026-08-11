@@ -438,6 +438,7 @@ async def event_stream(
             case_id=case_id,
         )
         schedule_case_extract(
+            user_id=user_id,
             case_id=case_id,
             case_enabled=case_enabled,
             thread_id=thread_id,

@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent_api.db.case_store import user_can_write_case
 from agent_api.db.models import Artifact, CaseMembership
 
 
@@ -29,15 +30,12 @@ async def create_artifact(
     run_id: UUID | None = None,
     meta: dict[str, object] | None = None,
 ) -> Artifact:
-    if case_id is not None:
-        membership_id = await session.scalar(
-            select(CaseMembership.id).where(
-                CaseMembership.case_id == case_id,
-                CaseMembership.user_id == owner_user_id,
-            ),
-        )
-        if membership_id is None:
-            raise ArtifactScopeError("Artifact Case is not accessible to the owner")
+    if case_id is not None and not await user_can_write_case(
+        session,
+        user_id=owner_user_id,
+        case_id=case_id,
+    ):
+        raise ArtifactScopeError("Artifact Case is not writable by the owner")
 
     row = Artifact(
         id=uuid4(),

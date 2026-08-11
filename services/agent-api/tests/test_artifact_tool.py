@@ -10,8 +10,8 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.config import Settings
-from agent_api.db.artifact_store import create_artifact, get_owned_artifact
-from agent_api.db.case_store import create_case
+from agent_api.db.artifact_store import ArtifactScopeError, create_artifact, get_owned_artifact
+from agent_api.db.case_store import add_case_member, create_case
 from agent_api.db.models import User
 from agent_api.db.session import close_database, session_factory
 from agent_api.tools.artifact.tool import run_read_artifact
@@ -172,7 +172,8 @@ async def test_artifact_case_scope_blocks_same_user_cross_case_reads(
     dispose_database_pool: None,
 ) -> None:
     user = User(email=f"artifact-case-{uuid4().hex}@example.com", status="active")
-    database_session.add(user)
+    viewer = User(email=f"artifact-viewer-{uuid4().hex}@example.com", status="active")
+    database_session.add_all([user, viewer])
     await database_session.flush()
     user_id = user.id
     imd_agent_id = UUID("00000000-0000-0000-0000-000000000002")
@@ -191,6 +192,22 @@ async def test_artifact_case_scope_blocks_same_user_cross_case_reads(
         display_name="第二位患者",
         make_default=False,
     )
+    await add_case_member(
+        database_session,
+        requester_user_id=user_id,
+        case_id=first_case.id,
+        member_user_id=viewer.id,
+        role="viewer",
+    )
+    with pytest.raises(ArtifactScopeError):
+        await create_artifact(
+            database_session,
+            owner_user_id=viewer.id,
+            case_id=first_case.id,
+            kind="upload",
+            title="viewer-write",
+            content="must-not-write",
+        )
     first_artifact = await create_artifact(
         database_session,
         owner_user_id=user_id,

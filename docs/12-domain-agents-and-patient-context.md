@@ -67,7 +67,7 @@ AgentOS 不先构建一个与 MMA/PA 业务硬编码绑定的专用应用，也�
 | `Run`               | 一次执行，记录 Agent/知识/患者上下文版本         | 私有             |
 | `Artifact`          | PDF、化验单、计划、原始文档和生成结果            | 按用户和患者授权 |
 
-当前实现映射为：`PatientCase` 对应平台通用表 `cases`，`PatientFact` 对应 `case_facts`，授权关系对应 `case_memberships`。`threads.case_id` 已绑定 Case；本轮进一步将 `runs.case_id`、`artifacts.case_id` 和 `user_memories.case_id` 纳入同一边界。Run 创建时保存 Thread 的 Case 快照，Artifact 读写和记忆召回/抽取均不能跨 Case；全局记忆使用 `case_id IS NULL`，不会自动注入 Case 会话。多看护人授权、临床扩展表和完整的患者 Artifact 上传流程仍未实现。
+当前实现映射为：`PatientCase` 对应平台通用表 `cases`，`PatientFact` 对应 `case_facts`，授权关系对应 `case_memberships`。`threads.case_id` 已绑定 Case；本轮进一步将 `runs.case_id`、`artifacts.case_id` 和 `user_memories.case_id` 纳入同一边界。Run 创建时保存 Thread 的 Case 快照，Artifact 读写和记忆召回/抽取均不能跨 Case；全局记忆使用 `case_id IS NULL`，不会自动注入 Case 会话。当前 membership 支持 `owner`、`editor`、`viewer`：owner 管理成员，editor 可写 Case 数据，viewer 只读；成员必须是已有 active 用户，不会通过 Case API 创建登录邀请。邀请生命周期、所有权转移、组织/临床角色、临床扩展表和完整的患者 Artifact 上传流程仍未实现。
 
 ## 公共知识与患者上下文
 
@@ -184,8 +184,8 @@ MMA/PA Agent 的系统规则应要求：
 
 - 建立 `AgentProfile`/`AgentVersion` 配置边界。
 - 将 `agent_id` 纳入 Thread 和 Run。
-- 建立 `PatientCase` 和最小授权关系。（已落地为 `cases` / `case_memberships`，当前只有 owner。）
-- 将 Artifact 设计为可绑定用户、患者、Thread 和 Run 的私有资源。（当前已落地用户与 Case 作用域校验。）
+- 建立 `PatientCase` 和最小授权关系。（已落地为 `cases` / `case_memberships`，支持 owner/editor/viewer 基础 ACL。）
+- 将 Artifact 设计为可绑定用户、患者、Thread 和 Run 的私有资源。（当前已落地用户、Case membership 和写入角色校验。）
 - 为公共知识库和患者私有上下文定义统一检索接口。
 
 ### Phase B：MMA/PA 领域包

@@ -89,6 +89,7 @@ async def test_apply_self_confirms_and_other_skips(database_session: AsyncSessio
 
     written = await apply_case_extract(
         database_session,
+        user_id=user.id,
         case_id=case_id,
         payload=ExtractedCasePayload(
             attribution="self",
@@ -103,6 +104,7 @@ async def test_apply_self_confirms_and_other_skips(database_session: AsyncSessio
 
     skipped = await apply_case_extract(
         database_session,
+        user_id=user.id,
         case_id=case_id,
         payload=ExtractedCasePayload(
             attribution="other",
@@ -140,6 +142,7 @@ async def test_unknown_writes_proposed(database_session: AsyncSession) -> None:
     )
     await apply_case_extract(
         database_session,
+        user_id=user.id,
         case_id=case_id,
         payload=ExtractedCasePayload(
             attribution="unknown",
@@ -178,6 +181,7 @@ async def test_merge_fills_missing_weight_then_confirms(database_session: AsyncS
     )
     written = await apply_case_extract(
         database_session,
+        user_id=user.id,
         case_id=case_id,
         payload=payload,
         source_thread_id=None,
@@ -210,6 +214,7 @@ async def test_height_update_preserves_weight(database_session: AsyncSession) ->
     )
     await apply_case_extract(
         database_session,
+        user_id=user.id,
         case_id=case_id,
         payload=ExtractedCasePayload(
             attribution="self",
@@ -223,6 +228,7 @@ async def test_height_update_preserves_weight(database_session: AsyncSession) ->
     )
     await apply_case_extract(
         database_session,
+        user_id=user.id,
         case_id=case_id,
         payload=ExtractedCasePayload(
             attribution="self",

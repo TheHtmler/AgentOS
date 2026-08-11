@@ -1,18 +1,24 @@
 """REST API for platform-generic Case archives."""
 
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from agent_api.api.auth import get_current_user
+from agent_api.db.auth_store import find_user_by_email
 from agent_api.db.case_store import (
     CaseNotFoundError,
+    CasePermissionError,
+    add_case_member,
     confirm_case_fact,
     create_case,
+    list_case_members,
     list_cases_for_user,
     list_facts_for_case,
+    remove_case_member,
     set_default_case,
     user_can_access_case,
 )
@@ -20,6 +26,7 @@ from agent_api.db.models import User
 from agent_api.db.session import session_factory
 
 router = APIRouter(prefix="/v1/cases", tags=["cases"])
+CaseMemberRole = Literal["owner", "editor", "viewer"]
 
 
 class CaseResponse(BaseModel):
@@ -53,6 +60,22 @@ class CaseFactResponse(BaseModel):
 
 class CaseFactListResponse(BaseModel):
     facts: list[CaseFactResponse]
+
+
+class CaseMemberResponse(BaseModel):
+    user_id: UUID
+    email: str
+    role: CaseMemberRole
+    created_at: datetime
+
+
+class CaseMemberListResponse(BaseModel):
+    members: list[CaseMemberResponse]
+
+
+class AddCaseMemberRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    role: Literal["editor", "viewer"] = "viewer"
 
 
 @router.get("", response_model=CaseListResponse)
@@ -134,6 +157,94 @@ async def patch_case_default(
         status=case.status,
         is_default=is_default,
     )
+
+
+@router.get("/{case_id}/members", response_model=CaseMemberListResponse)
+async def get_case_members(
+    case_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+) -> CaseMemberListResponse:
+    """List members for a Case after checking the requester's membership."""
+
+    try:
+        async with session_factory() as session:
+            rows = await list_case_members(
+                session,
+                requester_user_id=user.id,
+                case_id=case_id,
+            )
+    except CaseNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Case not found") from error
+    return CaseMemberListResponse(
+        members=[
+            CaseMemberResponse(
+                user_id=member_user.id,
+                email=member_user.email,
+                role=cast(CaseMemberRole, membership.role),
+                created_at=membership.created_at,
+            )
+            for membership, member_user in rows
+        ],
+    )
+
+
+@router.post("/{case_id}/members", response_model=CaseMemberResponse)
+async def post_case_member(
+    case_id: UUID,
+    payload: AddCaseMemberRequest,
+    user: Annotated[User, Depends(get_current_user)],
+) -> CaseMemberResponse:
+    """Add an existing active account; this endpoint never creates login invites."""
+
+    try:
+        async with session_factory() as session, session.begin():
+            member_user = await find_user_by_email(session, email=payload.email)
+            if member_user is None or member_user.status != "active":
+                raise HTTPException(status_code=404, detail="Active user not found")
+            membership, member_user = await add_case_member(
+                session,
+                requester_user_id=user.id,
+                case_id=case_id,
+                member_user_id=member_user.id,
+                role=payload.role,
+            )
+    except CaseNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Case or member not found") from error
+    except CasePermissionError as error:
+        raise HTTPException(status_code=403, detail="Case owner permission required") from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return CaseMemberResponse(
+        user_id=member_user.id,
+        email=member_user.email,
+        role=cast(CaseMemberRole, membership.role),
+        created_at=membership.created_at,
+    )
+
+
+@router.delete("/{case_id}/members/{member_user_id}", status_code=204)
+async def delete_case_member(
+    case_id: UUID,
+    member_user_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    """Remove a non-owner member; owner transfer is not implicit."""
+
+    try:
+        async with session_factory() as session, session.begin():
+            await remove_case_member(
+                session,
+                requester_user_id=user.id,
+                case_id=case_id,
+                member_user_id=member_user_id,
+            )
+    except CaseNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Case or member not found") from error
+    except CasePermissionError as error:
+        raise HTTPException(status_code=403, detail="Case owner permission required") from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return Response(status_code=204)
 
 
 @router.get("/{case_id}/facts", response_model=CaseFactListResponse)

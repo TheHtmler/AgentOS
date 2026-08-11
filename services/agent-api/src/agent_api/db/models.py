@@ -213,11 +213,14 @@ class Case(Base):
 
 
 class CaseMembership(Base):
-    """Grants a user access to one Case (MVP: owner only)."""
+    """Grants a user access to one Case with read or write permissions."""
 
     __tablename__ = "case_memberships"
     __table_args__ = (
-        CheckConstraint("role IN ('owner')", name="ck_case_memberships_role"),
+        CheckConstraint(
+            "role IN ('owner', 'editor', 'viewer')",
+            name="ck_case_memberships_role",
+        ),
         UniqueConstraint("case_id", "user_id", name="uq_case_memberships_case_user"),
     )
 

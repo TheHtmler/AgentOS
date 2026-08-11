@@ -28,7 +28,7 @@
 
 **Case 档案竖切（2026-08-06，已落地）：** 平台级 `cases` / `case_facts`（非 `patient_*`）；`imd` 默认 `case_enabled`；确认事实注入 + `case_context_read`；归属抽取与 HITL/`proposed`；默认 Case 隐式绑定（Web 无档案管理 UI）；`knowledge_search` 切片扩充；`growth_assess` 支持 WHO + NHC WS/T 423-2022。
 
-**Case 数据边界（2026-08-11，已落地）：** `Run` 保存 Thread 的 `case_id` 快照；Artifact 写入和读取按 Case membership 限制；用户记忆按全局或精确 Case 作用域召回/抽取；迁移 `i5j6k7l8m9n0` 并覆盖跨 Case 安全测试。公共知识库完整向量 RAG、复杂多看护人 ACL 和临床扩展表仍属后续增量。
+**Case 数据边界（2026-08-11，已落地）：** `Run` 保存 Thread 的 `case_id` 快照；Artifact 写入和读取按 Case membership/role 限制；用户记忆按全局或精确 Case 作用域召回/抽取；迁移 `i5j6k7l8m9n0`、`j6k7l8m9n0` 并覆盖跨 Case/跨角色安全测试。当前支持 owner/editor/viewer 基础 ACL；公共知识库完整向量 RAG、邀请生命周期、所有权转移和临床扩展表仍属后续增量。
 
 - 建立 `AgentProfile`、`AgentVersion` 和领域知识库边界。（首个竖切已用 spec 命名 `agents` / `agent_versions` 落地配置层 Agent，非完整 `AgentProfile` 域模型。）
 - 将 `agent_id` 纳入 Thread、Run 和运行快照。

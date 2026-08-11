@@ -22,6 +22,7 @@ AgentOS 是一个正在开发中的可控、可持久化 AI Agent Runtime 平台
 - invite-only 身份认证、可撤销 HttpOnly session，以及用户级 Thread、Run 与历史隔离。
 - 管理员在页面生成邀请链接；首次管理员可通过受控 CLI 生成链接。
 - 多 Agent 选择、通用 Case 档案，以及 Run、Artifact 和用户记忆的 Case 作用域隔离。
+- 基础 Case 成员角色（`owner`、`editor`、`viewer`）和同源成员管理；成员必须是已有 active 用户。
 - 策展版 MMA/PA `knowledge_search`、生长评估，以及默认关闭的只读 PubMed MCP 工具集。
 - 后端使用 pytest、Ruff 和 Pyright，前端使用 ESLint 和 Prettier 进行质量检查。
 

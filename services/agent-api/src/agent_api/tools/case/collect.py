@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 from typing import cast
-from uuid import UUID
 
 from pydantic_ai import RunContext
 
 from agent_api.case.extract import CaseFactUpdate, upsert_case_fact
+from agent_api.db.case_store import user_can_write_case
 from agent_api.db.session import session_factory
 from agent_api.tools.search.tool import AgentDeps
 
@@ -29,9 +29,10 @@ def _parse_fields(fields_json: str) -> list[dict[str, str]]:
     if not isinstance(raw, list):
         return []
     fields: list[dict[str, str]] = []
-    for item in raw:
-        if not isinstance(item, dict):
+    for raw_item in cast(list[object], raw):
+        if not isinstance(raw_item, dict):
             continue
+        item = cast(dict[str, object], raw_item)
         key = item.get("key")
         if not isinstance(key, str) or not key.strip():
             continue
@@ -45,9 +46,7 @@ def _parse_fields(fields_json: str) -> list[dict[str, str]]:
         unit_raw = item.get("unit")
         unit = unit_raw.strip() if isinstance(unit_raw, str) and unit_raw.strip() else ""
         reason_raw = item.get("reason")
-        reason = (
-            reason_raw.strip() if isinstance(reason_raw, str) and reason_raw.strip() else ""
-        )
+        reason = reason_raw.strip() if isinstance(reason_raw, str) and reason_raw.strip() else ""
         row = {"key": key, "label": label}
         if unit:
             row["unit"] = unit
@@ -82,7 +81,7 @@ async def run_case_slot_collect(
     if blocked is not None:
         return blocked
 
-    if deps.case_id is None:
+    if deps.case_id is None or deps.user_id is None:
         return json.dumps(
             {"error": "No Case is bound to this conversation"},
             ensure_ascii=False,
@@ -90,13 +89,24 @@ async def run_case_slot_collect(
 
     fields = _parse_fields(fields_json)
     if not fields:
-        return json.dumps({"error": "fields_json must be a non-empty JSON array"}, ensure_ascii=False)
+        return json.dumps(
+            {"error": "fields_json must be a non-empty JSON array"}, ensure_ascii=False
+        )
 
     provided = values if isinstance(values, dict) else {}
     written_keys: list[str] = []
     missing_keys: list[str] = []
 
     async with session_factory() as session, session.begin():
+        if not await user_can_write_case(
+            session,
+            user_id=deps.user_id,
+            case_id=deps.case_id,
+        ):
+            return json.dumps(
+                {"error": "This Case is read-only for the current user"},
+                ensure_ascii=False,
+            )
         for field in fields:
             key = field["key"]
             raw_value = provided.get(key)
@@ -115,7 +125,7 @@ async def run_case_slot_collect(
             tags = [field["label"]]
             await upsert_case_fact(
                 session,
-                case_id=cast(UUID, deps.case_id),
+                case_id=deps.case_id,
                 fact_update=CaseFactUpdate(key=key, content=content, tags=tags),
                 status="confirmed",
                 source_thread_id=None,

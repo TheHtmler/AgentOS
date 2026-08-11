@@ -17,6 +17,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.config import get_settings
+from agent_api.db.case_store import user_can_write_case
 from agent_api.db.memory_store import list_active_memories
 from agent_api.db.models import UserMemory
 from agent_api.db.session import session_factory
@@ -395,6 +396,13 @@ def schedule_memory_extract(
             if isinstance(payload, list):
                 payload = parse_extracted_payload(payload)
             async with session_factory() as session, session.begin():
+                if case_id is not None and not await user_can_write_case(
+                    session,
+                    user_id=user_id,
+                    case_id=case_id,
+                ):
+                    logger.info("memory extraction skipped for read-only Case run=%s", run_id)
+                    return
                 count = await upsert_extracted_memory(
                     session,
                     user_id=user_id,

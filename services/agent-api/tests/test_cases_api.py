@@ -105,3 +105,46 @@ async def test_cases_isolation(authenticated_api_user: UUID) -> None:
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.get(f"/v1/cases/{foreign}/facts")
         assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_case_members_owner_can_add_list_and_remove(
+    authenticated_api_user: UUID,
+) -> None:
+    member_email = f"case-member-{uuid4().hex}@example.com"
+    async with session_factory() as session, session.begin():
+        member = User(email=member_email, status="active")
+        session.add(member)
+        await session.flush()
+        member_id = member.id
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        created = await client.post(
+            "/v1/cases",
+            json={
+                "agent_id": str(IMD_AGENT_ID),
+                "display_name": "共享档案",
+                "make_default": False,
+            },
+        )
+        assert created.status_code == 200
+        case_id = created.json()["id"]
+
+        added = await client.post(
+            f"/v1/cases/{case_id}/members",
+            json={"email": member_email, "role": "editor"},
+        )
+        assert added.status_code == 200
+        assert added.json()["user_id"] == str(member_id)
+        assert added.json()["role"] == "editor"
+
+        listed = await client.get(f"/v1/cases/{case_id}/members")
+        assert listed.status_code == 200
+        assert {item["role"] for item in listed.json()["members"]} == {"owner", "editor"}
+
+        removed = await client.delete(f"/v1/cases/{case_id}/members/{member_id}")
+        assert removed.status_code == 204
+        listed = await client.get(f"/v1/cases/{case_id}/members")
+        assert listed.status_code == 200
+        assert [item["role"] for item in listed.json()["members"]] == ["owner"]

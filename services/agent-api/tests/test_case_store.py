@@ -6,9 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.db.case_store import (
     CaseNotFoundError,
+    CasePermissionError,
+    add_case_member,
     ensure_default_case,
+    remove_case_member,
     resolve_case_for_new_thread,
     user_can_access_case,
+    user_can_manage_case,
+    user_can_write_case,
 )
 from agent_api.db.chat_store import start_run
 from agent_api.db.models import Agent, Case, CaseMembership, Run, Thread, User, UserAgentDefaultCase
@@ -129,6 +134,68 @@ async def test_start_run_binds_case_for_imd(database_session: AsyncSession) -> N
     )
     assert default is not None
     assert default.case_id == thread.case_id
+
+
+@pytest.mark.anyio
+async def test_case_roles_limit_writes_and_member_management(
+    database_session: AsyncSession,
+) -> None:
+    owner = User(email=f"case-owner-role-{uuid4().hex}@example.com", status="active")
+    editor = User(email=f"case-editor-role-{uuid4().hex}@example.com", status="active")
+    viewer = User(email=f"case-viewer-role-{uuid4().hex}@example.com", status="active")
+    database_session.add_all([owner, editor, viewer])
+    await database_session.flush()
+    case_id = await ensure_default_case(
+        database_session,
+        user_id=owner.id,
+        agent_id=IMD_AGENT_ID,
+    )
+
+    editor_membership, _ = await add_case_member(
+        database_session,
+        requester_user_id=owner.id,
+        case_id=case_id,
+        member_user_id=editor.id,
+        role="editor",
+    )
+    viewer_membership, _ = await add_case_member(
+        database_session,
+        requester_user_id=owner.id,
+        case_id=case_id,
+        member_user_id=viewer.id,
+        role="viewer",
+    )
+    assert editor_membership.role == "editor"
+    assert viewer_membership.role == "viewer"
+    assert await user_can_access_case(database_session, user_id=viewer.id, case_id=case_id)
+    assert await user_can_write_case(database_session, user_id=editor.id, case_id=case_id)
+    assert not await user_can_write_case(database_session, user_id=viewer.id, case_id=case_id)
+    assert await user_can_manage_case(database_session, user_id=owner.id, case_id=case_id)
+    assert not await user_can_manage_case(database_session, user_id=editor.id, case_id=case_id)
+
+    with pytest.raises(CasePermissionError):
+        await add_case_member(
+            database_session,
+            requester_user_id=editor.id,
+            case_id=case_id,
+            member_user_id=viewer.id,
+            role="editor",
+        )
+
+    with pytest.raises(ValueError):
+        await remove_case_member(
+            database_session,
+            requester_user_id=owner.id,
+            case_id=case_id,
+            member_user_id=owner.id,
+        )
+    await remove_case_member(
+        database_session,
+        requester_user_id=owner.id,
+        case_id=case_id,
+        member_user_id=viewer.id,
+    )
+    assert not await user_can_access_case(database_session, user_id=viewer.id, case_id=case_id)
 
 
 @pytest.mark.anyio

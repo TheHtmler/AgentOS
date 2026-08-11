@@ -215,6 +215,7 @@ async def continue_run_after_approval(
             case_id=case_id,
         )
         schedule_case_extract(
+            user_id=user_id,
             case_id=case_id,
             case_enabled=version.case_enabled,
             thread_id=run.thread_id,
