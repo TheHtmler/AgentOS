@@ -88,7 +88,7 @@
 - `fetch_url`（Firecrawl / local）
 - Runtime Context Pack（当前时间/时区）
 - 用户 × Agent × Case 记忆
-- `knowledge_search`（当前为带 MMA/PA 标签的策展切片检索）
+- `knowledge_search`（当前为带 MMA/PA 标签、来源版本和审核状态的多来源策展切片混合检索）
 - `growth_assess`（WHO 2006 / NHC WS/T 423-2022）
 - 可选只读 PubMed MCP（默认关闭，严格工具白名单）
 
@@ -98,7 +98,7 @@
 
 1. **内建或封装 `growth_assess`**（可基于 groowooth core / RCPCH，不必先上完整 MCP 总线）
 2. **只读 MCP：PubMed + NCBI Bookshelf/GeneReviews 抓取**（严格 Tool Policy + 引用）
-3. **自建 `knowledge_search`**（把 GeneReviews/JIMD 指南切片入库，带亚型标签）——这才是 MMA Agent 的主路径
+3. **自建 `knowledge_search`**（把 GeneReviews/JIMD 指南切片入库，带亚型、来源版本和审核状态）——这才是 MMA Agent 的主路径；当前 P0 已导入首批来源和检索评测集
 4. 通用 medical-mcp 全家桶最后考虑（面太大、幻觉与合规风险更高）
 
 ---

@@ -16,7 +16,7 @@ from agent_api.tools.search.tool import AgentDeps
 async def test_seed_and_search_knowledge_chunks(database_session: AsyncSession) -> None:
     count = await upsert_mma_pa_knowledge(database_session)
     await database_session.commit()
-    assert count == 16
+    assert count == 32
 
     hits = await search_knowledge_chunks(
         database_session,
@@ -28,6 +28,8 @@ async def test_seed_and_search_knowledge_chunks(database_session: AsyncSession) 
     assert hits
     assert any("失代偿" in hit["title"] or "失代偿" in hit["content"] for hit in hits)
     assert all(hit.get("source_url") for hit in hits)
+    assert all(hit.get("version_label") for hit in hits)
+    assert all(hit.get("review_status") == "curated" for hit in hits)
 
     total = await database_session.scalar(select(func.count()).select_from(KnowledgeChunk))
     assert total is not None and int(total) >= 16
@@ -40,9 +42,7 @@ async def test_seed_and_search_knowledge_chunks(database_session: AsyncSession) 
         knowledge_base_slug="mma-pa",
     )
     assert b12_hits
-    assert any(
-        "B12" in hit["title"] or "反应型" in hit["content"] for hit in b12_hits
-    )
+    assert any("B12" in hit["title"] or "反应型" in hit["content"] for hit in b12_hits)
 
 
 @pytest.mark.anyio

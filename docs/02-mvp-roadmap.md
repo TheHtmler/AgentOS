@@ -28,16 +28,18 @@
 
 **Case 档案竖切（2026-08-06，已落地）：** 平台级 `cases` / `case_facts`（非 `patient_*`）；`imd` 默认 `case_enabled`；确认事实注入 + `case_context_read`；归属抽取与 HITL/`proposed`；默认 Case 隐式绑定（Web 无档案管理 UI）；`knowledge_search` 切片扩充；`growth_assess` 支持 WHO + NHC WS/T 423-2022。
 
-**Case 数据边界（2026-08-11，已落地）：** `Run` 保存 Thread 的 `case_id` 快照；Artifact 写入和读取按 Case membership/role 限制；用户记忆按全局或精确 Case 作用域召回/抽取；迁移 `i5j6k7l8m9n0`、`j6k7l8m9n0` 并覆盖跨 Case/跨角色安全测试。当前支持 owner/editor/viewer 基础 ACL；公共知识库完整向量 RAG、邀请生命周期、所有权转移和临床扩展表仍属后续增量。
+**Case 数据边界（2026-08-11，已落地）：** `Run` 保存 Thread 的 `case_id` 快照；Artifact 写入和读取按 Case membership/role 限制；用户记忆按全局或精确 Case 作用域召回/抽取；迁移 `i5j6k7l8m9n0`、`j6k7l8m9n0` 并覆盖跨 Case/跨角色安全测试。当前支持 owner/editor/viewer 基础 ACL；公共知识库人工审核工作流、邀请生命周期、所有权转移和临床扩展表仍属后续增量。
+
+**MMA/PA 公共知识 P0（2026-08-12，已落地）：** `knowledge_search` 支持多来源文档、来源类型/日期/版本/审核状态、章节标签和关键词 + embedding 混合召回；已导入 4 个来源文档、32 条教育摘要，并加入 P0 检索评测集。公共知识与 Case 私有资料仍严格分离。
 
 - 建立 `AgentProfile`、`AgentVersion` 和领域知识库边界。（首个竖切已用 spec 命名 `agents` / `agent_versions` 落地配置层 Agent，非完整 `AgentProfile` 域模型。）
 - 将 `agent_id` 纳入 Thread、Run 和运行快照。
 - 建立 `PatientCase`、患者授权关系和患者私有上下文。
-- 实现公共 MMA/PA 知识库与患者私有资料的分离检索。
+- 实现公共 MMA/PA 知识库与患者私有资料的分离检索。（已落地）
 - Artifact 支持用户、患者、Thread 和 Run 作用域。
-- 实现带疾病亚型过滤、来源引用和版本信息的 `knowledge_search`。
+- 实现带疾病亚型过滤、来源引用和版本信息的 `knowledge_search`。（已落地）
 - 增加 `patient_context_read`、`read_artifact` 等只读工具。
-- 建立跨用户、跨患者和未确认事实的安全测试。
+- 建立跨用户、跨患者和未确认事实的安全测试。（已落地；知识库另有 P0 检索评测集）
 
 完成标准：多个用户可以共享同一个 MMA/PA Agent 和公共知识库，但不能互相读取患者资料；同一用户的多个患者 Case 之间也不能串联上下文。
 

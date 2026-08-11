@@ -1,0 +1,66 @@
+{
+  "name": "mma-pa-p0-retrieval-v1",
+  "description": "Small retrieval regression set for curated MMA/PA educational knowledge.",
+  "cases": [
+    {
+      "id": "mma-definition",
+      "query": "孤立型 MMA 和同型半胱氨酸异常有什么区别",
+      "disease_tags": ["isolated_mma", "differential"],
+      "expected_title_terms": ["定义边界", "钴胺素相关障碍"]
+    },
+    {
+      "id": "pa-genes",
+      "query": "PA 主要看哪些基因，什么情况下能确认",
+      "disease_tags": ["pa", "diagnosis"],
+      "expected_title_terms": ["相关基因", "诊断"]
+    },
+    {
+      "id": "c3-screening",
+      "query": "新生儿筛查 C3 升高是不是一定就是 MMA",
+      "disease_tags": ["nbs", "C3", "differential"],
+      "expected_title_terms": ["C3", "筛查阳性"]
+    },
+    {
+      "id": "b12-response",
+      "query": "B12 反应型和非反应型 MMA 怎么区分",
+      "disease_tags": ["cobalamin_disorder", "isolated_mma"],
+      "expected_title_terms": ["B12 反应型", "亚型和相关基因"]
+    },
+    {
+      "id": "acute-vomiting",
+      "query": "MMA 孩子发热呕吐嗜睡应该怎么办",
+      "disease_tags": ["isolated_mma", "acute", "emergency"],
+      "expected_title_terms": ["急性失代偿", "风险"]
+    },
+    {
+      "id": "pa-hyperammonemia",
+      "query": "PA 高氨和代谢性酸中毒是不是急症",
+      "disease_tags": ["pa", "acute", "hyperammonemia"],
+      "expected_title_terms": ["急性失代偿", "识别边界"]
+    },
+    {
+      "id": "diet-boundary",
+      "query": "MMA PA 饮食和天然蛋白应该怎么调整",
+      "disease_tags": ["diet", "nutrition"],
+      "expected_title_terms": ["饮食原则", "饮食管理"]
+    },
+    {
+      "id": "fasting-risk",
+      "query": "MMA 孩子拒食多久会有风险，能不能先禁食",
+      "disease_tags": ["fasting", "acute"],
+      "expected_title_terms": ["禁食", "风险规避"]
+    },
+    {
+      "id": "monitoring-trend",
+      "query": "MMA PA 复查血氨肾功能和生长怎么看",
+      "disease_tags": ["monitoring", "labs", "growth"],
+      "expected_title_terms": ["监测", "随访"]
+    },
+    {
+      "id": "source-limits",
+      "query": "知识库能不能直接给孩子算蛋白克数和药物剂量",
+      "disease_tags": ["safety", "evidence"],
+      "expected_title_terms": ["安全边界", "证据和限制"]
+    }
+  ]
+}

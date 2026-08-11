@@ -366,6 +366,14 @@ class KnowledgeDocument(Base):
 
     __tablename__ = "knowledge_documents"
     __table_args__ = (
+        CheckConstraint(
+            "source_kind IN ('official_reference', 'clinical_guideline', 'curated_summary')",
+            name="ck_knowledge_documents_source_kind",
+        ),
+        CheckConstraint(
+            "review_status IN ('curated', 'clinically_reviewed', 'withdrawn')",
+            name="ck_knowledge_documents_review_status",
+        ),
         UniqueConstraint(
             "knowledge_base_id",
             "slug",
@@ -383,7 +391,19 @@ class KnowledgeDocument(Base):
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     source_url: Mapped[str | None] = mapped_column(Text)
     source_label: Mapped[str | None] = mapped_column(String(256))
+    source_kind: Mapped[str] = mapped_column(
+        String(32),
+        server_default=text("'curated_summary'"),
+        nullable=False,
+    )
+    source_date: Mapped[str | None] = mapped_column(String(32))
     version_label: Mapped[str | None] = mapped_column(String(128))
+    review_status: Mapped[str] = mapped_column(
+        String(24),
+        server_default=text("'curated'"),
+        nullable=False,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -419,6 +439,7 @@ class KnowledgeChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    section_label: Mapped[str | None] = mapped_column(String(256))
     tags: Mapped[list[str]] = mapped_column(
         ARRAY(Text),
         server_default=text("'{}'"),

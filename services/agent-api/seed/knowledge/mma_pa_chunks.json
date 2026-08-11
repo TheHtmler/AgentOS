@@ -4,109 +4,315 @@
     "name": "MMA/PA educational base",
     "description": "Curated Chinese educational summaries for methylmalonic and propionic acidemias. Original wording; cites GeneReviews and JIMD 2021 as pointers only."
   },
-  "document": {
-    "slug": "mma-pa-core-v1",
-    "title": "MMA/PA 核心教育摘要 v1",
-    "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK1231/",
-    "source_label": "GeneReviews / JIMD 2021 (pointers)",
-    "version_label": "2026-08-05-curated-v1"
-  },
-  "chunks": [
+  "documents": [
     {
-      "chunk_index": 0,
-      "title": "孤立型 MMA 是什么",
-      "tags": ["isolated_mma", "overview", "age_band:neonate", "age_band:infant"],
-      "content": "孤立型甲基丙二酸血症（isolated MMA）是一类有机酸代谢病，核心是甲基丙二酰辅酶A变位酶通路障碍，导致甲基丙二酸及相关代谢物蓄积。新生儿筛查或婴儿期喂养不耐受、嗜睡、酸中毒时可被发现。回答时必须标注亚型，不可与伴同型半胱氨酸升高的钴胺素缺陷混为一谈。权威综述入口：GeneReviews Isolated Methylmalonic Acidemia（NBK1231）。教育向说明，非诊断。"
+      "slug": "mma-pa-core-v1",
+      "title": "MMA/PA 核心教育摘要 v1",
+      "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK1231/",
+      "source_label": "GeneReviews / JIMD 2021 (pointers)",
+      "source_kind": "curated_summary",
+      "source_date": "2021-2022",
+      "version_label": "2026-08-12-curated-v2",
+      "review_status": "curated",
+      "chunks": [
+        {
+          "chunk_index": 0,
+          "title": "孤立型 MMA 是什么",
+          "tags": ["isolated_mma", "overview", "age_band:neonate", "age_band:infant"],
+          "content": "孤立型甲基丙二酸血症（isolated MMA）是一类有机酸代谢病，核心是甲基丙二酰辅酶A变位酶通路障碍，导致甲基丙二酸及相关代谢物蓄积。新生儿筛查或婴儿期喂养不耐受、嗜睡、酸中毒时可被发现。回答时必须标注亚型，不可与伴同型半胱氨酸升高的钴胺素缺陷混为一谈。权威综述入口：GeneReviews Isolated Methylmalonic Acidemia（NBK1231）。教育向说明，非诊断。"
+        },
+        {
+          "chunk_index": 1,
+          "title": "丙酸血症（PA）是什么",
+          "tags": ["pa", "overview", "gene:PCCA", "gene:PCCB"],
+          "content": "丙酸血症（propionic acidemia, PA）多与 PCCA/PCCB 相关的丙酰辅酶A羧化酶缺陷有关，可出现高氨、代谢性酸中毒、喂养困难与发育问题。管理框架与 MMA 有重叠但仍有差异，尤其是并发症谱与长期随访重点。权威综述入口：GeneReviews Propionic Acidemia（NBK92946）。回答需标明 PA，避免直接套用孤立型 MMA 结论。"
+        },
+        {
+          "chunk_index": 2,
+          "title": "钴胺素相关障碍与孤立型 MMA 的区分",
+          "tags": ["cobalamin_disorder", "isolated_mma", "differential", "homocysteine"],
+          "content": "细胞内钴胺素代谢缺陷（如 cblA/B/C 等）可表现为甲基丙二酸升高，但部分亚型同时伴同型半胱氨酸异常，治疗与随访叙事不同于经典 mut 型孤立型 MMA。家庭教育中应先问清：是否做过基因分型、同型半胱氨酸是否升高、是否被判定为 B12 反应型。不确定时写明「取决于亚型」，不要默认同一套饮食或用药表述。"
+        },
+        {
+          "chunk_index": 3,
+          "title": "常见相关基因标签",
+          "tags": ["gene:MMUT", "gene:MMAA", "gene:MMAB", "gene:PCCA", "gene:PCCB", "overview"],
+          "content": "常见标签：MMUT（mut0/mut−）多对应孤立型 MMA；MMAA/MMAB 等与 cblA/cblB 相关；PCCA/PCCB 对应 PA。基因标签用于检索与回答边界，不等于已确认患者诊断。引用基因结论时注明来源与是否为个体检测结果；公共知识库不存放具体患者报告。"
+        },
+        {
+          "chunk_index": 4,
+          "title": "C3 升高与鉴别要点",
+          "tags": ["nbs", "C3", "differential", "isolated_mma", "pa", "cobalamin_disorder"],
+          "content": "新生儿筛查中丙酰肉碱（C3）升高提示有机酸代谢异常可能，鉴别方向包括 PA、MMA 及部分钴胺素相关障碍。后续常需血氨、血气、氨基酸/酰基肉碱谱、尿有机酸，并视情况完善同型半胱氨酸与基因检测。C3 升高本身不是确诊；解释筛查阳性时应建议尽快联系代谢专科，避免家庭自行解读为「一定是某病」。"
+        },
+        {
+          "chunk_index": 5,
+          "title": "急性失代偿：家庭识别与就医升级",
+          "tags": ["acute", "emergency", "isolated_mma", "pa", "age_band:infant", "age_band:child"],
+          "content": "发热、呕吐、拒食、嗜睡、呼吸深快或精神明显变差时，有机酸血症患儿有急性失代偿风险。家庭侧原则：不要长时间禁食；按代谢团队既定应急方案联系医院；出现意识改变、抽搐、难以纠正的呕吐应急诊。本摘要不给剂量或具体输液处方。管理框架可参考 JIMD 2021 MMA/PA 诊断与管理指南修订版，具体以主管医生方案为准。"
+        },
+        {
+          "chunk_index": 6,
+          "title": "日常饮食原则（教育向）",
+          "tags": ["diet", "nutrition", "isolated_mma", "pa"],
+          "content": "长期管理常涉及天然蛋白控制、医学配方/特殊医学食品，以及患病或食欲差时的应急能量支持。目标是在专科营养指导下维持生长并降低代谢压力，而不是家庭自行大幅加严限蛋白。改饮食、停配方或添加保健品前应联系代谢/营养团队。公共知识只讲原则，不开个体化克数处方。"
+        },
+        {
+          "chunk_index": 7,
+          "title": "常用监测指标（教育向）",
+          "tags": ["labs", "monitoring", "isolated_mma", "pa", "growth"],
+          "content": "随访中常见关注：血氨、血气/阴离子间隙、酰基肉碱与有机酸趋势、肾功能、生长发育，以及亚型相关的并发症筛查。数值解读必须结合患儿基线与主管医生目标区间；单次波动不等于失代偿。公共知识库不保存具体患者化验时间线。"
+        },
+        {
+          "chunk_index": 8,
+          "title": "权威来源指针：GeneReviews 与 JIMD 2021",
+          "tags": ["sources", "genereviews", "jimd", "overview"],
+          "content": "优先引用并引导查阅：1) GeneReviews Isolated Methylmalonic Acidemia https://www.ncbi.nlm.nih.gov/books/NBK1231/ ；2) GeneReviews Propionic Acidemia https://www.ncbi.nlm.nih.gov/books/NBK92946/ ；3) Forny et al., JIMD 2021《Guidelines for the diagnosis and management of methylmalonic acidaemia and propionic acidaemia: First revision》。回答应带来源链接，并说明本库条目为教育摘要而非指南全文。"
+        },
+        {
+          "chunk_index": 9,
+          "title": "生长随访与代谢病叠加",
+          "tags": [
+            "growth",
+            "monitoring",
+            "isolated_mma",
+            "pa",
+            "age_band:infant",
+            "age_band:child"
+          ],
+          "content": "MMA/PA 儿童需常规追踪身长/身高、体重与营养是否跟上限蛋白/配方方案。生长偏离可能来自能量不足、感染后消耗、慢性并发症或多因素叠加。教育回答可结合公开生长标准（如 WHO）做对照解读，但疾病特异性目标仍以代谢团队为准；急性症状时优先就医而非只谈百分位。"
+        },
+        {
+          "chunk_index": 10,
+          "title": "B12 反应型与非反应型 MMA 的区分",
+          "tags": [
+            "cobalamin_disorder",
+            "isolated_mma",
+            "b12_responsive",
+            "differential",
+            "gene:MMAA",
+            "gene:MMAB"
+          ],
+          "content": "部分 MMA 亚型（如 cblA/cblB 等，常与 MMAA/MMAB 相关）对羟钴胺或氰钴胺补充有代谢改善，称为 B12 反应型；经典 mut0 型等多为非反应型，长期管理重点在天然蛋白控制与应急方案，而非指望 B12 单药纠正。家庭教育应先确认基因分型与同型半胱氨酸结果，再谈「是否需要长期 B12」——不可把全部 MMA 都描述为同一种 B12 叙事。综述入口：GeneReviews Isolated Methylmalonic Acidemia（NBK1231）钴胺素缺陷章节；JIMD 2021 修订版对亚型分层管理有说明。教育向，非个体用药处方。"
+        },
+        {
+          "chunk_index": 11,
+          "title": "肾脏并发症概述（MMA/PA）",
+          "tags": [
+            "renal",
+            "complications",
+            "isolated_mma",
+            "monitoring",
+            "age_band:child",
+            "age_band:adolescent"
+          ],
+          "content": "MMA 患儿长期可见肾小管间质病变、慢性肾病乃至终末期肾病的风险，部分与甲基丙二酸蓄积及反复失代偿有关；PA 亦需关注肾功能与电解质。家庭教育重点：按代谢团队节奏复查尿常规、肾功能、血压与影像学安排，不要等出现明显水肿或尿量异常才首次评估。早期发现不等于立刻透析，而是与专科共同调整蛋白/能量与并发症筛查。参考：GeneReviews NBK1231 并发症章节；JIMD 2021 长期随访建议。本条目为风险教育，不替代个体肾科评估。"
+        },
+        {
+          "chunk_index": 12,
+          "title": "神经系统并发症概述（MMA/PA）",
+          "tags": [
+            "neuro",
+            "complications",
+            "isolated_mma",
+            "pa",
+            "development",
+            "age_band:infant",
+            "age_band:child"
+          ],
+          "content": "MMA/PA 可伴发育迟缓、运动障碍、基底节信号异常、癫痫或认知受累，急性期亦可出现嗜睡、肌张力改变。解释时应区分：感染/代谢失代偿相关的可逆变化 vs 慢性神经损伤；二者处理 urgency 不同。家庭若见新发抽搐、持续嗜睡、步态突变或语言明显倒退，应联系代谢/神经专科或急诊，而非仅当作「慢慢会好」。神经影像与发育评估由主管团队安排。参考：GeneReviews MMA/PA 神经表现；JIMD 2021 神经发育随访框架。公共知识不存放个体 MRI/EEG 报告。"
+        },
+        {
+          "chunk_index": 13,
+          "title": "随访监测细节：频率与解读原则",
+          "tags": ["labs", "monitoring", "isolated_mma", "pa", "growth", "renal", "neuro"],
+          "content": "稳定期常见监测组合：血氨、血气/阴离子间隙、酰基肉碱与尿有机酸趋势、肝肾功能、血常规、营养与生长参数；亚型相关可加同型半胱氨酸、维生素 B12 水平或专项并发症筛查。频率由代谢团队按年龄与稳定性个体化（婴儿期通常更密，稳定儿童可适度延长间隔）。解读原则：与「自家基线」和主管目标区间比，而不是照搬健康儿童参考范围；单次轻度波动需结合是否感染、拒食或呕吐。计划外化验异常应反馈给代谢专科，家庭不宜自行停药或大幅改蛋白。框架见 JIMD 2021；GeneReviews 随访章节。不开具体复查日历。"
+        },
+        {
+          "chunk_index": 14,
+          "title": "感染期间的家庭指导",
+          "tags": [
+            "infection",
+            "acute",
+            "emergency",
+            "isolated_mma",
+            "pa",
+            "age_band:infant",
+            "age_band:child"
+          ],
+          "content": "普通上感、发热、胃肠炎均可触发 MMA/PA 代谢失代偿。家庭侧：尽早联系代谢团队并按既定「生病日」方案执行（常包括额外能量摄入、更频监测、何时抽血/何时入院）；不要因食欲差而长时间零能量摄入。需升级就医的信号：持续呕吐、无法口服、呼吸深快、嗜睡加重、抽搐或主管医生定义的「红区」指标。抗生素等用药需告知代谢/儿科团队，避免自行使用高蛋白「增强免疫」偏方。管理原则参见 JIMD 2021 sick-day 章节；GeneReviews 急性处理概述。本摘要不给具体输液或药物剂量。"
+        },
+        {
+          "chunk_index": 15,
+          "title": "禁食与拒食期间的家庭指导",
+          "tags": [
+            "fasting",
+            "nutrition",
+            "acute",
+            "isolated_mma",
+            "pa",
+            "diet",
+            "age_band:infant",
+            "age_band:child"
+          ],
+          "content": "MMA/PA 患儿长时间空腹会显著增加分解代谢与失代偿风险，「先饿着等好了再吃」并不安全。轻度拒食时可优先在代谢/营养团队指导下使用医学配方、葡萄糖聚合物或既定应急能量方案维持摄入；无法保证 oral 摄入时应尽快联系专科，评估是否需静脉能量支持。手术、麻醉前禁食须由代谢团队与麻醉科共同制定方案，不可照搬普通儿童长时间禁食流程。与感染叠加时 urgency 更高。参考 JIMD 2021 代谢稳定与 sick-day 管理；GeneReviews 营养与急性代谢失代偿章节。公共知识不提供个体化 ml/kcal 处方。"
+        }
+      ]
     },
     {
-      "chunk_index": 1,
-      "title": "丙酸血症（PA）是什么",
-      "tags": ["pa", "overview", "gene:PCCA", "gene:PCCB"],
-      "content": "丙酸血症（propionic acidemia, PA）多与 PCCA/PCCB 相关的丙酰辅酶A羧化酶缺陷有关，可出现高氨、代谢性酸中毒、喂养困难与发育问题。管理框架与 MMA 有重叠但仍有差异，尤其是并发症谱与长期随访重点。权威综述入口：GeneReviews Propionic Acidemia（NBK92946）。回答需标明 PA，避免直接套用孤立型 MMA 结论。"
+      "slug": "isolated-mma-genereviews-2022",
+      "title": "GeneReviews：孤立型甲基丙二酸血症摘要",
+      "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK1231/",
+      "source_label": "GeneReviews: Isolated Methylmalonic Acidemia",
+      "source_kind": "official_reference",
+      "source_date": "2022-09-08",
+      "version_label": "GeneReviews update 2022-09-08",
+      "review_status": "curated",
+      "chunks": [
+        {
+          "chunk_index": 0,
+          "section_label": "Definition and scope",
+          "title": "孤立型 MMA 的定义边界",
+          "tags": ["isolated_mma", "overview", "differential"],
+          "content": "GeneReviews 将孤立型甲基丙二酸血症用于描述血液和尿液甲基丙二酸升高、但不以高同型半胱氨酸或同型半胱氨酸尿症为特征的一组遗传代谢病。回答时必须先区分孤立型 MMA 与伴同型半胱氨酸异常的钴胺素代谢障碍；单凭一个代谢物或一个症状不能完成分型。本文档是教育摘要，不替代临床诊断。"
+        },
+        {
+          "chunk_index": 1,
+          "section_label": "Phenotypes and genes",
+          "title": "孤立型 MMA 的亚型和相关基因",
+          "tags": [
+            "isolated_mma",
+            "gene:MMUT",
+            "gene:MMAA",
+            "gene:MMAB",
+            "gene:MMADHC",
+            "gene:MCEE"
+          ],
+          "content": "孤立型 MMA 可涉及 MMUT 变位酶缺陷、腺苷钴胺素辅因子合成或转运相关缺陷，以及 MCEE 相关缺陷。临床表现、严重程度和对维生素 B12 的反应性会随酶学亚型和基因而变。公共知识只能用于建立提问和解释框架，不能把基因标签当作某位患者已经确认的诊断。"
+        },
+        {
+          "chunk_index": 2,
+          "section_label": "Newborn screening",
+          "title": "C3 新生儿筛查阳性不等于确诊",
+          "tags": ["isolated_mma", "pa", "nbs", "C3", "differential"],
+          "content": "新生儿筛查通常关注丙酰肉碱 C3。C3 升高是需要复查和进一步鉴别的筛查信号，不是孤立型 MMA 或 PA 的单独确诊依据。后续应由代谢专科结合尿有机酸、血液酰基肉碱、氨基酸、同型半胱氨酸及必要的分子或酶学检查判断；家庭不应仅凭筛查结果自行确定病名。"
+        },
+        {
+          "chunk_index": 3,
+          "section_label": "Acute decompensation",
+          "title": "孤立型 MMA 的急性失代偿风险",
+          "tags": ["isolated_mma", "acute", "emergency", "infection", "fasting"],
+          "content": "感染、压力、呕吐、拒食或长时间禁食可能诱发代谢失代偿。持续嗜睡、反复呕吐、呼吸异常、意识改变或抽搐等情况不能只按普通胃肠炎观察，应立即联系代谢团队并按既定生病日和急救方案处理；该知识库不提供家庭自行执行的输液或药物剂量。"
+        },
+        {
+          "chunk_index": 4,
+          "section_label": "Agents and circumstances to avoid",
+          "title": "孤立型 MMA 的一般风险规避原则",
+          "tags": ["isolated_mma", "fasting", "diet", "nutrition", "renal"],
+          "content": "GeneReviews 将禁食、应激和未经专科指导增加膳食蛋白列为需要避免或谨慎管理的情境，也提示应关注肾毒性药物或其他会增加风险的因素。具体饮食、药物和生病日方案必须以患儿自己的代谢医生与营养师书面方案为准，不能由公共知识切片替代。"
+        },
+        {
+          "chunk_index": 5,
+          "section_label": "Initial evaluation and surveillance",
+          "title": "孤立型 MMA 的初始评估和随访框架",
+          "tags": ["isolated_mma", "monitoring", "labs", "growth", "renal", "neuro"],
+          "content": "确诊或高度怀疑后，通常需要遗传代谢专科和代谢营养团队共同评估，并建立急性处理说明、营养记录和随访计划。随访范围可涉及代谢实验室指标、肾功能、营养与生长，以及神经发育等亚型相关风险；频率和目标区间应由主管团队按年龄、亚型和稳定程度制定。"
+        }
+      ]
     },
     {
-      "chunk_index": 2,
-      "title": "钴胺素相关障碍与孤立型 MMA 的区分",
-      "tags": ["cobalamin_disorder", "isolated_mma", "differential", "homocysteine"],
-      "content": "细胞内钴胺素代谢缺陷（如 cblA/B/C 等）可表现为甲基丙二酸升高，但部分亚型同时伴同型半胱氨酸异常，治疗与随访叙事不同于经典 mut 型孤立型 MMA。家庭教育中应先问清：是否做过基因分型、同型半胱氨酸是否升高、是否被判定为 B12 反应型。不确定时写明「取决于亚型」，不要默认同一套饮食或用药表述。"
+      "slug": "pa-genereviews-2024",
+      "title": "GeneReviews：丙酸血症摘要",
+      "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK92946/",
+      "source_label": "GeneReviews: Propionic Acidemia",
+      "source_kind": "official_reference",
+      "source_date": "2024-09-26",
+      "version_label": "GeneReviews update 2024-09-26",
+      "review_status": "curated",
+      "chunks": [
+        {
+          "chunk_index": 0,
+          "section_label": "Clinical spectrum",
+          "title": "PA 的临床谱和相关基因",
+          "tags": ["pa", "overview", "gene:PCCA", "gene:PCCB", "age_band:neonate"],
+          "content": "丙酸血症的临床谱可以从新生儿起病到晚发型。PA 与丙酰辅酶 A 羧化酶缺陷相关，常见相关基因为 PCCA 和 PCCB。新生儿期可能表现为喂养困难、警觉性下降和进行性脑病；但年龄和症状不能替代分子或酶学确认。"
+        },
+        {
+          "chunk_index": 1,
+          "section_label": "Diagnosis",
+          "title": "PA 的诊断不能只看单项代谢物",
+          "tags": ["pa", "diagnosis", "labs", "C3", "differential"],
+          "content": "PA 的评估可涉及 C3、尿有机酸、血浆氨基酸等结果，但单项代谢物升高并不完全特异。GeneReviews 将 PCCA 或 PCCB 的双等位基因致病或可能致病变异，或相应的丙酰辅酶 A 羧化酶活性显著降低，作为建立诊断的重要依据。变异意义不确定或只有单个杂合变异时，不能直接当成确诊。"
+        },
+        {
+          "chunk_index": 2,
+          "section_label": "Acute decompensation",
+          "title": "PA 急性失代偿的识别边界",
+          "tags": ["pa", "acute", "emergency", "hyperammonemia", "acidosis"],
+          "content": "PA 急性失代偿可伴高阴离子间隙代谢性酸中毒、高乳酸、血氨升高、酮体升高或血糖偏低等异常。临床上若出现喂养明显下降、嗜睡加重、持续呕吐、呼吸异常、抽搐或意识障碍，应按代谢急症处理并联系专科或急诊，而不是等待下一次常规复查。"
+        },
+        {
+          "chunk_index": 3,
+          "section_label": "Routine daily treatment",
+          "title": "PA 的营养管理只能讲原则",
+          "tags": ["pa", "diet", "nutrition", "growth"],
+          "content": "PA 的日常营养管理目标是减少丙酰基底物负荷，同时维持安全的蛋白质合成、能量供应和生长，常需由有经验的代谢医生和营养师制定医学食品与天然蛋白安排。蛋白克数、配方比例和应急能量不能由公共知识库替患者开具。"
+        },
+        {
+          "chunk_index": 4,
+          "section_label": "Long-term follow-up",
+          "title": "PA 的长期随访需要多系统视角",
+          "tags": ["pa", "monitoring", "labs", "cardiac", "renal", "neuro", "growth"],
+          "content": "PA 的长期管理需要结合代谢稳定性、营养和生长，以及疾病相关的神经、心脏、肾脏等风险进行随访。具体检查项目和频率由主管团队根据年龄、既往失代偿、实验室趋势和临床表现确定；单次异常不能脱离患者基线直接下结论。"
+        }
+      ]
     },
     {
-      "chunk_index": 3,
-      "title": "常见相关基因标签",
-      "tags": ["gene:MMUT", "gene:MMAA", "gene:MMAB", "gene:PCCA", "gene:PCCB", "overview"],
-      "content": "常见标签：MMUT（mut0/mut−）多对应孤立型 MMA；MMAA/MMAB 等与 cblA/cblB 相关；PCCA/PCCB 对应 PA。基因标签用于检索与回答边界，不等于已确认患者诊断。引用基因结论时注明来源与是否为个体检测结果；公共知识库不存放具体患者报告。"
-    },
-    {
-      "chunk_index": 4,
-      "title": "C3 升高与鉴别要点",
-      "tags": ["nbs", "C3", "differential", "isolated_mma", "pa", "cobalamin_disorder"],
-      "content": "新生儿筛查中丙酰肉碱（C3）升高提示有机酸代谢异常可能，鉴别方向包括 PA、MMA 及部分钴胺素相关障碍。后续常需血氨、血气、氨基酸/酰基肉碱谱、尿有机酸，并视情况完善同型半胱氨酸与基因检测。C3 升高本身不是确诊；解释筛查阳性时应建议尽快联系代谢专科，避免家庭自行解读为「一定是某病」。"
-    },
-    {
-      "chunk_index": 5,
-      "title": "急性失代偿：家庭识别与就医升级",
-      "tags": ["acute", "emergency", "isolated_mma", "pa", "age_band:infant", "age_band:child"],
-      "content": "发热、呕吐、拒食、嗜睡、呼吸深快或精神明显变差时，有机酸血症患儿有急性失代偿风险。家庭侧原则：不要长时间禁食；按代谢团队既定应急方案联系医院；出现意识改变、抽搐、难以纠正的呕吐应急诊。本摘要不给剂量或具体输液处方。管理框架可参考 JIMD 2021 MMA/PA 诊断与管理指南修订版，具体以主管医生方案为准。"
-    },
-    {
-      "chunk_index": 6,
-      "title": "日常饮食原则（教育向）",
-      "tags": ["diet", "nutrition", "isolated_mma", "pa"],
-      "content": "长期管理常涉及天然蛋白控制、医学配方/特殊医学食品，以及患病或食欲差时的应急能量支持。目标是在专科营养指导下维持生长并降低代谢压力，而不是家庭自行大幅加严限蛋白。改饮食、停配方或添加保健品前应联系代谢/营养团队。公共知识只讲原则，不开个体化克数处方。"
-    },
-    {
-      "chunk_index": 7,
-      "title": "常用监测指标（教育向）",
-      "tags": ["labs", "monitoring", "isolated_mma", "pa", "growth"],
-      "content": "随访中常见关注：血氨、血气/阴离子间隙、酰基肉碱与有机酸趋势、肾功能、生长发育，以及亚型相关的并发症筛查。数值解读必须结合患儿基线与主管医生目标区间；单次波动不等于失代偿。公共知识库不保存具体患者化验时间线。"
-    },
-    {
-      "chunk_index": 8,
-      "title": "权威来源指针：GeneReviews 与 JIMD 2021",
-      "tags": ["sources", "genereviews", "jimd", "overview"],
-      "content": "优先引用并引导查阅：1) GeneReviews Isolated Methylmalonic Acidemia https://www.ncbi.nlm.nih.gov/books/NBK1231/ ；2) GeneReviews Propionic Acidemia https://www.ncbi.nlm.nih.gov/books/NBK92946/ ；3) Forny et al., JIMD 2021《Guidelines for the diagnosis and management of methylmalonic acidaemia and propionic acidaemia: First revision》。回答应带来源链接，并说明本库条目为教育摘要而非指南全文。"
-    },
-    {
-      "chunk_index": 9,
-      "title": "生长随访与代谢病叠加",
-      "tags": ["growth", "monitoring", "isolated_mma", "pa", "age_band:infant", "age_band:child"],
-      "content": "MMA/PA 儿童需常规追踪身长/身高、体重与营养是否跟上限蛋白/配方方案。生长偏离可能来自能量不足、感染后消耗、慢性并发症或多因素叠加。教育回答可结合公开生长标准（如 WHO）做对照解读，但疾病特异性目标仍以代谢团队为准；急性症状时优先就医而非只谈百分位。"
-    },
-    {
-      "chunk_index": 10,
-      "title": "B12 反应型与非反应型 MMA 的区分",
-      "tags": ["cobalamin_disorder", "isolated_mma", "b12_responsive", "differential", "gene:MMAA", "gene:MMAB"],
-      "content": "部分 MMA 亚型（如 cblA/cblB 等，常与 MMAA/MMAB 相关）对羟钴胺或氰钴胺补充有代谢改善，称为 B12 反应型；经典 mut0 型等多为非反应型，长期管理重点在天然蛋白控制与应急方案，而非指望 B12 单药纠正。家庭教育应先确认基因分型与同型半胱氨酸结果，再谈「是否需要长期 B12」——不可把全部 MMA 都描述为同一种 B12 叙事。综述入口：GeneReviews Isolated Methylmalonic Acidemia（NBK1231）钴胺素缺陷章节；JIMD 2021 修订版对亚型分层管理有说明。教育向，非个体用药处方。"
-    },
-    {
-      "chunk_index": 11,
-      "title": "肾脏并发症概述（MMA/PA）",
-      "tags": ["renal", "complications", "isolated_mma", "monitoring", "age_band:child", "age_band:adolescent"],
-      "content": "MMA 患儿长期可见肾小管间质病变、慢性肾病乃至终末期肾病的风险，部分与甲基丙二酸蓄积及反复失代偿有关；PA 亦需关注肾功能与电解质。家庭教育重点：按代谢团队节奏复查尿常规、肾功能、血压与影像学安排，不要等出现明显水肿或尿量异常才首次评估。早期发现不等于立刻透析，而是与专科共同调整蛋白/能量与并发症筛查。参考：GeneReviews NBK1231 并发症章节；JIMD 2021 长期随访建议。本条目为风险教育，不替代个体肾科评估。"
-    },
-    {
-      "chunk_index": 12,
-      "title": "神经系统并发症概述（MMA/PA）",
-      "tags": ["neuro", "complications", "isolated_mma", "pa", "development", "age_band:infant", "age_band:child"],
-      "content": "MMA/PA 可伴发育迟缓、运动障碍、基底节信号异常、癫痫或认知受累，急性期亦可出现嗜睡、肌张力改变。解释时应区分：感染/代谢失代偿相关的可逆变化 vs 慢性神经损伤；二者处理 urgency 不同。家庭若见新发抽搐、持续嗜睡、步态突变或语言明显倒退，应联系代谢/神经专科或急诊，而非仅当作「慢慢会好」。神经影像与发育评估由主管团队安排。参考：GeneReviews MMA/PA 神经表现；JIMD 2021 神经发育随访框架。公共知识不存放个体 MRI/EEG 报告。"
-    },
-    {
-      "chunk_index": 13,
-      "title": "随访监测细节：频率与解读原则",
-      "tags": ["labs", "monitoring", "isolated_mma", "pa", "growth", "renal", "neuro"],
-      "content": "稳定期常见监测组合：血氨、血气/阴离子间隙、酰基肉碱与尿有机酸趋势、肝肾功能、血常规、营养与生长参数；亚型相关可加同型半胱氨酸、维生素 B12 水平或专项并发症筛查。频率由代谢团队按年龄与稳定性个体化（婴儿期通常更密，稳定儿童可适度延长间隔）。解读原则：与「自家基线」和主管目标区间比，而不是照搬健康儿童参考范围；单次轻度波动需结合是否感染、拒食或呕吐。计划外化验异常应反馈给代谢专科，家庭不宜自行停药或大幅改蛋白。框架见 JIMD 2021；GeneReviews 随访章节。不开具体复查日历。"
-    },
-    {
-      "chunk_index": 14,
-      "title": "感染期间的家庭指导",
-      "tags": ["infection", "acute", "emergency", "isolated_mma", "pa", "age_band:infant", "age_band:child"],
-      "content": "普通上感、发热、胃肠炎均可触发 MMA/PA 代谢失代偿。家庭侧：尽早联系代谢团队并按既定「生病日」方案执行（常包括额外能量摄入、更频监测、何时抽血/何时入院）；不要因食欲差而长时间零能量摄入。需升级就医的信号：持续呕吐、无法口服、呼吸深快、嗜睡加重、抽搐或主管医生定义的「红区」指标。抗生素等用药需告知代谢/儿科团队，避免自行使用高蛋白「增强免疫」偏方。管理原则参见 JIMD 2021 sick-day 章节；GeneReviews 急性处理概述。本摘要不给具体输液或药物剂量。"
-    },
-    {
-      "chunk_index": 15,
-      "title": "禁食与拒食期间的家庭指导",
-      "tags": ["fasting", "nutrition", "acute", "isolated_mma", "pa", "diet", "age_band:infant", "age_band:child"],
-      "content": "MMA/PA 患儿长时间空腹会显著增加分解代谢与失代偿风险，「先饿着等好了再吃」并不安全。轻度拒食时可优先在代谢/营养团队指导下使用医学配方、葡萄糖聚合物或既定应急能量方案维持摄入；无法保证 oral 摄入时应尽快联系专科，评估是否需静脉能量支持。手术、麻醉前禁食须由代谢团队与麻醉科共同制定方案，不可照搬普通儿童长时间禁食流程。与感染叠加时 urgency 更高。参考 JIMD 2021 代谢稳定与 sick-day 管理；GeneReviews 营养与急性代谢失代偿章节。公共知识不提供个体化 ml/kcal 处方。"
+      "slug": "mma-pa-guideline-2021",
+      "title": "MMA/PA 诊断与管理指南 2021 摘要",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/33595124/",
+      "source_label": "Forny et al., JIMD 2021, DOI 10.1002/jimd.12370",
+      "source_kind": "clinical_guideline",
+      "source_date": "2021",
+      "version_label": "JIMD 2021;44:566-592",
+      "review_status": "curated",
+      "chunks": [
+        {
+          "chunk_index": 0,
+          "section_label": "Biochemical diagnosis",
+          "title": "MMA 与 PA 的生化鉴别方向",
+          "tags": ["isolated_mma", "pa", "diagnosis", "labs", "differential"],
+          "content": "2021 年 MMA/PA 指南强调，疑似有机酸血症时应结合尿有机酸和其他基础实验室检查。甲基丙二酸升高支持 MMA 方向，而 PA 的典型代谢模式不应直接套用孤立型 MMA 的结论；最终判断仍需结合完整临床、生化和遗传或酶学证据。"
+        },
+        {
+          "chunk_index": 1,
+          "section_label": "Emergency management",
+          "title": "急性期回答必须先处理风险",
+          "tags": ["isolated_mma", "pa", "acute", "emergency", "hyperammonemia"],
+          "content": "指南型资料适合帮助 Agent 识别急性风险和提醒就医，但不能把指南摘要变成家庭处方。出现无法进食、持续呕吐、精神状态改变、抽搐、呼吸异常或疑似高氨和酸中毒时，回答应优先建议联系代谢团队或急诊，并询问是否已有主管团队的生病日方案。"
+        },
+        {
+          "chunk_index": 2,
+          "section_label": "Nutrition and catabolism",
+          "title": "MMA/PA 饮食回答的安全边界",
+          "tags": ["isolated_mma", "pa", "diet", "nutrition", "fasting"],
+          "content": "MMA/PA 的饮食管理要同时考虑减少相关底物负荷、维持足够能量和避免分解代谢。家庭提问涉及蛋白克数、医学配方替换、发热期间能量或停药时，Agent 只能解释原则、要求核对现有书面方案并联系代谢营养团队，不能根据公共资料自行计算个体剂量。"
+        },
+        {
+          "chunk_index": 3,
+          "section_label": "Surveillance",
+          "title": "随访指标应结合趋势和患者基线",
+          "tags": ["isolated_mma", "pa", "monitoring", "labs", "growth", "renal", "neuro"],
+          "content": "指南和权威综述中的监测项目需要结合患者年龄、亚型、近期感染或拒食、肾功能和既往失代偿进行解释。Agent 应优先使用患者 Case 中已确认的时间线与主管目标；只有单次化验或脱离上下文的参考范围时，应明确说明证据不足。"
+        },
+        {
+          "chunk_index": 4,
+          "section_label": "Evidence and limitations",
+          "title": "知识库摘要的证据和限制",
+          "tags": ["sources", "guideline", "evidence", "safety"],
+          "content": "本条目是对 JIMD 2021 指南的原创教育摘要，不是指南全文，也不是个体医疗建议。回答应同时给出来源链接、适用疾病标签和不确定性；当问题超出公共摘要、涉及最新研究或个体处方时，应转向主管医生或经允许的只读文献检索，而不是补写没有证据的结论。"
+        }
+      ]
     }
   ]
 }

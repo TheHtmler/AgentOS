@@ -92,16 +92,19 @@ async def search_knowledge_chunks(
         select(KnowledgeChunk, KnowledgeDocument, KnowledgeBase)
         .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
         .join(KnowledgeBase, KnowledgeDocument.knowledge_base_id == KnowledgeBase.id)
-        .where(KnowledgeBase.status == "active")
+        .where(
+            KnowledgeBase.status == "active",
+            KnowledgeDocument.review_status != "withdrawn",
+        )
     )
     if knowledge_base_slug:
         stmt = stmt.where(KnowledgeBase.slug == knowledge_base_slug)
     if disease_tags:
         stmt = stmt.where(KnowledgeChunk.tags.overlap(disease_tags))
 
-    # When embeddings can rescue synonym queries, widen beyond ILIKE hits.
+    # Embeddings or explicit tags can rescue synonym queries beyond ILIKE hits.
     use_vector = query_embedding is not None
-    if tokens and not use_vector:
+    if tokens and not use_vector and not disease_tags:
         like_clauses: list[ColumnElement[bool]] = []
         for token in tokens:
             pattern = f"%{token}%"
@@ -119,9 +122,7 @@ async def search_knowledge_chunks(
     scored: list[tuple[float, dict[str, Any]]] = []
     for chunk, document, base in rows:
         tags = [str(item) for item in cast(list[Any], chunk.tags or [])]
-        chunk_embedding = (
-            list(cast(list[float], chunk.embedding)) if chunk.embedding else None
-        )
+        chunk_embedding = list(cast(list[float], chunk.embedding)) if chunk.embedding else None
         score = score_knowledge_hit(
             content=chunk.content,
             title=chunk.title,
@@ -145,7 +146,11 @@ async def search_knowledge_chunks(
                     "document_title": document.title,
                     "source_url": document.source_url,
                     "source_label": document.source_label,
+                    "source_kind": document.source_kind,
+                    "source_date": document.source_date,
                     "version_label": document.version_label,
+                    "review_status": document.review_status,
+                    "section_label": chunk.section_label,
                     "knowledge_base": base.slug,
                     "score": round(score, 4),
                 },

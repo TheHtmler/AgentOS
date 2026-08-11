@@ -136,6 +136,9 @@ For MMA/PA / C3 NBS education, acute decompensation family guidance, diet/monito
 education, call knowledge_search first (optional disease_tags: isolated_mma, pa,
 cobalamin_disorder, gene:…). Cite source_url values. Fall back to web_search only when
 the curated base is insufficient or the user needs a newer external page.
+When citing a curated hit, include its source_label and version_label when available.
+Treat curated summaries as educational evidence, not individualized prescriptions; if
+the retrieved evidence does not answer the question, say so instead of filling the gap.
 """
 
 MEMORY_HEADER = "## Known user facts (for this agent only; use when relevant)"
