@@ -1,0 +1,101 @@
+{
+  "name": "foundation-util-v1",
+  "description": "Deterministic regression set for platform util tools (time_diff + calculate).",
+  "cases": [
+    {
+      "id": "calc-basic",
+      "tool": "calculate",
+      "input": { "expression": "2+2" },
+      "expect": { "ok": true, "result": 4 }
+    },
+    {
+      "id": "calc-parens",
+      "tool": "calculate",
+      "input": { "expression": "(2 + 3) * 4" },
+      "expect": { "ok": true, "result": 20 }
+    },
+    {
+      "id": "calc-div-zero",
+      "tool": "calculate",
+      "input": { "expression": "1 / 0" },
+      "expect": { "ok": false, "error_code": "div_zero" }
+    },
+    {
+      "id": "calc-forbidden-attr",
+      "tool": "calculate",
+      "input": { "expression": "(1).bit_length()" },
+      "expect": { "ok": false, "error_code": "forbidden" }
+    },
+    {
+      "id": "calc-too-long",
+      "tool": "calculate",
+      "input": { "expression": "1++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++1" },
+      "expect": { "ok": false, "error_code": "too_long" }
+    },
+    {
+      "id": "td-hours",
+      "tool": "time_diff",
+      "input": {
+        "start": "2026-08-12T08:00:00",
+        "end": "2026-08-12T11:30:00",
+        "timezone": "Asia/Shanghai",
+        "units": ["hours", "minutes"]
+      },
+      "expect": { "ok": true, "delta.hours": 3.5, "delta.minutes": 210.0 }
+    },
+    {
+      "id": "td-date-days",
+      "tool": "time_diff",
+      "input": {
+        "start": "2026-08-01",
+        "end": "2026-08-12",
+        "timezone": "Asia/Shanghai",
+        "units": ["days"]
+      },
+      "expect": { "ok": true, "delta.days": 11.0 }
+    },
+    {
+      "id": "td-default-end",
+      "tool": "time_diff",
+      "input": {
+        "start": "2026-08-10",
+        "timezone": "Asia/Shanghai",
+        "units": ["days"]
+      },
+      "now": "2026-08-12T00:00:00+08:00",
+      "expect": { "ok": true, "delta.days": 2.0 }
+    },
+    {
+      "id": "td-months",
+      "tool": "time_diff",
+      "input": {
+        "start": "2024-01-31",
+        "end": "2024-03-01",
+        "timezone": "Asia/Shanghai",
+        "units": ["months", "years"]
+      },
+      "expect": { "ok": true, "delta.months": 1, "delta.years": 0 }
+    },
+    {
+      "id": "td-bad-tz",
+      "tool": "time_diff",
+      "input": {
+        "start": "2026-01-01",
+        "end": "2026-01-02",
+        "timezone": "Not/AZone"
+      },
+      "expect": { "ok": false, "error_code": "bad_timezone" }
+    },
+    {
+      "id": "td-negative",
+      "tool": "time_diff",
+      "input": {
+        "start": "2026-08-12",
+        "end": "2026-08-10",
+        "timezone": "Asia/Shanghai",
+        "units": ["days"]
+      },
+      "expect": { "ok": true, "delta.days": -2.0 }
+    }
+  ]
+}
