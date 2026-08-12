@@ -130,6 +130,13 @@ Explain with the tool source_url; if a required Case slot is missing, call case_
 instead of a long text ask.
 """
 
+UTIL_INSTRUCTIONS = """\
+## Capability: time_diff / calculate
+For exact time spans, age-in-days, or duration math, call time_diff (omit end to use the
+Runtime Context Pack "now"). For precise arithmetic, call calculate — do not mental-math
+totals, rates, or multi-step formulas when a tool result is available.
+"""
+
 KNOWLEDGE_INSTRUCTIONS = """\
 ## Capability: knowledge_search
 For MMA/PA / C3 NBS education, acute decompensation family guidance, diet/monitoring
@@ -209,6 +216,8 @@ def build_instructions(
         sections.append(ARTIFACT_INSTRUCTIONS.strip())
     if "growth_assess" in mounted_names:
         sections.append(GROWTH_INSTRUCTIONS.strip())
+    if "time_diff" in mounted_names or "calculate" in mounted_names:
+        sections.append(UTIL_INSTRUCTIONS.strip())
     if "knowledge_search" in mounted_names:
         sections.append(KNOWLEDGE_INSTRUCTIONS.strip())
     if "case_context_read" in mounted_names:
@@ -250,6 +259,7 @@ def create_agent(
     fetch_router: FetchRouter | None = None,
     fetch_enabled: bool | None = None,
     growth_enabled: bool | None = None,
+    util_enabled: bool | None = None,
     knowledge_enabled: bool | None = None,
     system_prompt_overlay: str | None = None,
     memory_block: str | None = None,
@@ -269,6 +279,8 @@ def create_agent(
         updates["fetch_url_enabled"] = fetch_enabled
     if growth_enabled is not None:
         updates["growth_assess_enabled"] = growth_enabled
+    if util_enabled is not None:
+        updates["util_tools_enabled"] = util_enabled
     if knowledge_enabled is not None:
         updates["knowledge_search_enabled"] = knowledge_enabled
     if updates:

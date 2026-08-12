@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     read_artifact_max_chars: int = 1_500
     # Built-in WHO growth assessment (anthro); no external router required.
     growth_assess_enabled: bool = True
+    # Platform util tools: time_diff + calculate (deterministic; no external API).
+    util_tools_enabled: bool = True
     # Built-in keyword search over curated knowledge_chunks.
     knowledge_search_enabled: bool = True
     # Read confirmed Case facts for case-enabled Agents (mounted per-run when Case bound).

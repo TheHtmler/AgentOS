@@ -19,6 +19,7 @@ from agent_api.tools.growth.tool import growth_assess
 from agent_api.tools.knowledge.tool import knowledge_search
 from agent_api.tools.policy import PolicyAction, evaluate
 from agent_api.tools.search.tool import AgentDeps, web_search
+from agent_api.tools.util.tool import calculate, time_diff
 
 RiskLevel = Literal["read", "write", "exec", "external"]
 
@@ -27,6 +28,7 @@ class ToolDomain(StrEnum):
     SEARCH = "search"
     FETCH = "fetch"
     GROWTH = "growth"
+    UTIL = "util"
     KNOWLEDGE = "knowledge"
     CASE = "case"
     ARTIFACT = "artifact"
@@ -106,6 +108,22 @@ _BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         handler=growth_assess,
     ),
     ToolSpec(
+        name="time_diff",
+        domain=ToolDomain.UTIL,
+        risk="read",
+        default_action=PolicyAction.ALLOW,
+        description="Deterministic signed time delta (days/hours/minutes/months/years)",
+        handler=time_diff,
+    ),
+    ToolSpec(
+        name="calculate",
+        domain=ToolDomain.UTIL,
+        risk="read",
+        default_action=PolicyAction.ALLOW,
+        description="Safe whitelist arithmetic expression evaluator",
+        handler=calculate,
+    ),
+    ToolSpec(
         name="knowledge_search",
         domain=ToolDomain.KNOWLEDGE,
         risk="read",
@@ -170,6 +188,8 @@ def is_tool_enabled(spec: ToolSpec, settings: Settings | None = None) -> bool:
         return cfg.artifact_enabled
     if spec.domain == ToolDomain.GROWTH:
         return cfg.growth_assess_enabled
+    if spec.domain == ToolDomain.UTIL:
+        return cfg.util_tools_enabled
     if spec.domain == ToolDomain.KNOWLEDGE:
         return cfg.knowledge_search_enabled
     if spec.domain == ToolDomain.CASE:
