@@ -37,7 +37,12 @@ async def run_calculate(deps: AgentDeps, *, expression: str) -> str:
             if payload.get("ok")
             else f"error={payload.get('error_code')}"
         )
-        await _persist_tool_result(deps.run_id, "calculate", ok=bool(payload.get("ok")), summary=summary[:500])
+        await _persist_tool_result(
+            deps.run_id,
+            "calculate",
+            ok=bool(payload.get("ok")),
+            summary=summary[:500],
+        )
 
     return json.dumps(payload, ensure_ascii=False)
 
@@ -84,7 +89,12 @@ async def run_time_diff(
             if payload.get("ok")
             else f"error={payload.get('error_code')}"
         )
-        await _persist_tool_result(deps.run_id, "time_diff", ok=bool(payload.get("ok")), summary=summary[:500])
+        await _persist_tool_result(
+            deps.run_id,
+            "time_diff",
+            ok=bool(payload.get("ok")),
+            summary=summary[:500],
+        )
 
     return json.dumps(payload, ensure_ascii=False)
 

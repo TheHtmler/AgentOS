@@ -7,8 +7,7 @@ import math
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any
-
+from typing import Any, cast
 
 Handler = Callable[..., dict[str, object]]
 
@@ -16,7 +15,10 @@ Handler = Callable[..., dict[str, object]]
 def load_suite(path: Path) -> dict[str, Any]:
     """Load a suite JSON document from disk."""
 
-    return json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise TypeError(f"suite root must be an object: {path}")
+    return cast(dict[str, Any], payload)
 
 
 def default_handlers() -> dict[str, Handler]:
@@ -53,14 +55,15 @@ def run_suite(
 
     registry = handlers if handlers is not None else default_handlers()
     failures: list[str] = []
-    cases = suite.get("cases")
-    if not isinstance(cases, list):
+    cases_raw = suite.get("cases")
+    if not isinstance(cases_raw, list):
         return ["suite: missing cases list"]
 
-    for case in cases:
-        if not isinstance(case, dict):
+    for case_item in cast(list[object], cases_raw):
+        if not isinstance(case_item, dict):
             failures.append("case: not an object")
             continue
+        case = cast(dict[str, Any], case_item)
         case_id = str(case.get("id", "<missing-id>"))
         tool = case.get("tool")
         if not isinstance(tool, str) or tool not in registry:
@@ -70,7 +73,9 @@ def run_suite(
         if not isinstance(raw_input, dict):
             failures.append(f"{case_id}: input must be an object")
             continue
-        kwargs = dict(raw_input)
+        kwargs: dict[str, Any] = {
+            str(key): value for key, value in cast(dict[object, object], raw_input).items()
+        }
         if "now" in case:
             kwargs["now"] = case["now"]
         try:
@@ -78,10 +83,11 @@ def run_suite(
         except Exception as exc:  # noqa: BLE001 — suite should never crash the runner
             failures.append(f"{case_id}: handler raised {type(exc).__name__}: {exc}")
             continue
-        expect = case.get("expect")
-        if not isinstance(expect, dict):
+        expect_raw = case.get("expect")
+        if not isinstance(expect_raw, dict):
             failures.append(f"{case_id}: expect must be an object")
             continue
+        expect = cast(dict[str, Any], expect_raw)
         for key, expected in expect.items():
             got = _dig(actual, str(key))
             if not _values_match(got, expected):
@@ -94,9 +100,12 @@ def run_suite(
 def _dig(payload: object, path: str) -> object:
     current: object = payload
     for part in path.split("."):
-        if not isinstance(current, dict) or part not in current:
+        if not isinstance(current, dict):
             return None
-        current = current[part]
+        mapping = cast(dict[str, object], current)
+        if part not in mapping:
+            return None
+        current = mapping[part]
     return current
 
 

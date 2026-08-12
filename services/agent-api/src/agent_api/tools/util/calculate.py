@@ -3,32 +3,72 @@
 from __future__ import annotations
 
 import ast
-import operator
-from typing import Any
-
+from collections.abc import Callable
+from typing import cast
 
 MAX_EXPRESSION_CHARS = 200
 MAX_AST_NODES = 64
 MAX_ABS_VALUE = 1e15
 
-_BIN_OPS: dict[type[ast.operator], Any] = {
-    ast.Add: operator.add,
-    ast.Sub: operator.sub,
-    ast.Mult: operator.mul,
-    ast.Div: operator.truediv,
-    ast.FloorDiv: operator.floordiv,
-    ast.Mod: operator.mod,
-    ast.Pow: operator.pow,
+BinOpFn = Callable[[int | float, int | float], int | float]
+UnaryOpFn = Callable[[int | float], int | float]
+FuncFn = Callable[..., int | float]
+
+
+def _add(a: int | float, b: int | float) -> int | float:
+    return a + b
+
+
+def _sub(a: int | float, b: int | float) -> int | float:
+    return a - b
+
+
+def _mul(a: int | float, b: int | float) -> int | float:
+    return a * b
+
+
+def _truediv(a: int | float, b: int | float) -> int | float:
+    return a / b
+
+
+def _floordiv(a: int | float, b: int | float) -> int | float:
+    return a // b
+
+
+def _mod(a: int | float, b: int | float) -> int | float:
+    return a % b
+
+
+def _pow(a: int | float, b: int | float) -> int | float:
+    return a**b
+
+
+def _pos(a: int | float) -> int | float:
+    return +a
+
+
+def _neg(a: int | float) -> int | float:
+    return -a
+
+
+_BIN_OPS: dict[type[ast.operator], BinOpFn] = {
+    ast.Add: _add,
+    ast.Sub: _sub,
+    ast.Mult: _mul,
+    ast.Div: _truediv,
+    ast.FloorDiv: _floordiv,
+    ast.Mod: _mod,
+    ast.Pow: _pow,
 }
-_UNARY_OPS: dict[type[ast.unaryop], Any] = {
-    ast.UAdd: operator.pos,
-    ast.USub: operator.neg,
+_UNARY_OPS: dict[type[ast.unaryop], UnaryOpFn] = {
+    ast.UAdd: _pos,
+    ast.USub: _neg,
 }
-_FUNCS: dict[str, Any] = {
-    "abs": abs,
-    "min": min,
-    "max": max,
-    "round": round,
+_FUNCS: dict[str, FuncFn] = {
+    "abs": cast(FuncFn, abs),
+    "min": cast(FuncFn, min),
+    "max": cast(FuncFn, max),
+    "round": cast(FuncFn, round),
 }
 
 
@@ -77,7 +117,7 @@ def compute_calculate(expression: str) -> dict[str, object]:
         return {"ok": False, "error_code": "type_error", "message": str(exc)}
 
     # bool is a subclass of int — reject before accepting ints.
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool):
         return {
             "ok": False,
             "error_code": "type_error",

@@ -32,6 +32,8 @@
 
 **MMA/PA 公共知识 P0（2026-08-12，已落地）：** `knowledge_search` 支持多来源文档、来源类型/日期/版本/审核状态、章节标签和关键词 + embedding 混合召回；已导入 4 个来源文档、32 条教育摘要，并加入 P0 检索评测集。公共知识与 Case 私有资料仍严格分离。
 
+**平台基础工具 + 评测集（2026-08-12，已落地）：** `time_diff` / `calculate`（`ToolDomain.UTIL`，`UTIL_TOOLS_ENABLED`）；薄 `eval.runner` + `foundation-util-v1` golden（无 LLM e2e）。
+
 - 建立 `AgentProfile`、`AgentVersion` 和领域知识库边界。（首个竖切已用 spec 命名 `agents` / `agent_versions` 落地配置层 Agent，非完整 `AgentProfile` 域模型。）
 - 将 `agent_id` 纳入 Thread、Run 和运行快照。
 - 建立 `PatientCase`、患者授权关系和患者私有上下文。

@@ -1,10 +1,10 @@
 # 实施进度
 
-最后更新：2026-08-12（MMA/PA 公共知识库 P0 闭环）
+最后更新：2026-08-12（平台基础工具 + 评测集）
 
 ## 当前状态
 
-前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与 MMA/PA `knowledge_search` 已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。本轮进一步将 Run、Artifact、用户记忆和多看护人基础 ACL 绑定到 Case 作用域；同一用户的不同 Case 不能互相读取资料，viewer 不能写入 Case 数据。公共知识库仍需后续补完整导入、审核工作流和版本快照。
+前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与 MMA/PA `knowledge_search` 已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。Run、Artifact、用户记忆和多看护人基础 ACL 已绑定 Case 作用域。公共知识库已有 P0 策展切片与混合检索。本轮落地平台 util 工具（`time_diff` / `calculate`）与薄评测 runner + foundation golden suite；公共知识库完整导入、审核工作流和版本快照仍属后续增量。
 
 已完成：
 
@@ -93,6 +93,8 @@
 - 知识库表：`knowledge_bases` / `knowledge_documents` / `knowledge_chunks`（基础迁移 `e9f0a1b2c3d4`，来源治理迁移 `k7l8m9n0o1p2`）；`scripts/seed_knowledge.py` 写入 MMA/PA 中文教育摘要（带亚型 tags + 来源指针）。
 - 内建 `knowledge_search`：关键词 + tags overlap + 可选 Ollama embedding 混合召回；结果返回来源、版本、审核状态和章节；`KNOWLEDGE_SEARCH_ENABLED`；垂类 Agent「遗传代谢」(`imd`) 优先使用。
 - MMA/PA P0 检索评测集：`seed/knowledge/mma_pa_eval.json`，覆盖分型、C3 筛查、急症、饮食边界、监测和证据限制。
+- 平台 util 工具：`ToolDomain.UTIL` 下 `time_diff`（可注入 now、日历月/年）与 `calculate`（白名单 AST）；`UTIL_TOOLS_ENABLED`；挂载时注入 `UTIL_INSTRUCTIONS`。
+- 薄评测框架：`agent_api.eval.runner` + `seed/util/foundation_eval.json`（`foundation-util-v1`）；pytest 覆盖 golden 与挂载/禁用；knowledge P0 暂未迁移到该 runner。
 
 ## 验证
 
@@ -121,4 +123,4 @@
 
 ## 下一步
 
-平台基础能力：通用基础工具（时间差/计算）与基础能力评测集；模型/Provider 档位。领域侧在 Case 之上挂医疗扩展，并推进公共知识库人工审核、版本快照和多看护人授权。
+平台基础能力：模型/Provider 档位；可选将 knowledge P0 迁到通用 eval runner。领域侧在 Case 之上挂医疗扩展，并推进公共知识库人工审核、版本快照和多看护人授权。

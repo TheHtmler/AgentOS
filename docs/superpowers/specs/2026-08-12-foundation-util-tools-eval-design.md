@@ -1,7 +1,8 @@
 # 平台基础工具与评测集
 
 日期：2026-08-12  
-状态：accepted  
+状态：accepted（已实现）  
+
 前置：Tool Registry / Policy、Runtime Context Pack、knowledge P0 评测（`mma_pa_eval.json` + `test_knowledge_evaluation.py`）
 
 ## 背景
