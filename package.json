@@ -9,6 +9,9 @@
     "dev:web": "pnpm --filter web dev",
     "build:web": "pnpm --filter web build",
     "lint:web": "pnpm --filter web lint",
+    "dev:ops": "pnpm --filter ops dev",
+    "build:ops": "pnpm --filter ops build",
+    "lint:ops": "pnpm --filter ops lint",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
