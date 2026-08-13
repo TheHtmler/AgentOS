@@ -39,7 +39,10 @@ export default function LoginPage() {
       <form className="panel login-panel stack" onSubmit={onSubmit}>
         <div>
           <div className="brand">AgentOS Ops</div>
-          <p className="muted">运营控制台 · 独立于用户产品登录</p>
+          <p className="muted">运营控制台（不是聊天站 agentos）</p>
+          <p className="muted" style={{ marginTop: 8 }}>
+            登录成功后顶部会出现：概览 / 知识库 / Agents
+          </p>
         </div>
         <label>
           用户名
