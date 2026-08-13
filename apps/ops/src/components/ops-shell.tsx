@@ -7,10 +7,10 @@ import { useState, type ReactNode } from "react";
 const NAV = [
   { href: "/", label: "概览", soon: false },
   { href: "/knowledge", label: "知识库", soon: false },
-  { href: "/agents", label: "Agents", soon: false },
+  { href: "/agents", label: "智能体", soon: false },
   { href: "/mcp", label: "MCP", soon: true },
-  { href: "/skills", label: "Skills", soon: true },
-  { href: "/sessions", label: "Sessions", soon: true },
+  { href: "/skills", label: "技能", soon: true },
+  { href: "/sessions", label: "会话", soon: true },
 ] as const;
 
 export function OpsShell({

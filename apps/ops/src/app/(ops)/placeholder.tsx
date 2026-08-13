@@ -7,7 +7,7 @@ export function ComingSoon({ title }: { title: string }) {
       </div>
       <section className="panel">
         <p style={{ margin: 0 }}>
-          当前第一期聚焦知识库审核与 Agent 基础管理。MCP / Skills / Sessions 将在后续迭代接入。
+          当前第一期聚焦知识库审核与智能体基础管理。MCP / 技能 / 会话将在后续迭代接入。
         </p>
       </section>
     </div>

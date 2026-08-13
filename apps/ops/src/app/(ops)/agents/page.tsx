@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { opsJson } from "@/lib/ops-fetch";
+import { AGENT_KIND_LABELS, AGENT_STATUS_LABELS, boolZh, labelOf } from "@/lib/labels";
 
 type OpsAgent = {
   id: string;
@@ -82,8 +83,8 @@ export default function AgentsPage() {
   return (
     <div className="stack">
       <div>
-        <h1 className="page-title">Agents</h1>
-        <p className="muted">启停、描述与默认 Agent（不改 version 配置）</p>
+        <h1 className="page-title">智能体</h1>
+        <p className="muted">启停、描述与默认智能体（不改版本配置）</p>
       </div>
 
       {error ? <p className="error">{error}</p> : null}
@@ -93,14 +94,15 @@ export default function AgentsPage() {
           <article key={agent.id} className="doc-card">
             <div className="doc-card__title">
               {agent.name}
-              {agent.is_default ? <span className="pill">default</span> : null}
+              {agent.is_default ? <span className="pill">默认</span> : null}
             </div>
             <div className="muted" style={{ fontSize: "0.85rem" }}>
-              {agent.slug} · {agent.kind} · {agent.status}
+              标识：{agent.slug} · {labelOf(AGENT_KIND_LABELS, agent.kind)} ·{" "}
+              {labelOf(AGENT_STATUS_LABELS, agent.status)}
             </div>
             <div className="doc-card__meta">
-              <span>memory {agent.memory_enabled == null ? "—" : String(agent.memory_enabled)}</span>
-              <span>case {agent.case_enabled == null ? "—" : String(agent.case_enabled)}</span>
+              <span>记忆 {boolZh(agent.memory_enabled)}</span>
+              <span>档案 {boolZh(agent.case_enabled)}</span>
             </div>
             <p style={{ margin: 0 }}>{agent.description || "无描述"}</p>
 

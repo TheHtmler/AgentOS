@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { opsJson } from "@/lib/ops-fetch";
+import { REVIEW_STATUS_LABELS, SOURCE_KIND_LABELS } from "@/lib/labels";
 
 type Chunk = {
   id: string;
@@ -136,7 +137,7 @@ export default function KnowledgeDetailPage() {
           ← 返回列表
         </Link>
         <h1 className="page-title">{doc?.title ?? "文档详情"}</h1>
-        <p className="muted">{doc?.slug}</p>
+        <p className="muted">标识：{doc?.slug}</p>
       </div>
 
       {error ? <p className="error">{error}</p> : null}
@@ -144,7 +145,7 @@ export default function KnowledgeDetailPage() {
       {doc ? (
         <>
           <form className="panel stack" onSubmit={(event) => void onSave(event)}>
-            <h2 className="section-title">元数据</h2>
+            <h2 className="section-title">文档信息</h2>
             <label>
               标题
               <input value={title} onChange={(e) => setTitle(e.target.value)} required />
@@ -158,17 +159,17 @@ export default function KnowledgeDetailPage() {
               <select value={sourceKind} onChange={(e) => setSourceKind(e.target.value)}>
                 {SOURCE_KINDS.map((kind) => (
                   <option key={kind} value={kind}>
-                    {kind}
+                    {SOURCE_KIND_LABELS[kind]}
                   </option>
                 ))}
               </select>
             </label>
             <label>
-              来源标签
+              来源名称
               <input value={sourceLabel} onChange={(e) => setSourceLabel(e.target.value)} />
             </label>
             <label>
-              来源 URL
+              来源链接
               <input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} />
             </label>
             <label>
@@ -180,14 +181,16 @@ export default function KnowledgeDetailPage() {
               <select value={reviewStatus} onChange={(e) => setReviewStatus(e.target.value)}>
                 {REVIEW_OPTIONS.map((option) => (
                   <option key={option} value={option}>
-                    {option}
+                    {REVIEW_STATUS_LABELS[option]}
                   </option>
                 ))}
               </select>
             </label>
             <p className="muted" style={{ margin: 0 }}>
-              reviewed_at：{doc.reviewed_at ? new Date(doc.reviewed_at).toLocaleString() : "—"} ·
-              chunks：{doc.chunk_count}
+              审核时间：
+              {doc.reviewed_at ? new Date(doc.reviewed_at).toLocaleString() : "—"}
+              {" · "}
+              切片数：{doc.chunk_count}
             </p>
             <button type="submit" disabled={saving}>
               {saving ? "保存中…" : "保存"}
@@ -195,17 +198,17 @@ export default function KnowledgeDetailPage() {
           </form>
 
           <section className="panel stack">
-            <h2 className="section-title">Chunks（只读）</h2>
+            <h2 className="section-title">内容切片（只读）</h2>
             {doc.chunks.map((chunk) => {
               const open = expanded[chunk.id] ?? false;
               return (
                 <article key={chunk.id} className="doc-card">
                   <div className="doc-card__title">
-                    #{chunk.chunk_index} {chunk.title}
+                    第 {chunk.chunk_index} 条 · {chunk.title}
                   </div>
                   <div className="doc-card__meta">
-                    <span>{chunk.section_label ?? "—"}</span>
-                    <span>{chunk.tags.join(", ") || "无 tags"}</span>
+                    <span>章节：{chunk.section_label ?? "—"}</span>
+                    <span>标签：{chunk.tags.join("、") || "无"}</span>
                   </div>
                   <button
                     type="button"
@@ -221,22 +224,20 @@ export default function KnowledgeDetailPage() {
           </section>
 
           <section className="panel stack">
-            <h2 className="section-title">快照（只读）</h2>
+            <h2 className="section-title">历史快照（只读）</h2>
             {snapshots.length === 0 ? <p className="muted">暂无快照</p> : null}
             {snapshots.map((snap) => (
               <div key={snap.id} className="snap-card">
-                <strong>{snap.version_label ?? "—"}</strong>
+                <strong>版本 {snap.version_label ?? "—"}</strong>
                 <span className="muted">{new Date(snap.created_at).toLocaleString()}</span>
-                <span>{snap.created_by}</span>
+                <span>创建者：{snap.created_by === "system" ? "系统" : snap.created_by}</span>
                 <button type="button" className="secondary" onClick={() => void openSnapshot(snap.id)}>
-                  查看 payload
+                  查看快照内容
                 </button>
               </div>
             ))}
             {snapshotDetail ? (
-              <pre className="chunk-body">
-                {JSON.stringify(snapshotDetail.payload, null, 2)}
-              </pre>
+              <pre className="chunk-body">{JSON.stringify(snapshotDetail.payload, null, 2)}</pre>
             ) : null}
           </section>
         </>

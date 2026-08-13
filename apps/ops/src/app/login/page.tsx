@@ -41,7 +41,7 @@ export default function LoginPage() {
           <div className="brand">AgentOS Ops</div>
           <p className="muted">运营控制台（不是聊天站 agentos）</p>
           <p className="muted" style={{ marginTop: 8 }}>
-            登录成功后顶部会出现：概览 / 知识库 / Agents
+            登录成功后顶部会出现：概览 / 知识库 / 智能体
           </p>
         </div>
         <label>

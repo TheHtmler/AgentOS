@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { OpsFetchError, opsJson } from "@/lib/ops-fetch";
+import { REVIEW_STATUS_LABELS, labelOf } from "@/lib/labels";
 
 type KnowledgeDocument = {
   id: string;
@@ -18,6 +19,13 @@ type KnowledgeDocument = {
 
 const REVIEW_OPTIONS = ["curated", "clinically_reviewed", "withdrawn"] as const;
 const FILTERS = ["all", ...REVIEW_OPTIONS] as const;
+
+const FILTER_LABELS: Record<(typeof FILTERS)[number], string> = {
+  all: "全部",
+  curated: REVIEW_STATUS_LABELS.curated,
+  clinically_reviewed: REVIEW_STATUS_LABELS.clinically_reviewed,
+  withdrawn: REVIEW_STATUS_LABELS.withdrawn,
+};
 
 export default function KnowledgePage() {
   const router = useRouter();
@@ -78,7 +86,7 @@ export default function KnowledgePage() {
     <div className="stack">
       <div>
         <h1 className="page-title">知识库</h1>
-        <p className="muted">mma-pa · 审核状态与文档详情</p>
+        <p className="muted">MMA/PA 公共知识 · 审核与文档详情</p>
       </div>
 
       <div className="filter-row">
@@ -89,7 +97,7 @@ export default function KnowledgePage() {
             className={`secondary ${filter === item ? "is-selected" : ""}`}
             onClick={() => setFilter(item)}
           >
-            {item}
+            {FILTER_LABELS[item]}
           </button>
         ))}
       </div>
@@ -105,12 +113,14 @@ export default function KnowledgePage() {
                 {doc.title}
               </Link>
               <div className="muted" style={{ fontSize: "0.85rem", wordBreak: "break-all" }}>
-                {doc.slug}
+                标识：{doc.slug}
               </div>
               <div className="doc-card__meta">
                 <span>版本 {doc.version_label ?? "—"}</span>
-                <span className={`status-${doc.review_status}`}>{doc.review_status}</span>
-                <span>{doc.chunk_count} 切片</span>
+                <span className={`status-${doc.review_status}`}>
+                  {labelOf(REVIEW_STATUS_LABELS, doc.review_status)}
+                </span>
+                <span>{doc.chunk_count} 条切片</span>
               </div>
               <label>
                 审核状态
@@ -121,7 +131,7 @@ export default function KnowledgePage() {
                 >
                   {REVIEW_OPTIONS.map((option) => (
                     <option key={option} value={option}>
-                      {option}
+                      {REVIEW_STATUS_LABELS[option]}
                     </option>
                   ))}
                 </select>
