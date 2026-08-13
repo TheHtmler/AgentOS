@@ -1,7 +1,7 @@
 # 运营后台骨架 + 知识库审核（第一模块）
 
 日期：2026-08-13  
-状态：accepted  
+状态：已实现  
 前置：MMA/PA 知识 provenance（`review_status` / `version_label`）、用户侧 invite 认证（**本竖切刻意解耦**）
 
 ## 背景

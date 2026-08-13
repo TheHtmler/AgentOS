@@ -34,6 +34,8 @@
 
 **平台基础工具 + 评测集（2026-08-12，已落地）：** `time_diff` / `calculate`（`ToolDomain.UTIL`，`UTIL_TOOLS_ENABLED`）；薄 `eval.runner` + `foundation-util-v1` golden（无 LLM e2e）。
 
+**运营后台 + 知识审核竖切（2026-08-13，已落地）：** 独立 `apps/ops` + env root/`ops_sessions`；知识文档列表、PATCH `review_status`、upsert 自动快照与只读快照列表。Agent / MCP / Skills 管理页仍属后续增量。
+
 - 建立 `AgentProfile`、`AgentVersion` 和领域知识库边界。（首个竖切已用 spec 命名 `agents` / `agent_versions` 落地配置层 Agent，非完整 `AgentProfile` 域模型。）
 - 将 `agent_id` 纳入 Thread、Run 和运行快照。
 - 建立 `PatientCase`、患者授权关系和患者私有上下文。

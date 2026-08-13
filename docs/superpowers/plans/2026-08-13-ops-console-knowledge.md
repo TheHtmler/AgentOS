@@ -1,6 +1,6 @@
 # Ops Console + Knowledge Review Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Ship an independent ops console (`apps/ops`) with env-seeded root login and a knowledge document admin (list, change `review_status`, read-only snapshots), backed by `/v1/ops/*` on Agent API.
 
@@ -51,7 +51,7 @@
 - Produces ORM `OpsSession`, `KnowledgeDocumentSnapshot`
 - Migration revises `k7l8m9n0o1p2`
 
-- [ ] **Step 1: Failing model smoke test**
+- [x] **Step 1: Failing model smoke test**
 
 ```python
 # tests/test_ops_models.py
@@ -62,16 +62,16 @@ def test_ops_models_are_mapped() -> None:
     assert KnowledgeDocumentSnapshot.__tablename__ == "knowledge_document_snapshots"
 ```
 
-- [ ] **Step 2: Run — expect FAIL** (or pass only after models exist)
+- [x] **Step 2: Run — expect FAIL** (or pass only after models exist)
 
-- [ ] **Step 3: Add models + migration**
+- [x] **Step 3: Add models + migration**
 
 `OpsSession`: id, token_hash(64 unique), subject, expires_at, revoked_at, created_at.  
 `KnowledgeDocumentSnapshot`: id, document_id FK CASCADE, version_label, payload JSONB, created_at, created_by.
 
-- [ ] **Step 4: `alembic upgrade head` + test PASS**
+- [x] **Step 4: `alembic upgrade head` + test PASS**
 
-- [ ] **Step 5: Commit + push**
+- [x] **Step 5: Commit + push**
 
 ```bash
 git commit -m "feat(db): add ops_sessions and knowledge document snapshots"
@@ -104,11 +104,11 @@ ops_session_ttl_hours: int = 12
 
 Use `bcrypt` check (add dependency if missing; else `passlib[bcrypt]`). Prefer std approach already in repo if any.
 
-- [ ] **Step 1: Failing tests** — login 503 without hash; login 401 bad password; login 200 + me; logout; user cookie ignored
+- [x] **Step 1: Failing tests** — login 503 without hash; login 401 bad password; login 200 + me; logout; user cookie ignored
 
-- [ ] **Step 2–4: Implement + PASS**
+- [x] **Step 2–4: Implement + PASS**
 
-- [ ] **Step 5: Commit** `feat(api): add ops root login and session`
+- [x] **Step 5: Commit** `feat(api): add ops root login and session`
 
 Generate a dev hash for `.env` (document in commit message or README snippet):
 ```bash
@@ -131,11 +131,11 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'changeme', bcrypt.gensalt()).dec
 - GET snapshots returns [{id, version_label, created_at, created_by}]
 - upsert: if document exists and has chunks, insert snapshot with `created_by="system"` then rewrite
 
-- [ ] **Step 1: Failing tests** with ops auth headers + database_session
+- [x] **Step 1: Failing tests** with ops auth headers + database_session
 
-- [ ] **Step 2–4: Implement + PASS** (include withdrawn still excluded from search — reuse existing search helper)
+- [x] **Step 2–4: Implement + PASS** (include withdrawn still excluded from search — reuse existing search helper)
 
-- [ ] **Step 5: Commit** `feat(api): ops knowledge list, review, and snapshots`
+- [x] **Step 5: Commit** `feat(api): ops knowledge list, review, and snapshots`
 
 ---
 
@@ -150,13 +150,13 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'changeme', bcrypt.gensalt()).dec
 **Interfaces:**
 - Cookie `ops_session` HttpOnly via BFF Set-Cookie from API token response (mirror web auth BFF pattern)
 
-- [ ] **Step 1: Scaffold app** (`pnpm` workspace already `apps/*`)
+- [x] **Step 1: Scaffold app** (`pnpm` workspace already `apps/*`)
 
-- [ ] **Step 2: Login page + knowledge page** (functional, not chat-themed)
+- [x] **Step 2: Login page + knowledge page** (functional, not chat-themed)
 
-- [ ] **Step 3: `tsc --noEmit` / build ops**
+- [x] **Step 3: `tsc --noEmit` / build ops**
 
-- [ ] **Step 4: Commit** `feat(ops): add ops console login and knowledge admin`
+- [x] **Step 4: Commit** `feat(ops): add ops console login and knowledge admin`
 
 ---
 
@@ -166,9 +166,9 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'changeme', bcrypt.gensalt()).dec
 - Spec status → 已实现
 - Remind: alembic + OPS_* + restart API + `pnpm --filter ops dev`
 
-- [ ] **Step 1: Docs**
-- [ ] **Step 2: pytest ops tests + ruff/pyright targeted**
-- [ ] **Step 3: Commit** `docs: record ops console knowledge delivery`
+- [x] **Step 1: Docs**
+- [x] **Step 2: pytest ops tests + ruff/pyright targeted**
+- [x] **Step 3: Commit** `docs: record ops console knowledge delivery`
 
 ---
 

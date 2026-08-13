@@ -1,10 +1,10 @@
 # 实施进度
 
-最后更新：2026-08-13（助手回合统一气泡）
+最后更新：2026-08-13（运营后台 + 知识审核）
 
 ## 当前状态
 
-前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与 MMA/PA `knowledge_search` 已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。Run、Artifact、用户记忆和多看护人基础 ACL 已绑定 Case 作用域。公共知识库已有 P0 策展切片与混合检索。本轮落地平台 util 工具（`time_diff` / `calculate`）与薄评测 runner + foundation golden suite；公共知识库完整导入、审核工作流和版本快照仍属后续增量。
+前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与 MMA/PA `knowledge_search` 已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。Run、Artifact、用户记忆和多看护人基础 ACL 已绑定 Case 作用域。公共知识库已有 P0 策展切片与混合检索、运营审核与文档快照。平台 util 工具（`time_diff` / `calculate`）与薄评测 runner + foundation golden suite 已落地。
 
 已完成：
 
@@ -95,6 +95,7 @@
 - MMA/PA P0 检索评测集：`seed/knowledge/mma_pa_eval.json`，覆盖分型、C3 筛查、急症、饮食边界、监测和证据限制。
 - 平台 util 工具：`ToolDomain.UTIL` 下 `time_diff`（可注入 now、日历月/年）与 `calculate`（白名单 AST）；`UTIL_TOOLS_ENABLED`；挂载时注入 `UTIL_INSTRUCTIONS`。
 - 薄评测框架：`agent_api.eval.runner` + `seed/util/foundation_eval.json`（`foundation-util-v1`）；pytest 覆盖 golden 与挂载/禁用；knowledge P0 暂未迁移到该 runner。
+- 运营后台竖切：`apps/ops`（`:3001`）+ `/v1/ops/*`；env 种子 root（`OPS_ROOT_*`）与独立 `ops_sessions` Cookie；知识文档列表 / PATCH `review_status` / 只读快照；seed upsert 前写入 `knowledge_document_snapshots`；迁移 `l8m9n0o1p2q3`。
 - 工具调用行 UI：折叠行改为线框 SVG + 英文 `toolName` + 关键参数，副行状态（执行中/已完成/失败/待审批）。
 - 助手回合统一气泡：thinking、工具行与最终文字同处一个 `agentos-message-assistant`；去掉气泡外「处理中/已处理」过程组；HITL 审批条仍在泡外。
 
@@ -119,10 +120,11 @@
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
 - Artifact 文件上传/下载、完整 `messages.role=tool` 模型历史对齐，以及 Artifact 审计记录。
-- 公共知识库完整文档导入、人工审核工作流、版本快照和撤回管理（当前已有多来源策展切片与关键词 + embedding 混合检索）。
+- 公共知识库完整文档导入、Chunk 在线编辑、快照一键恢复、PDF/图片素材流水线（当前已有多来源策展切片、混合检索、ops 审核与只读快照）。
+- 运营后台扩展：Agent / MCP / Skills / Session 审计；多 ops 账号表。
 - 更复杂的 Case ACL（邀请生命周期、所有权转移、组织/临床角色）、领域扩展表（如护理计划/化验时间线）；Sandbox；侧栏按工具类型的富展示。
 - 参数级 Tool Policy（如按 URL/命令细规则）、审计表落库。
 
 ## 下一步
 
-平台基础能力：模型/Provider 档位；可选将 knowledge P0 迁到通用 eval runner。领域侧在 Case 之上挂医疗扩展，并推进公共知识库人工审核、版本快照和多看护人授权。
+平台基础能力：模型/Provider 档位；可选将 knowledge P0 迁到通用 eval runner。领域侧在 Case 之上挂医疗扩展与多看护人授权；运营侧可扩展 Agent/MCP/Skills 管理。
