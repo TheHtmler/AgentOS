@@ -5,6 +5,7 @@ import { OpsShell } from "@/components/ops-shell";
 import { OPS_SESSION_COOKIE_NAME, agentApiBaseUrl } from "@/lib/ops-api";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function OpsLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const token = (await cookies()).get(OPS_SESSION_COOKIE_NAME)?.value;

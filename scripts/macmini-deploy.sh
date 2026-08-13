@@ -146,17 +146,36 @@ if [[ "$DO_WEB" -eq 1 ]]; then
 fi
 
 if [[ "$DO_OPS" -eq 1 ]]; then
+  log "clean ops .next (avoid stale prerender cache)"
+  rm -rf "$ROOT/apps/ops/.next"
   log "build ops"
   CI=1 pnpm --filter ops build
   kick "$OPS_LABEL" || true
 fi
 
-sleep 1
+sleep 2
 log "health"
 printf '  api  :8000/health  => %s\n' "$(http_code 'http://127.0.0.1:8000/health')"
 printf '  web  :3000/        => %s\n' "$(http_code 'http://127.0.0.1:3000/')"
 printf '  ops  :3001/login   => %s\n' "$(http_code 'http://127.0.0.1:3001/login')"
+
+if [[ "$DO_OPS" -eq 1 ]]; then
+  # Authenticated shell HTML is gated; verify built artifact contains tab nav marker.
+  if ! rg -q "ops-tabs" "$ROOT/apps/ops/.next" 2>/dev/null; then
+    warn "ops build artifact missing ops-tabs — shell nav may not have shipped"
+  else
+    log "ops build contains ops-tabs marker"
+  fi
+  # Local unauthenticated /knowledge should redirect to login (new shell), not serve old static list.
+  know_code="$(http_code 'http://127.0.0.1:3001/knowledge')"
+  printf '  ops  :3001/knowledge => %s (expect 307/308 to login)\n' "$know_code"
+  if [[ "$know_code" == "200" ]]; then
+    warn "local /knowledge returned 200 — still looks like a stale static page; check launchd WorkingDirectory / .next"
+  fi
+fi
+
 log "public"
 printf '  web  https://agentos.lemonbabycare.cn/\n'
 printf '  ops  https://ops-agentos.lemonbabycare.cn/\n'
+log "If public ops still shows old UI: purge 宝塔/nginx cache for ops-agentos, then hard-refresh."
 log "done"
