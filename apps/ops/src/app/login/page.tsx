@@ -38,11 +38,12 @@ export default function LoginPage() {
     <div className="login-wrap">
       <form className="panel login-panel stack" onSubmit={onSubmit}>
         <div>
-          <div className="brand">AgentOS Ops</div>
-          <p className="muted">运营控制台（不是聊天站 agentos）</p>
-          <p className="muted" style={{ marginTop: 8 }}>
-            登录成功后顶部会出现：概览 / 知识库 / 智能体
-          </p>
+          <span className="login-kicker">Operations</span>
+          <div className="brand-mark" style={{ marginBottom: 8 }}>
+            <span className="brand-mark__glyph" aria-hidden />
+            <div className="brand">AgentOS Ops</div>
+          </div>
+          <p className="muted page-lead">运营控制台 · 知识审核与智能体配置（非聊天站）</p>
         </div>
         <label>
           用户名

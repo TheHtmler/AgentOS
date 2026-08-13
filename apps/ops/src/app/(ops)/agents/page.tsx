@@ -84,7 +84,7 @@ export default function AgentsPage() {
     <div className="stack">
       <div>
         <h1 className="page-title">智能体</h1>
-        <p className="muted">启停、描述与默认智能体（不改版本配置）</p>
+        <p className="muted page-lead">启停、描述与默认智能体（不改版本配置）</p>
       </div>
 
       {error ? <p className="error">{error}</p> : null}

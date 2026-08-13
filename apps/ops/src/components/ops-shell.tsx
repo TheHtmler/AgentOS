@@ -13,6 +13,18 @@ const NAV = [
   { href: "/sessions", label: "会话", soon: true },
 ] as const;
 
+function BrandMark({ subtitle }: { subtitle?: string }) {
+  return (
+    <div className="brand-mark">
+      <span className="brand-mark__glyph" aria-hidden />
+      <div>
+        <div className="brand">AgentOS Ops</div>
+        {subtitle ? <div className="muted" style={{ fontSize: "0.78rem", marginTop: 2 }}>{subtitle}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 export function OpsShell({
   subject,
   children,
@@ -46,9 +58,9 @@ export function OpsShell({
         >
           菜单
         </button>
-        <div className="brand">AgentOS Ops</div>
+        <BrandMark />
         <div className="ops-top-right">
-          <span className="muted ops-subject">{subject}</span>
+          <span className="ops-subject">{subject}</span>
           <button type="button" className="secondary" onClick={() => void logout()}>
             退出
           </button>
@@ -79,7 +91,7 @@ export function OpsShell({
 
       <aside className={`ops-nav ${open ? "is-open" : ""}`}>
         <div className="ops-nav-head">
-          <div className="brand">导航</div>
+          <BrandMark subtitle="运营控制台" />
           <button type="button" className="secondary" onClick={() => setOpen(false)}>
             关闭
           </button>
@@ -97,6 +109,7 @@ export function OpsShell({
             </Link>
           ))}
         </nav>
+        <div className="ops-nav-foot">知识内容经 seed 入库；本台负责审核与智能体配置。</div>
       </aside>
 
       <main className="ops-main">{children}</main>

@@ -146,45 +146,47 @@ export default function KnowledgeDetailPage() {
         <>
           <form className="panel stack" onSubmit={(event) => void onSave(event)}>
             <h2 className="section-title">文档信息</h2>
-            <label>
-              标题
-              <input value={title} onChange={(e) => setTitle(e.target.value)} required />
-            </label>
-            <label>
-              版本标签
-              <input value={versionLabel} onChange={(e) => setVersionLabel(e.target.value)} />
-            </label>
-            <label>
-              来源类型
-              <select value={sourceKind} onChange={(e) => setSourceKind(e.target.value)}>
-                {SOURCE_KINDS.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {SOURCE_KIND_LABELS[kind]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              来源名称
-              <input value={sourceLabel} onChange={(e) => setSourceLabel(e.target.value)} />
-            </label>
+            <div className="form-grid cols-2">
+              <label>
+                标题
+                <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+              </label>
+              <label>
+                版本标签
+                <input value={versionLabel} onChange={(e) => setVersionLabel(e.target.value)} />
+              </label>
+              <label>
+                来源类型
+                <select value={sourceKind} onChange={(e) => setSourceKind(e.target.value)}>
+                  {SOURCE_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {SOURCE_KIND_LABELS[kind]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                审核状态
+                <select value={reviewStatus} onChange={(e) => setReviewStatus(e.target.value)}>
+                  {REVIEW_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {REVIEW_STATUS_LABELS[option]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                来源名称
+                <input value={sourceLabel} onChange={(e) => setSourceLabel(e.target.value)} />
+              </label>
+              <label>
+                来源日期
+                <input value={sourceDate} onChange={(e) => setSourceDate(e.target.value)} />
+              </label>
+            </div>
             <label>
               来源链接
               <input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} />
-            </label>
-            <label>
-              来源日期
-              <input value={sourceDate} onChange={(e) => setSourceDate(e.target.value)} />
-            </label>
-            <label>
-              审核状态
-              <select value={reviewStatus} onChange={(e) => setReviewStatus(e.target.value)}>
-                {REVIEW_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {REVIEW_STATUS_LABELS[option]}
-                  </option>
-                ))}
-              </select>
             </label>
             <p className="muted" style={{ margin: 0 }}>
               审核时间：

@@ -36,7 +36,7 @@ export default function DashboardPage() {
     <div className="stack">
       <div>
         <h1 className="page-title">概览</h1>
-        <p className="muted">运营控制台 · 知识库与智能体</p>
+        <p className="muted page-lead">一眼看清知识库审核进度与智能体状态。</p>
       </div>
 
       {error ? <p className="error">{error}</p> : null}

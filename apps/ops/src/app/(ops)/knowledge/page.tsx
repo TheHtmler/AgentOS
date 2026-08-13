@@ -86,8 +86,27 @@ export default function KnowledgePage() {
     <div className="stack">
       <div>
         <h1 className="page-title">知识库</h1>
-        <p className="muted">MMA/PA 公共知识 · 审核与文档详情</p>
+        <p className="muted page-lead">MMA/PA 公共知识 · 审核状态与文档元数据</p>
       </div>
+
+      <section className="callout" aria-label="知识库能力说明">
+        <h2>现在能做什么 / 数据从哪来</h2>
+        <ul>
+          <li>
+            <strong>已有：</strong>查看文档与内容切片、改审核状态、改来源/版本等元数据、只读查看历史快照。
+          </li>
+          <li>
+            <strong>还没有：</strong>网页上传 PDF/链接、新建文档、在线改切片正文、一键恢复快照（规格里列为后续）。
+          </li>
+          <li>
+            <strong>现有数据：</strong>仓库策展文件{" "}
+            <code>services/agent-api/seed/knowledge/mma_pa_chunks.json</code>
+            （约 4 篇文档 / 32 条切片），经 Mac mini 上执行{" "}
+            <code>uv run --directory services/agent-api python scripts/seed_knowledge.py</code>{" "}
+            写入数据库；不是用户从前端投递的。
+          </li>
+        </ul>
+      </section>
 
       <div className="filter-row">
         {FILTERS.map((item) => (
@@ -117,7 +136,7 @@ export default function KnowledgePage() {
               </div>
               <div className="doc-card__meta">
                 <span>版本 {doc.version_label ?? "—"}</span>
-                <span className={`status-${doc.review_status}`}>
+                <span className={`badge badge--${doc.review_status}`}>
                   {labelOf(REVIEW_STATUS_LABELS, doc.review_status)}
                 </span>
                 <span>{doc.chunk_count} 条切片</span>
@@ -141,7 +160,13 @@ export default function KnowledgePage() {
         </div>
       ) : null}
 
-      {!loading && visible.length === 0 ? <p className="muted">暂无文档</p> : null}
+      {!loading && visible.length === 0 ? (
+        <div className="panel">
+          <p className="muted" style={{ margin: 0 }}>
+            暂无文档。若库是空的，请在 API 机器上跑一次知识 seed（见上方说明）。
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
