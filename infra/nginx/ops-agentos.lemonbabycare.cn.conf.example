@@ -1,0 +1,26 @@
+# 宝塔：网站 → 添加站点 → ops-agentos.lemonbabycare.cn
+# 申请 SSL 后，在「配置文件」里用类似内容（端口改成你 frps 映射到本机的 remotePort）。
+#
+# 流量：浏览器 → 宝塔 :443 → 127.0.0.1:13001(frps) → FRP → Mac mini :3001 (apps/ops)
+
+server {
+    listen 80;
+    listen 443 ssl http2;
+    server_name ops-agentos.lemonbabycare.cn;
+
+    # 宝塔会插入 ssl_certificate / ssl_certificate_key
+
+    client_max_body_size 20m;
+
+    location / {
+        proxy_pass http://127.0.0.1:13001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+    }
+}

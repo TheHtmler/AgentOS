@@ -5,6 +5,7 @@
 | 文档                                                                                                                               | 内容                                                     | 何时更新                               |
 | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------- |
 | [01-architecture-baseline.md](01-architecture-baseline.md)                                                                         | 当前技术选型、服务边界、数据流与部署拓扑                 | 架构或依赖变化时                       |
+| [14-macmini-frp-ops-deploy.md](14-macmini-frp-ops-deploy.md)                                                                       | Ops 子域 + FRP + launchd + 宝塔部署                      | 变更 ops 公网入口或 Mac mini 托管方式时 |
 | [02-mvp-roadmap.md](02-mvp-roadmap.md)                                                                                             | MVP 实施顺序与完成标准                                   | 迭代计划变化时                         |
 | [03-development-workflow.md](03-development-workflow.md)                                                                           | 代码所有权、协作方式与每轮交付格式                       | 协作边界或开发流程变化时               |
 | [04-foundation-setup.md](04-foundation-setup.md)                                                                                   | 首轮工程初始化命令、代码和验收标准                       | 工具链或工程骨架变化时                 |

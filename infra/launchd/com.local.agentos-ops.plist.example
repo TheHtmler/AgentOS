@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Install on Mac mini (mirror com.local.agentos-web):
+
+  1. Copy to ~/Library/LaunchAgents/com.local.agentos-ops.plist
+  2. Replace __AGENTOS_ROOT__ and __NODE_BIN__ (e.g. $(which node) from the same Node used to build)
+  3. Ensure apps/ops/.env.local has AGENT_API_BASE_URL=http://127.0.0.1:8000
+  4. launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.local.agentos-ops.plist
+  5. After rebuild: launchctl kickstart -k gui/$(id -u)/com.local.agentos-ops
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.agentos-ops</string>
+  <key>WorkingDirectory</key>
+  <string>__AGENTOS_ROOT__/apps/ops</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE_BIN__</string>
+    <string>__AGENTOS_ROOT__/apps/ops/node_modules/next/dist/bin/next</string>
+    <string>start</string>
+    <string>-H</string>
+    <string>127.0.0.1</string>
+    <string>-p</string>
+    <string>3001</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>PORT</key>
+    <string>3001</string>
+    <key>HOSTNAME</key>
+    <string>127.0.0.1</string>
+    <key>AGENT_API_BASE_URL</key>
+    <string>http://127.0.0.1:8000</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/agentos-ops.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/agentos-ops.err.log</string>
+</dict>
+</plist>

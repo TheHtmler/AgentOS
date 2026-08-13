@@ -1,0 +1,23 @@
+# Example frpc snippet for Mac mini → cloud frps.
+# Merge into your real frpc.toml; keep existing agentos-web / agent-api proxies.
+# Replace remote_port with free ports allowed by frps (and matching 宝塔反代目标).
+
+serverAddr = "YOUR_CLOUD_HOST"
+serverPort = 7000
+# auth.token = "..."
+
+# Existing product web (example; keep your real values)
+[[proxies]]
+name = "agentos-web"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 3000
+remotePort = 13000
+
+# Ops console (new)
+[[proxies]]
+name = "agentos-ops"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 3001
+remotePort = 13001

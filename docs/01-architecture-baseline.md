@@ -12,28 +12,37 @@
 
 ```text
 浏览器
-  -> 云服务器：宝塔 Nginx、HTTPS、Next.js、frps
+  -> 云服务器：宝塔 Nginx、HTTPS、frps
   -> FRP 隧道
-  -> Mac mini：frpc、FastAPI、Pydantic AI、Ollama、PostgreSQL、Sandbox
+  -> Mac mini：frpc、Next.js(web/ops)、FastAPI、Pydantic AI、Ollama、PostgreSQL、Sandbox
 ```
 
 云服务器是唯一公网入口。Mac mini 不直接暴露 Ollama、PostgreSQL、MinIO 控制台、Docker Socket 或 Sandbox Manager。
 
+生产前端也跑在 Mac mini（`launchctl` 托管），经 FRP 映射到云侧反代：
+
+| 站点 | 域名 | 本机端口 | launchd |
+| --- | --- | --- | --- |
+| 产品 Web | `agentos.lemonbabycare.cn` | `3000` | `com.local.agentos-web` |
+| Ops | `ops-agentos.lemonbabycare.cn` | `3001` | `com.local.agentos-ops` |
+
+Ops 部署步骤见 [14-macmini-frp-ops-deploy.md](14-macmini-frp-ops-deploy.md)。
+
 ### 云服务器（2C2G）
 
-- 宝塔 Nginx：域名、TLS、限流、反向代理。
-- Next.js：自定义前端与静态资源。
+- 宝塔 Nginx：域名、TLS、限流、反向代理到 frps 本地端口。
 - `frps`：接收 Mac mini 主动建立的隧道。
-- 不部署 PostgreSQL、Redis、工作流引擎或模型服务。
+- 不部署 PostgreSQL、Redis、工作流引擎、模型服务或 Next 进程（Next 在 Mac mini）。
 
 ### Mac mini（16GB 起）
 
 - Ollama：本地模型推理，优先原生运行以使用 Apple Silicon Metal。
 - Agent API：FastAPI + Pydantic AI。
+- Next.js：`apps/web`（`:3000`）与 `apps/ops`（`:3001`），BFF 本机访问 Agent API。
 - PostgreSQL：对话、Run、HITL、审计记录的事实来源。
 - Sandbox Manager：唯一可以控制 Docker 的内部服务。
 - 用户 Sandbox：按需启动、单并发起步、受资源和网络策略限制。
-- `frpc`：仅把 Agent API 暴露给云服务器。
+- `frpc`：把 Web / Ops /（如需）Agent API 隧道到云服务器，供宝塔反代。
 
 ## 技术选型
 
