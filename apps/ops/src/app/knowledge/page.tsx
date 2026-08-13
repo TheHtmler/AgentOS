@@ -22,6 +22,40 @@ type Snapshot = {
 
 const REVIEW_OPTIONS = ["curated", "clinically_reviewed", "withdrawn"] as const;
 
+function DocActions({
+  doc,
+  saving,
+  onPatch,
+  onSnapshots,
+}: {
+  doc: KnowledgeDocument;
+  saving: boolean;
+  onPatch: (id: string, status: string) => void;
+  onSnapshots: (id: string) => void;
+}) {
+  return (
+    <div className="doc-card__actions">
+      <label>
+        审核状态
+        <select
+          value={doc.review_status}
+          disabled={saving}
+          onChange={(event) => onPatch(doc.id, event.target.value)}
+        >
+          {REVIEW_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button type="button" className="secondary block" onClick={() => onSnapshots(doc.id)}>
+        查看快照
+      </button>
+    </div>
+  );
+}
+
 export default function KnowledgePage() {
   const router = useRouter();
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
@@ -99,6 +133,8 @@ export default function KnowledgePage() {
     setSnapshots(body.snapshots);
   }
 
+  const selectedTitle = documents.find((doc) => doc.id === selectedId)?.title;
+
   return (
     <div className="shell">
       <header className="topbar">
@@ -113,7 +149,7 @@ export default function KnowledgePage() {
 
       <section className="panel stack">
         <div>
-          <h1 style={{ margin: "0 0 6px", fontSize: "1.2rem" }}>公共知识文档</h1>
+          <h1 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>公共知识文档</h1>
           <p className="muted" style={{ margin: 0 }}>
             修改 review_status；快照只读，由 seed/upsert 自动生成。
           </p>
@@ -123,52 +159,64 @@ export default function KnowledgePage() {
         {loading ? <p className="muted">加载中…</p> : null}
 
         {!loading && documents.length > 0 ? (
-          <table>
-            <thead>
-              <tr>
-                <th>标题</th>
-                <th>版本</th>
-                <th>状态</th>
-                <th>切片</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            <div className="doc-list">
               {documents.map((doc) => (
-                <tr key={doc.id}>
-                  <td>
-                    <div>{doc.title}</div>
-                    <div className="muted">{doc.slug}</div>
-                  </td>
-                  <td>{doc.version_label ?? "—"}</td>
-                  <td className={`status-${doc.review_status}`}>{doc.review_status}</td>
-                  <td>{doc.chunk_count}</td>
-                  <td>
-                    <div className="stack" style={{ gap: 8 }}>
-                      <select
-                        value={doc.review_status}
-                        disabled={savingId === doc.id}
-                        onChange={(event) => void patchStatus(doc.id, event.target.value)}
-                      >
-                        {REVIEW_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => void openSnapshots(doc.id)}
-                      >
-                        查看快照
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                <article key={doc.id} className="doc-card">
+                  <div className="doc-card__title">{doc.title}</div>
+                  <div className="muted" style={{ fontSize: "0.85rem", wordBreak: "break-all" }}>
+                    {doc.slug}
+                  </div>
+                  <div className="doc-card__meta">
+                    <span>版本 {doc.version_label ?? "—"}</span>
+                    <span className={`status-${doc.review_status}`}>{doc.review_status}</span>
+                    <span>{doc.chunk_count} 切片</span>
+                  </div>
+                  <DocActions
+                    doc={doc}
+                    saving={savingId === doc.id}
+                    onPatch={(id, status) => void patchStatus(id, status)}
+                    onSnapshots={(id) => void openSnapshots(id)}
+                  />
+                </article>
               ))}
-            </tbody>
-          </table>
+            </div>
+
+            <div className="table-wrap desktop-only">
+              <table>
+                <thead>
+                  <tr>
+                    <th>标题</th>
+                    <th>版本</th>
+                    <th>状态</th>
+                    <th>切片</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {documents.map((doc) => (
+                    <tr key={doc.id}>
+                      <td>
+                        <div>{doc.title}</div>
+                        <div className="muted">{doc.slug}</div>
+                      </td>
+                      <td>{doc.version_label ?? "—"}</td>
+                      <td className={`status-${doc.review_status}`}>{doc.review_status}</td>
+                      <td>{doc.chunk_count}</td>
+                      <td style={{ minWidth: 180 }}>
+                        <DocActions
+                          doc={doc}
+                          saving={savingId === doc.id}
+                          onPatch={(id, status) => void patchStatus(id, status)}
+                          onSnapshots={(id) => void openSnapshots(id)}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         ) : null}
 
         {!loading && documents.length === 0 ? <p className="muted">暂无文档</p> : null}
@@ -177,27 +225,41 @@ export default function KnowledgePage() {
       {selectedId ? (
         <section className="panel stack" style={{ marginTop: 16 }}>
           <h2 style={{ margin: 0, fontSize: "1.05rem" }}>快照（只读）</h2>
+          {selectedTitle ? <p className="muted" style={{ margin: 0 }}>{selectedTitle}</p> : null}
           {snapshots.length === 0 ? (
             <p className="muted">该文档尚无快照</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>版本</th>
-                  <th>创建时间</th>
-                  <th>创建者</th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              <div className="snap-list">
                 {snapshots.map((snap) => (
-                  <tr key={snap.id}>
-                    <td>{snap.version_label ?? "—"}</td>
-                    <td>{new Date(snap.created_at).toLocaleString()}</td>
-                    <td>{snap.created_by}</td>
-                  </tr>
+                  <div key={snap.id} className="snap-card">
+                    <strong>{snap.version_label ?? "—"}</strong>
+                    <span className="muted">{new Date(snap.created_at).toLocaleString()}</span>
+                    <span>{snap.created_by}</span>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+              <div className="table-wrap desktop-only">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>版本</th>
+                      <th>创建时间</th>
+                      <th>创建者</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {snapshots.map((snap) => (
+                      <tr key={snap.id}>
+                        <td>{snap.version_label ?? "—"}</td>
+                        <td>{new Date(snap.created_at).toLocaleString()}</td>
+                        <td>{snap.created_by}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </section>
       ) : null}

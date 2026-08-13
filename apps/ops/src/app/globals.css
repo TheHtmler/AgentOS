@@ -9,6 +9,7 @@
   --accent-ink: #f7fffc;
   --danger: #8a2f2f;
   --warn: #8a6a12;
+  --tap: 44px;
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
 }
 
@@ -24,6 +25,7 @@ body {
     radial-gradient(circle at top left, #e7efe9 0%, transparent 42%),
     linear-gradient(180deg, #f7f4ee 0%, var(--bg) 100%);
   color: var(--ink);
+  -webkit-text-size-adjust: 100%;
 }
 
 a {
@@ -40,15 +42,17 @@ select {
 .shell {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 28px 20px 48px;
+  padding: 28px 20px calc(48px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 
 .topbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 28px;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .brand {
@@ -82,21 +86,32 @@ input,
 select {
   border: 1px solid var(--line);
   background: #fff;
-  padding: 10px 12px;
+  padding: 12px;
+  /* ≥16px avoids iOS focus zoom */
+  font-size: 16px;
+  width: 100%;
+  min-height: var(--tap);
+  border-radius: 0;
 }
 
 button {
   border: 1px solid var(--accent);
   background: var(--accent);
   color: var(--accent-ink);
-  padding: 10px 14px;
+  padding: 12px 16px;
+  min-height: var(--tap);
   cursor: pointer;
+  width: auto;
 }
 
 button.secondary {
   background: transparent;
   color: var(--ink);
   border-color: var(--line);
+}
+
+button.block {
+  width: 100%;
 }
 
 button:disabled {
@@ -109,10 +124,17 @@ button:disabled {
   font-size: 0.92rem;
 }
 
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.92rem;
+  min-width: 640px;
 }
 
 th,
@@ -141,12 +163,92 @@ th {
 }
 
 .login-wrap {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
 }
 
 .login-panel {
   width: min(420px, 100%);
+}
+
+.doc-list {
+  display: none;
+  gap: 12px;
+}
+
+.doc-card {
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.doc-card__title {
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.doc-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 0.88rem;
+}
+
+.doc-card__actions {
+  display: grid;
+  gap: 8px;
+}
+
+.snap-list {
+  display: none;
+  gap: 8px;
+}
+
+.snap-card {
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.92rem;
+}
+
+.desktop-only {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .shell {
+    padding-top: 16px;
+  }
+
+  .brand {
+    font-size: 1.2rem;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .topbar button {
+    flex-shrink: 0;
+  }
+
+  .desktop-only {
+    display: none;
+  }
+
+  .doc-list,
+  .snap-list {
+    display: grid;
+  }
+
+  table {
+    min-width: 0;
+  }
 }

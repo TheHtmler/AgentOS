@@ -47,6 +47,10 @@ export default function LoginPage() {
             value={username}
             onChange={(event) => setUsername(event.target.value)}
             autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="next"
             required
           />
         </label>
@@ -57,11 +61,12 @@ export default function LoginPage() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
+            enterKeyHint="go"
             required
           />
         </label>
         {error ? <p className="error">{error}</p> : null}
-        <button type="submit" disabled={pending}>
+        <button type="submit" className="block" disabled={pending}>
           {pending ? "登录中…" : "登录"}
         </button>
       </form>
