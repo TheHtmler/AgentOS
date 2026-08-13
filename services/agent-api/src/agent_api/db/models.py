@@ -104,6 +104,23 @@ class UserSession(Base):
     )
 
 
+class OpsSession(Base):
+    """Revocable ops-console session (env root subject; not a user_sessions row)."""
+
+    __tablename__ = "ops_sessions"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    subject: Mapped[str] = mapped_column(String(128), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
 class Agent(Base):
     """A selectable general-purpose or vertical agent."""
 
@@ -456,6 +473,27 @@ class KnowledgeChunk(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class KnowledgeDocumentSnapshot(Base):
+    """Point-in-time copy of a knowledge document and its chunks before overwrite."""
+
+    __tablename__ = "knowledge_document_snapshots"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    document_id: Mapped[UUID] = mapped_column(
+        ForeignKey("knowledge_documents.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    version_label: Mapped[str | None] = mapped_column(String(128))
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
         nullable=False,
     )
 
