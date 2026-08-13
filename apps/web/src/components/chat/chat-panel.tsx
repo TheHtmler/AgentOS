@@ -15,7 +15,6 @@ import {
 
 import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval-panel";
 import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
-import { ProcessGroup } from "@/components/chat/process-group";
 import { ThinkingStepCard, type ThinkingStepState } from "@/components/chat/thinking-step-card";
 import {
   summarizeToolResultContent,
@@ -1353,39 +1352,46 @@ export function ChatPanel({
             </div>
           ) : (
             messages.map((message, index) => {
+              // Process steps are keyed to the user message that started the run; render
+              // them inside the first following assistant bubble only.
+              const precedingUserIndex =
+                message.role === "assistant"
+                  ? (() => {
+                      for (let i = index - 1; i >= 0; i -= 1) {
+                        if (messages[i]?.role === "user") {
+                          return i;
+                        }
+                      }
+                      return -1;
+                    })()
+                  : -1;
+              const precedingUserId =
+                precedingUserIndex >= 0 ? messages[precedingUserIndex]?.id : undefined;
+              const isPrimaryAssistantForTurn =
+                message.role === "assistant" &&
+                precedingUserIndex >= 0 &&
+                messages.findIndex(
+                  (item, itemIndex) =>
+                    itemIndex > precedingUserIndex && item.role === "assistant",
+                ) === index;
+
               const liveSteps =
-                liveUserMessageId === message.id
-                  ? timelineSteps.filter((step) => step.afterMessageId === message.id)
+                isPrimaryAssistantForTurn &&
+                precedingUserId !== undefined &&
+                liveUserMessageId === precedingUserId
+                  ? timelineSteps.filter((step) => step.afterMessageId === precedingUserId)
                   : [];
               const historicalTools =
-                liveUserMessageId === message.id
-                  ? []
-                  : historyToolCalls.filter((toolCall) => toolCall.afterMessageId === message.id);
-
-              // Duration for the process group comes from the following assistant reply.
-              const followingAssistant =
-                message.role === "user"
-                  ? messages.slice(index + 1).find((item) => item.role === "assistant")
-                  : undefined;
-              const hasProcessShell = liveSteps.length > 0 || historicalTools.length > 0;
-              // While tools/thinking are live, draft assistant text is analysis — keep it in
-              // the process fold. After the turn ends, the same text becomes the conclusion outside.
-              const foldAnalysisIntoProcess =
-                message.role === "user" &&
-                isStreaming &&
-                liveUserMessageId === message.id &&
-                hasProcessShell &&
-                Boolean(followingAssistant?.content);
-              const processStepsActive =
-                message.role === "user" &&
-                isStreaming &&
-                liveUserMessageId === message.id &&
-                (liveSteps.length > 0 ||
-                  (followingAssistant !== undefined && !followingAssistant.content) ||
-                  foldAnalysisIntoProcess);
+                isPrimaryAssistantForTurn &&
+                precedingUserId !== undefined &&
+                liveUserMessageId !== precedingUserId
+                  ? historyToolCalls.filter(
+                      (toolCall) => toolCall.afterMessageId === precedingUserId,
+                    )
+                  : [];
 
               const processChildren =
-                message.role === "user"
+                message.role === "assistant"
                   ? [
                       ...liveSteps.map((step) => {
                         if (step.kind === "thinking") {
@@ -1407,85 +1413,95 @@ export function ChatPanel({
                           onToggle={() => toggleHistoryToolCall(toolCall.id)}
                         />
                       )),
-                      ...(foldAnalysisIntoProcess && followingAssistant
-                        ? [
-                            <div
-                              key={`${message.id}-process-note`}
-                              className="agentos-process-note"
-                            >
-                              <p className="agentos-process-note-label">分析</p>
-                              <AssistantMarkdown content={followingAssistant.content} />
-                            </div>,
-                          ]
-                        : []),
                     ]
                   : [];
 
-              const suppressOutsideAssistant =
-                message.role === "assistant" &&
-                isStreaming &&
-                index === currentAssistantMessageIndex &&
-                timelineSteps.length > 0;
+              // Edge case: tools/thinking arrived before the assistant placeholder exists.
+              // Keep a temporary stack under the live user message so the turn is not blank.
+              const orphanLiveSteps =
+                message.role === "user" &&
+                liveUserMessageId === message.id &&
+                currentAssistantMessageIndex < 0
+                  ? timelineSteps.filter((step) => step.afterMessageId === message.id)
+                  : [];
 
               return (
                 <Fragment key={message.id}>
-                  {suppressOutsideAssistant ? null : (
-                    <article
-                      className={`agentos-message ${
-                        message.role === "user"
-                          ? "agentos-message-user ml-auto max-w-[88%] sm:max-w-[72%]"
-                          : `agentos-message-assistant max-w-full sm:max-w-[92%] ${
-                              isStreaming && index === currentAssistantMessageIndex
-                                ? "agentos-message-streaming"
-                                : ""
-                            }`
-                      }`}
-                    >
-                      <div className="mb-2 flex items-center justify-between gap-3 text-xs">
-                        <p className="agentos-message-author">
-                          {message.role === "user" ? "你" : "AgentOS"}
-                          {message.createdAt ? (
-                            <span className="agentos-message-meta">
-                              {" "}
-                              · {formatMessageTimestamp(message.createdAt)}
-                            </span>
-                          ) : null}
-                          {message.role === "assistant" && message.durationLabel ? (
-                            <span className="agentos-message-meta"> · {message.durationLabel}</span>
-                          ) : null}
-                        </p>
-                        {message.role === "assistant" && message.content ? (
-                          <button
-                            type="button"
-                            onClick={() => void copyAssistantMessage(message)}
-                            className="agentos-copy-button"
-                          >
-                            {copiedMessageId === message.id ? "已复制" : "复制"}
-                          </button>
+                  <article
+                    className={`agentos-message ${
+                      message.role === "user"
+                        ? "agentos-message-user ml-auto max-w-[88%] sm:max-w-[72%]"
+                        : `agentos-message-assistant max-w-full sm:max-w-[92%] ${
+                            isStreaming && index === currentAssistantMessageIndex
+                              ? "agentos-message-streaming"
+                              : ""
+                          }`
+                    }`}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+                      <p className="agentos-message-author">
+                        {message.role === "user" ? "你" : "AgentOS"}
+                        {message.createdAt ? (
+                          <span className="agentos-message-meta">
+                            {" "}
+                            · {formatMessageTimestamp(message.createdAt)}
+                          </span>
                         ) : null}
-                      </div>
-
-                      {message.content ? (
-                        message.role === "assistant" ? (
-                          <AssistantMarkdown content={message.content} />
-                        ) : (
-                          <p className="break-words whitespace-pre-wrap">{message.content}</p>
-                        )
-                      ) : message.role === "assistant" && isStreaming ? (
-                        <p aria-live="polite" className="agentos-chat-subheading">
-                          正在生成最终回答...
-                        </p>
+                        {message.role === "assistant" && message.durationLabel ? (
+                          <span className="agentos-message-meta"> · {message.durationLabel}</span>
+                        ) : null}
+                      </p>
+                      {message.role === "assistant" && message.content ? (
+                        <button
+                          type="button"
+                          onClick={() => void copyAssistantMessage(message)}
+                          className="agentos-copy-button"
+                        >
+                          {copiedMessageId === message.id ? "已复制" : "复制"}
+                        </button>
                       ) : null}
-                    </article>
-                  )}
+                    </div>
 
-                  {message.role === "user" && processChildren.length > 0 ? (
-                    <ProcessGroup
-                      isActive={processStepsActive}
-                      durationLabel={followingAssistant?.durationLabel}
-                    >
-                      {processChildren}
-                    </ProcessGroup>
+                    {processChildren.length > 0 ? (
+                      <div className="agentos-message-process">{processChildren}</div>
+                    ) : null}
+
+                    {message.content ? (
+                      message.role === "assistant" ? (
+                        <AssistantMarkdown content={message.content} />
+                      ) : (
+                        <p className="break-words whitespace-pre-wrap">{message.content}</p>
+                      )
+                    ) : message.role === "assistant" && isStreaming ? (
+                      <p aria-live="polite" className="agentos-chat-subheading">
+                        {processChildren.length > 0 ? "继续生成中…" : "正在生成最终回答..."}
+                      </p>
+                    ) : null}
+                  </article>
+
+                  {orphanLiveSteps.length > 0 ? (
+                    <article className="agentos-message agentos-message-assistant agentos-message-streaming max-w-full sm:max-w-[92%]">
+                      <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+                        <p className="agentos-message-author">AgentOS</p>
+                      </div>
+                      <div className="agentos-message-process">
+                        {orphanLiveSteps.map((step) => {
+                          if (step.kind === "thinking") {
+                            return <ThinkingStepCard key={step.id} step={step} />;
+                          }
+                          return (
+                            <ToolCallCard
+                              key={step.id}
+                              toolCall={step}
+                              onToggle={() => toggleTimelineStep(step.id)}
+                            />
+                          );
+                        })}
+                      </div>
+                      <p aria-live="polite" className="agentos-chat-subheading">
+                        继续生成中…
+                      </p>
+                    </article>
                   ) : null}
                 </Fragment>
               );

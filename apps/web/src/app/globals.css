@@ -600,6 +600,16 @@ body {
   box-shadow: var(--shadow);
 }
 
+/* Thinking + tool rows stacked inside the assistant bubble (no outer process group). */
+.agentos-message-process {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+}
+
 .agentos-message-assistant::before {
   position: absolute;
   top: 0.75rem;

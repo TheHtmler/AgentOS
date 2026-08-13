@@ -1,6 +1,6 @@
 # 实施进度
 
-最后更新：2026-08-13（工具调用行 UI：icon + toolName + params）
+最后更新：2026-08-13（助手回合统一气泡）
 
 ## 当前状态
 
@@ -95,7 +95,8 @@
 - MMA/PA P0 检索评测集：`seed/knowledge/mma_pa_eval.json`，覆盖分型、C3 筛查、急症、饮食边界、监测和证据限制。
 - 平台 util 工具：`ToolDomain.UTIL` 下 `time_diff`（可注入 now、日历月/年）与 `calculate`（白名单 AST）；`UTIL_TOOLS_ENABLED`；挂载时注入 `UTIL_INSTRUCTIONS`。
 - 薄评测框架：`agent_api.eval.runner` + `seed/util/foundation_eval.json`（`foundation-util-v1`）；pytest 覆盖 golden 与挂载/禁用；knowledge P0 暂未迁移到该 runner。
-- 工具调用行 UI：折叠行改为线框 SVG + 英文 `toolName` + 关键参数，副行状态（执行中/已完成/失败/待审批）；过程组外壳与组外模型总结保留。
+- 工具调用行 UI：折叠行改为线框 SVG + 英文 `toolName` + 关键参数，副行状态（执行中/已完成/失败/待审批）。
+- 助手回合统一气泡：thinking、工具行与最终文字同处一个 `agentos-message-assistant`；去掉气泡外「处理中/已处理」过程组；HITL 审批条仍在泡外。
 
 ## 验证
 
