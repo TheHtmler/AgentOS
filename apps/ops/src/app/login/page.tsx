@@ -25,7 +25,7 @@ export default function LoginPage() {
         setError(body?.detail ?? `登录失败（${response.status}）`);
         return;
       }
-      router.replace("/knowledge");
+      router.replace("/");
       router.refresh();
     } catch {
       setError("无法连接运营后台服务");
