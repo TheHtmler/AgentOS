@@ -42,9 +42,8 @@ select {
 .shell {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 28px 20px calc(48px + env(safe-area-inset-bottom, 0px));
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding: 16px max(16px, env(safe-area-inset-right, 0px))
+    calc(48px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
 }
 
 .topbar {
@@ -55,8 +54,12 @@ select {
   margin-bottom: 20px;
 }
 
+.topbar button {
+  flex-shrink: 0;
+}
+
 .brand {
-  font-size: 1.35rem;
+  font-size: 1.2rem;
   font-weight: 650;
   letter-spacing: 0.02em;
 }
@@ -68,7 +71,7 @@ select {
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  padding: 20px;
+  padding: 14px;
 }
 
 .stack {
@@ -174,8 +177,11 @@ th {
   width: min(420px, 100%);
 }
 
-.doc-list {
-  display: none;
+/* Mobile-first: cards by default. Table only on wide + hover-capable desktops.
+   Phones with “Request Desktop Website” often get a wide viewport but hover:none. */
+.doc-list,
+.snap-list {
+  display: grid;
   gap: 12px;
 }
 
@@ -190,6 +196,7 @@ th {
 .doc-card__title {
   font-weight: 600;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .doc-card__meta {
@@ -204,11 +211,6 @@ th {
   gap: 8px;
 }
 
-.snap-list {
-  display: none;
-  gap: 8px;
-}
-
 .snap-card {
   border: 1px solid var(--line);
   background: #fff;
@@ -219,36 +221,29 @@ th {
 }
 
 .desktop-only {
-  display: block;
+  display: none;
 }
 
-@media (max-width: 768px) {
+@media (min-width: 900px) and (hover: hover) and (pointer: fine) {
   .shell {
-    padding-top: 16px;
+    padding-top: 28px;
+    padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px));
   }
 
   .brand {
-    font-size: 1.2rem;
+    font-size: 1.35rem;
   }
 
   .panel {
-    padding: 14px;
-  }
-
-  .topbar button {
-    flex-shrink: 0;
-  }
-
-  .desktop-only {
-    display: none;
+    padding: 20px;
   }
 
   .doc-list,
   .snap-list {
-    display: grid;
+    display: none;
   }
 
-  table {
-    min-width: 0;
+  .desktop-only {
+    display: block;
   }
 }
