@@ -276,6 +276,47 @@ th {
   gap: 8px;
 }
 
+.ops-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px max(12px, env(safe-area-inset-right, 0px)) 10px
+    max(12px, env(safe-area-inset-left, 0px));
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  position: sticky;
+  top: 57px;
+  z-index: 15;
+}
+
+.ops-tab {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  font-size: 0.92rem;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ops-tab.is-active {
+  border-color: var(--line);
+  background: #fff;
+  font-weight: 600;
+}
+
+.ops-tab.is-soon {
+  color: var(--muted);
+}
+
+.ops-tab em {
+  font-style: normal;
+  font-size: 0.7rem;
+}
+
 .ops-subject {
   max-width: 120px;
   overflow: hidden;
@@ -446,11 +487,16 @@ button.secondary.is-selected {
 @media (min-width: 900px) and (hover: hover) and (pointer: fine) {
   .ops-frame {
     grid-template-columns: 220px 1fr;
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto auto 1fr;
   }
 
-  .ops-top {
+  .ops-top,
+  .ops-tabs {
     grid-column: 1 / -1;
+  }
+
+  .ops-tabs {
+    top: 57px;
   }
 
   .ops-menu-btn {
@@ -463,11 +509,11 @@ button.secondary.is-selected {
 
   .ops-nav {
     position: sticky;
-    top: 57px;
-    height: calc(100dvh - 57px);
+    top: 105px;
+    height: calc(100dvh - 105px);
     transform: none;
     width: auto;
-    grid-row: 2;
+    grid-row: 3;
   }
 
   .ops-nav-head button {
@@ -476,7 +522,7 @@ button.secondary.is-selected {
 
   .ops-main {
     grid-column: 2;
-    grid-row: 2;
+    grid-row: 3;
     padding: 24px 28px 48px;
   }
 

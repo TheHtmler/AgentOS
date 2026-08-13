@@ -55,6 +55,19 @@ export function OpsShell({
         </div>
       </header>
 
+      <nav className="ops-tabs" aria-label="主导航">
+        {NAV.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`ops-tab ${isActive(item.href) ? "is-active" : ""} ${item.soon ? "is-soon" : ""}`}
+          >
+            {item.label}
+            {item.soon ? <em>后续</em> : null}
+          </Link>
+        ))}
+      </nav>
+
       {open ? (
         <button
           type="button"
