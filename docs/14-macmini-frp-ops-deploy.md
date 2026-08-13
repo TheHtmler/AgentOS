@@ -45,7 +45,27 @@ remotePort = 13001
 
 重启 frpc 后，在云服务器上确认 `13001`（或你选的端口）在听。
 
-## 3. Agent API（Mac mini）
+## 3. 一键部署（推荐）
+
+Mac mini 仓库根目录：
+
+```bash
+# 首次安装 launchd（api / web / ops；会替换占位符并启动）
+./scripts/install-launchd.sh
+
+# 日常：pull + uv sync + migrate + build web/ops + kickstart
+./scripts/macmini-deploy.sh
+
+# 只更某一侧
+./scripts/macmini-deploy.sh api
+./scripts/macmini-deploy.sh web ops
+./scripts/macmini-deploy.sh --no-pull ops
+```
+
+默认 launchd 名：`com.local.agentos-api` / `com.local.agentos-web` / `com.local.agentos-ops`。  
+若你本机 API 的 Label 不同，可：`AGENTOS_API_LABEL=你的label ./scripts/macmini-deploy.sh api`。
+
+## 4. Agent API 环境（Mac mini）
 
 `services/agent-api/.env` 最简单这样写：
 
@@ -55,48 +75,18 @@ OPS_ROOT_PASSWORD=你的简单密码
 OPS_SESSION_TTL_HOURS=12
 ```
 
-（可选）也可用 `OPS_ROOT_PASSWORD_HASH`（Argon2id）；两者都设时以 hash 为准。
-
-然后：
-
-```bash
-cd /path/to/AgentOS && git pull
-uv run --directory services/agent-api alembic upgrade head
-# 按你平时方式重启 agent-api（确保 OPS_* 已加载）
-```
-
-## 4. Ops Next + launchd（Mac mini）
-
-首次：
-
-```bash
-cd /path/to/AgentOS
-git pull
-pnpm --filter ops install
-# apps/ops/.env.local → AGENT_API_BASE_URL=http://127.0.0.1:8000
-pnpm --filter ops build
-./scripts/install-ops-launchd.sh
-```
-
-`install-ops-launchd.sh` 会把 `__AGENTOS_ROOT__` / `__NODE_BIN__` 写成真实路径并 bootstrap。  
-若 plist 里仍是占位符，launchd 不会真正启动（本机 `:3001` 连不上 → 公网 502）。
-
-日常更新（对齐 web 习惯）：
-
-```bash
-./scripts/macmini-reload-ops.sh
-# 或：
-# git pull && pnpm --filter ops install && pnpm --filter ops build
-# launchctl kickstart -k gui/$(id -u)/com.local.agentos-ops
-```
+（可选）也可用 `OPS_ROOT_PASSWORD_HASH`（Argon2id）；两者都设时以 hash 为准。  
+`apps/web/.env.local` / `apps/ops/.env.local` 建议：`AGENT_API_BASE_URL=http://127.0.0.1:8000`。
 
 本地冒烟：
 
 ```bash
-curl -sS --noproxy '*' http://127.0.0.1:3001/login | head
+curl -sS --noproxy '*' http://127.0.0.1:8000/health
+curl -sS --noproxy '*' -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
+curl -sS --noproxy '*' -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3001/login
 ```
 
-公网：打开 `https://ops-agentos.lemonbabycare.cn/login`，用 ops root 登录。
+公网：`https://agentos.lemonbabycare.cn` / `https://ops-agentos.lemonbabycare.cn/login`。
 
 ## 5. 注意
 

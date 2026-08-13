@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Prefer: ./scripts/install-launchd.sh web
+  Daily: ./scripts/macmini-deploy.sh
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.agentos-web</string>
+  <key>WorkingDirectory</key>
+  <string>__AGENTOS_ROOT__/apps/web</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE_BIN__</string>
+    <string>__AGENTOS_ROOT__/apps/web/node_modules/next/dist/bin/next</string>
+    <string>start</string>
+    <string>-H</string>
+    <string>127.0.0.1</string>
+    <string>-p</string>
+    <string>3000</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>PORT</key>
+    <string>3000</string>
+    <key>HOSTNAME</key>
+    <string>127.0.0.1</string>
+    <key>AGENT_API_BASE_URL</key>
+    <string>http://127.0.0.1:8000</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/agentos-web.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/agentos-web.err.log</string>
+</dict>
+</plist>

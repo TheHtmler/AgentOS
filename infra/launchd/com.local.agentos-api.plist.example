@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Prefer: ./scripts/install-launchd.sh api
+  Requires uv on PATH (Homebrew). Loads services/agent-api/.env via Settings.
+  Daily: ./scripts/macmini-deploy.sh
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.agentos-api</string>
+  <key>WorkingDirectory</key>
+  <string>__AGENTOS_ROOT__/services/agent-api</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__UV_BIN__</string>
+    <string>run</string>
+    <string>--directory</string>
+    <string>__AGENTOS_ROOT__/services/agent-api</string>
+    <string>uvicorn</string>
+    <string>agent_api.main:app</string>
+    <string>--host</string>
+    <string>127.0.0.1</string>
+    <string>--port</string>
+    <string>8000</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/agentos-api.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/agentos-api.err.log</string>
+</dict>
+</plist>
