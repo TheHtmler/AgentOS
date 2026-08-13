@@ -1001,53 +1001,89 @@ body {
   animation: agentos-thinking-pulse 1.2s ease-in-out infinite;
 }
 
-/* ── Tool call (compact Codex-style row) ── */
+/* ── Tool call (icon + toolName + key params) ── */
 .agentos-tool-call {
   overflow: hidden;
   border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
+  border-radius: 8px;
+  background: var(--panel-muted);
   box-shadow: none;
 }
 
 .agentos-tool-call-toggle {
   display: flex;
   width: 100%;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.35rem 0.5rem;
+  padding: 0.45rem 0.65rem;
   color: var(--text-secondary);
   text-align: left;
 }
 
-.agentos-tool-call-title {
+.agentos-tool-call-main {
   display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
+  align-items: flex-start;
+  gap: 0.5rem;
   min-width: 0;
   flex: 1 1 auto;
-  font-size: 0.8125rem;
-  font-weight: 450;
 }
 
 .agentos-tool-call-icon {
+  display: inline-flex;
   flex-shrink: 0;
-  font-size: 0.85rem;
-  line-height: 1;
-  opacity: 0.9;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.1rem;
+  color: var(--text-secondary);
+  opacity: 0.95;
+}
+
+.agentos-tool-call-text {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.1rem;
 }
 
 .agentos-tool-call-headline {
+  display: flex;
   min-width: 0;
+  align-items: baseline;
+  gap: 0.45rem;
   overflow: hidden;
   color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.agentos-tool-call-name {
+  flex-shrink: 0;
+  color: var(--text);
+  font-weight: 600;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.78rem;
+}
+
+.agentos-tool-call-param {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.agentos-tool-call-status {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+
 .agentos-tool-call-state {
   flex-shrink: 0;
+  margin-top: 0.15rem;
   color: var(--muted);
   font-size: 0.7rem;
   opacity: 0.7;
@@ -1079,11 +1115,16 @@ body {
   font-weight: 600;
 }
 
-.agentos-tool-call-running .agentos-tool-call-headline {
+.agentos-tool-call-running .agentos-tool-call-name {
   color: var(--text);
 }
 
-.agentos-tool-call-error .agentos-tool-call-headline {
+.agentos-tool-call-running .agentos-tool-call-status {
+  color: var(--text-secondary);
+}
+
+.agentos-tool-call-error .agentos-tool-call-name,
+.agentos-tool-call-error .agentos-tool-call-status {
   color: var(--danger);
 }
 

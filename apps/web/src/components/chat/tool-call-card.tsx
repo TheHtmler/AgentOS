@@ -1,5 +1,7 @@
 "use client";
 
+import { ToolIcon } from "./tool-icons";
+
 export type ToolCallStatus = "running" | "done" | "error" | "awaiting_approval";
 
 export type ToolCallState = {
@@ -23,7 +25,12 @@ function stringField(record: Record<string, unknown>, key: string): string | nul
   return trimmed || null;
 }
 
-function queryFromArgsText(argsText: string): string | null {
+function numberField(record: Record<string, unknown>, key: string): number | null {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function parseArgsRecord(argsText: string): Record<string, unknown> | null {
   const trimmed = argsText.trim();
   if (!trimmed) {
     return null;
@@ -32,7 +39,7 @@ function queryFromArgsText(argsText: string): string | null {
   try {
     const parsed = JSON.parse(trimmed) as unknown;
     if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      return stringField(parsed as Record<string, unknown>, "query");
+      return parsed as Record<string, unknown>;
     }
   } catch {
     // Args may still be a partial JSON fragment while streaming.
@@ -41,22 +48,14 @@ function queryFromArgsText(argsText: string): string | null {
   return null;
 }
 
+function queryFromArgsText(argsText: string): string | null {
+  const record = parseArgsRecord(argsText);
+  return record ? stringField(record, "query") : null;
+}
+
 function urlFromArgsText(argsText: string): string | null {
-  const trimmed = argsText.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      return stringField(parsed as Record<string, unknown>, "url");
-    }
-  } catch {
-    // Args may still be a partial JSON fragment while streaming.
-  }
-
-  return null;
+  const record = parseArgsRecord(argsText);
+  return record ? stringField(record, "url") : null;
 }
 
 function shortUrl(url: string): string {
@@ -70,7 +69,7 @@ function shortUrl(url: string): string {
   }
 }
 
-function truncate(text: string, max = 48): string {
+function truncate(text: string, max = 56): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (normalized.length <= max) {
     return normalized;
@@ -78,62 +77,106 @@ function truncate(text: string, max = 48): string {
   return `${normalized.slice(0, max - 1)}…`;
 }
 
-function toolIcon(toolName: string): string {
-  if (toolName === "web_search") {
-    return "🌐";
+function firstShortStringField(record: Record<string, unknown>): string | null {
+  for (const value of Object.values(record)) {
+    if (typeof value === "string" && value.trim()) {
+      return truncate(value.trim(), 40);
+    }
   }
-  if (toolName === "fetch_url") {
-    return "📄";
-  }
-  return "⚙";
+  return null;
 }
 
-/**
- * Single-line Codex-style status: 正在… / 已… (+ short target).
- * Keep verb phrases tool-specific so the row reads as an action log, not a card title.
- */
+/** Key parameter snippet for the collapsed row (toolName stays separate). */
+export function toolCallKeyParam(toolCall: ToolCallState): string | null {
+  const record = parseArgsRecord(toolCall.argsText);
+  if (!record) {
+    return toolCall.argsText.trim() ? "…" : null;
+  }
+
+  const name = toolCall.toolName;
+
+  if (name === "web_search" || name === "knowledge_search") {
+    const query = stringField(record, "query");
+    return query ? truncate(query) : null;
+  }
+
+  if (name === "fetch_url") {
+    const url = stringField(record, "url");
+    return url ? shortUrl(url) : null;
+  }
+
+  if (name === "read_artifact") {
+    const id = stringField(record, "artifact_id");
+    return id ? truncate(id, 36) : null;
+  }
+
+  if (name === "calculate") {
+    const expression = stringField(record, "expression");
+    return expression ? truncate(expression) : null;
+  }
+
+  if (name === "time_diff") {
+    const start = stringField(record, "start");
+    if (!start) {
+      return null;
+    }
+    const end = stringField(record, "end");
+    return truncate(`${start} → ${end ?? "now"}`);
+  }
+
+  if (name === "growth_assess") {
+    const parts: string[] = [];
+    const sex = stringField(record, "sex");
+    if (sex) {
+      parts.push(sex);
+    }
+    const age = numberField(record, "age_months");
+    if (age !== null) {
+      parts.push(`${age}mo`);
+    }
+    const height = numberField(record, "height_cm");
+    if (height !== null) {
+      parts.push(`${height}cm`);
+    }
+    const weight = numberField(record, "weight_kg");
+    if (weight !== null) {
+      parts.push(`${weight}kg`);
+    }
+    return parts.length > 0 ? truncate(parts.join(" · ")) : null;
+  }
+
+  if (name.startsWith("case_")) {
+    return firstShortStringField(record);
+  }
+
+  const query = stringField(record, "query");
+  if (query) {
+    return truncate(query);
+  }
+  const url = stringField(record, "url");
+  if (url) {
+    return shortUrl(url);
+  }
+  return firstShortStringField(record);
+}
+
+export function toolCallStatusLabel(status: ToolCallStatus): string {
+  if (status === "running") {
+    return "执行中…";
+  }
+  if (status === "awaiting_approval") {
+    return "待审批";
+  }
+  if (status === "error") {
+    return "失败";
+  }
+  return "已完成";
+}
+
+/** @deprecated Prefer toolCallKeyParam + toolName; kept for any external imports. */
 export function toolCallHeadline(toolCall: ToolCallState): string {
-  const query = queryFromArgsText(toolCall.argsText);
-  const url = urlFromArgsText(toolCall.argsText);
-
-  if (toolCall.toolName === "web_search") {
-    if (toolCall.status === "running") {
-      return query ? `正在搜索网页：${truncate(query)}` : "正在搜索网页…";
-    }
-    if (toolCall.status === "awaiting_approval") {
-      return query ? `等待审批搜索：${truncate(query)}` : "等待审批搜索…";
-    }
-    if (toolCall.status === "error") {
-      return query ? `搜索网页失败：${truncate(query)}` : "搜索网页失败";
-    }
-    return query ? `已搜索网页：${truncate(query)}` : "已完成搜索";
-  }
-
-  if (toolCall.toolName === "fetch_url") {
-    const target = url ? shortUrl(url) : null;
-    if (toolCall.status === "running") {
-      return target ? `正在读取：${target}` : "正在读取网页…";
-    }
-    if (toolCall.status === "awaiting_approval") {
-      return target ? `等待审批读取：${target}` : "等待审批读取…";
-    }
-    if (toolCall.status === "error") {
-      return target ? `读取失败：${target}` : "读取网页失败";
-    }
-    return target ? `已读取：${target}` : "已完成读取";
-  }
-
-  // Future tools (file/edit/shell) can plug verb maps here.
-  if (toolCall.status === "running") {
-    return `正在调用 ${toolCall.toolName}…`;
-  }
-  if (toolCall.status === "awaiting_approval") {
-    return `等待审批 ${toolCall.toolName}…`;
-  }
-  if (toolCall.status === "error") {
-    return `${toolCall.toolName} 失败`;
-  }
-  return `已完成 ${toolCall.toolName}`;
+  const param = toolCallKeyParam(toolCall);
+  return param ? `${toolCall.toolName}  ${param}` : toolCall.toolName;
 }
 
 export function ToolCallCard({
@@ -145,7 +188,10 @@ export function ToolCallCard({
 }) {
   const query = queryFromArgsText(toolCall.argsText);
   const url = urlFromArgsText(toolCall.argsText);
-  const headline = toolCallHeadline(toolCall);
+  const expression = stringField(parseArgsRecord(toolCall.argsText) ?? {}, "expression");
+  const keyParam = toolCallKeyParam(toolCall);
+  const statusLabel = toolCallStatusLabel(toolCall.status);
+  const title = keyParam ? `${toolCall.toolName} ${keyParam}` : toolCall.toolName;
 
   return (
     <section
@@ -158,13 +204,19 @@ export function ToolCallCard({
         onClick={onToggle}
         aria-expanded={toolCall.expanded}
         className="agentos-tool-call-toggle"
-        title={headline}
+        title={title}
       >
-        <span className="agentos-tool-call-title">
-          <span aria-hidden="true" className="agentos-tool-call-icon">
-            {toolIcon(toolCall.toolName)}
+        <span className="agentos-tool-call-main">
+          <span className="agentos-tool-call-icon" aria-hidden="true">
+            <ToolIcon toolName={toolCall.toolName} />
           </span>
-          <span className="agentos-tool-call-headline">{headline}</span>
+          <span className="agentos-tool-call-text">
+            <span className="agentos-tool-call-headline">
+              <span className="agentos-tool-call-name">{toolCall.toolName}</span>
+              {keyParam ? <span className="agentos-tool-call-param">{keyParam}</span> : null}
+            </span>
+            <span className="agentos-tool-call-status">{statusLabel}</span>
+          </span>
         </span>
         <span className="agentos-tool-call-state" aria-hidden="true">
           {toolCall.expanded ? "▾" : "▸"}
@@ -185,7 +237,13 @@ export function ToolCallCard({
               {url}
             </p>
           ) : null}
-          {toolCall.argsText.trim() && !query && !url ? (
+          {expression ? (
+            <p>
+              <span className="agentos-tool-call-label">expression</span>
+              {expression}
+            </p>
+          ) : null}
+          {toolCall.argsText.trim() && !query && !url && !expression ? (
             <pre>{toolCall.argsText.trim()}</pre>
           ) : null}
           {toolCall.provider ? (
