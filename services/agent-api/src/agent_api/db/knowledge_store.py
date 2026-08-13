@@ -13,7 +13,12 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.config import get_settings
-from agent_api.db.models import KnowledgeBase, KnowledgeChunk, KnowledgeDocument
+from agent_api.db.models import (
+    KnowledgeBase,
+    KnowledgeChunk,
+    KnowledgeDocument,
+    KnowledgeDocumentSnapshot,
+)
 from agent_api.memory.embed import embed_text
 
 logger = logging.getLogger(__name__)
@@ -123,6 +128,43 @@ async def upsert_mma_pa_knowledge(
             document = KnowledgeDocument(id=document_id, **fields)
             session.add(document)
         else:
+            existing_chunks = list(
+                await session.scalars(
+                    select(KnowledgeChunk)
+                    .where(KnowledgeChunk.document_id == document_id)
+                    .order_by(KnowledgeChunk.chunk_index),
+                ),
+            )
+            if existing_chunks:
+                session.add(
+                    KnowledgeDocumentSnapshot(
+                        document_id=document_id,
+                        version_label=document.version_label,
+                        payload={
+                            "document": {
+                                "slug": document.slug,
+                                "title": document.title,
+                                "source_url": document.source_url,
+                                "source_label": document.source_label,
+                                "source_kind": document.source_kind,
+                                "source_date": document.source_date,
+                                "version_label": document.version_label,
+                                "review_status": document.review_status,
+                            },
+                            "chunks": [
+                                {
+                                    "chunk_index": chunk.chunk_index,
+                                    "title": chunk.title,
+                                    "content": chunk.content,
+                                    "section_label": chunk.section_label,
+                                    "tags": list(chunk.tags or []),
+                                }
+                                for chunk in existing_chunks
+                            ],
+                        },
+                        created_by="system",
+                    ),
+                )
             for key, value in fields.items():
                 setattr(document, key, value)
 

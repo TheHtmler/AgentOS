@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     auth_session_ttl_days: int = 30
     auth_invite_ttl_minutes: int = 1_440
     auth_admin_emails: str = ""
+    # Ops console root (env-seeded; independent from AUTH_ADMIN_EMAILS / invite users).
+    ops_root_username: str = "admin"
+    # Argon2id hash from pwdlib PasswordHash.recommended(); empty disables ops login.
+    ops_root_password_hash: str = ""
+    ops_session_ttl_hours: int = 12
     web_app_origin: str = "http://127.0.0.1:3000"
     database_url: str
     search_enabled: bool = True

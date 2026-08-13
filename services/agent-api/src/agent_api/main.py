@@ -5,6 +5,8 @@ from agent_api.api.agents import router as agents_router
 from agent_api.api.auth import router as auth_router
 from agent_api.api.cases import router as cases_router
 from agent_api.api.chat import router as chat_router
+from agent_api.api.ops_auth import router as ops_auth_router
+from agent_api.api.ops_knowledge import router as ops_knowledge_router
 from agent_api.api.runs import router as runs_router
 from agent_api.api.threads import router as threads_router
 from agent_api.runtime import lifespan
@@ -23,6 +25,8 @@ app.include_router(cases_router)
 app.include_router(threads_router)
 app.include_router(runs_router)
 app.include_router(auth_router)
+app.include_router(ops_auth_router)
+app.include_router(ops_knowledge_router)
 
 
 @app.get("/health", tags=["system"])
