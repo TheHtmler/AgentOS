@@ -1,6 +1,6 @@
 # 实施进度
 
-最后更新：2026-08-13（运营后台 + 知识审核）
+最后更新：2026-08-13（Ops 管理台第一期：壳子 / 知识详情 / Agents）
 
 ## 当前状态
 
@@ -98,6 +98,7 @@
 - 运营后台竖切：`apps/ops`（`:3001`）+ `/v1/ops/*`；env 种子 root（`OPS_ROOT_*`）与独立 `ops_sessions` Cookie；知识文档列表 / PATCH `review_status` / 只读快照；seed upsert 前写入 `knowledge_document_snapshots`；迁移 `l8m9n0o1p2q3`。
 - Ops 公网部署模板：`ops-agentos.lemonbabycare.cn` + FRP `:3001` + launchd `com.local.agentos-ops`（见 `docs/14-macmini-frp-ops-deploy.md`、`infra/launchd|frpc|nginx`）。
 - Mac mini 一键脚本：`scripts/macmini-deploy.sh`（pull / sync / migrate / build / kickstart）、`scripts/install-launchd.sh`（api/web/ops plist）。
+- Ops 管理台第一期：侧栏壳子 + 概览统计；知识详情（chunks / 元数据 PATCH / 快照 payload）；Agent 列表与启停/默认；MCP·Skills·Sessions 占位页。
 - 工具调用行 UI：折叠行改为线框 SVG + 英文 `toolName` + 关键参数，副行状态（执行中/已完成/失败/待审批）。
 - 助手回合统一气泡：thinking、工具行与最终文字同处一个 `agentos-message-assistant`；去掉气泡外「处理中/已处理」过程组；HITL 审批条仍在泡外。
 

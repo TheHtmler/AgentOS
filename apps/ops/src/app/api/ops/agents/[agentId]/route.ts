@@ -6,25 +6,11 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type RouteContext = {
-  params: Promise<{ documentId: string }>;
+  params: Promise<{ agentId: string }>;
 };
 
-export async function GET(request: Request, context: RouteContext) {
-  const { documentId } = await context.params;
-  try {
-    const upstream = await fetch(`${agentApiBaseUrl()}/v1/ops/knowledge/documents/${documentId}`, {
-      headers: await opsSessionHeaders(),
-      cache: "no-store",
-      signal: request.signal,
-    });
-    return proxyUpstreamResponse(upstream);
-  } catch {
-    return NextResponse.json({ error: "agent_api_unavailable" }, { status: 503 });
-  }
-}
-
 export async function PATCH(request: Request, context: RouteContext) {
-  const { documentId } = await context.params;
+  const { agentId } = await context.params;
   let payload: unknown;
   try {
     payload = await request.json();
@@ -33,7 +19,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   try {
-    const upstream = await fetch(`${agentApiBaseUrl()}/v1/ops/knowledge/documents/${documentId}`, {
+    const upstream = await fetch(`${agentApiBaseUrl()}/v1/ops/agents/${agentId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",

@@ -1,7 +1,7 @@
 # Ops 管理台第一期：壳子 + 知识加深 + Agent 基础
 
 日期：2026-08-13  
-状态：draft  
+状态：已实现  
 前置：`2026-08-13-ops-console-knowledge-design.md`（已实现：ops 认证、知识列表 / review_status、只读快照列表、apps/ops 部署）
 
 ## 背景

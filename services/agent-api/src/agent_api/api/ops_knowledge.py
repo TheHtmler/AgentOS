@@ -1,13 +1,13 @@
-"""Ops knowledge admin: list documents, patch review_status, list snapshots."""
+"""Ops knowledge admin: list/detail documents, patch metadata, snapshots."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
 from agent_api.api.ops_auth import get_ops_subject
@@ -22,6 +22,7 @@ from agent_api.db.session import session_factory
 router = APIRouter(prefix="/v1/ops/knowledge", tags=["ops-knowledge"])
 
 ReviewStatus = Literal["curated", "clinically_reviewed", "withdrawn"]
+SourceKind = Literal["official_reference", "clinical_guideline", "curated_summary"]
 
 
 class KnowledgeBaseOut(BaseModel):
@@ -53,8 +54,33 @@ class KnowledgeDocumentListResponse(BaseModel):
     documents: list[KnowledgeDocumentOut]
 
 
-class PatchReviewRequest(BaseModel):
-    review_status: ReviewStatus
+class KnowledgeChunkOut(BaseModel):
+    id: UUID
+    chunk_index: int
+    title: str
+    content: str
+    section_label: str | None
+    tags: list[str]
+
+
+class KnowledgeDocumentDetailOut(KnowledgeDocumentOut):
+    chunks: list[KnowledgeChunkOut]
+
+
+class PatchDocumentRequest(BaseModel):
+    review_status: ReviewStatus | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=256)
+    version_label: str | None = Field(default=None, max_length=128)
+    source_kind: SourceKind | None = None
+    source_label: str | None = Field(default=None, max_length=256)
+    source_url: str | None = None
+    source_date: str | None = Field(default=None, max_length=32)
+
+    @model_validator(mode="after")
+    def require_at_least_one_field(self) -> PatchDocumentRequest:
+        if not self.model_dump(exclude_unset=True):
+            raise ValueError("At least one field is required")
+        return self
 
 
 class SnapshotOut(BaseModel):
@@ -66,6 +92,35 @@ class SnapshotOut(BaseModel):
 
 class SnapshotListResponse(BaseModel):
     snapshots: list[SnapshotOut]
+
+
+class SnapshotDetailOut(SnapshotOut):
+    payload: dict[str, Any]
+
+
+def _document_out(doc: KnowledgeDocument, chunk_count: int) -> KnowledgeDocumentOut:
+    return KnowledgeDocumentOut(
+        id=doc.id,
+        slug=doc.slug,
+        title=doc.title,
+        source_kind=doc.source_kind,
+        source_url=doc.source_url,
+        source_label=doc.source_label,
+        source_date=doc.source_date,
+        version_label=doc.version_label,
+        review_status=doc.review_status,
+        reviewed_at=doc.reviewed_at,
+        chunk_count=chunk_count,
+    )
+
+
+async def _chunk_count(session: Any, document_id: UUID) -> int:
+    count = await session.scalar(
+        select(func.count())
+        .select_from(KnowledgeChunk)
+        .where(KnowledgeChunk.document_id == document_id),
+    )
+    return int(count or 0)
 
 
 @router.get("/bases", response_model=KnowledgeBaseListResponse)
@@ -91,7 +146,8 @@ async def list_knowledge_documents(
         kb = await session.scalar(select(KnowledgeBase).where(KnowledgeBase.slug == base))
         if kb is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge base not found"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Knowledge base not found",
             )
 
         chunk_count = (
@@ -109,21 +165,39 @@ async def list_knowledge_documents(
         rows = result.all()
 
     return KnowledgeDocumentListResponse(
-        documents=[
-            KnowledgeDocumentOut(
-                id=doc.id,
-                slug=doc.slug,
-                title=doc.title,
-                source_kind=doc.source_kind,
-                source_url=doc.source_url,
-                source_label=doc.source_label,
-                source_date=doc.source_date,
-                version_label=doc.version_label,
-                review_status=doc.review_status,
-                reviewed_at=doc.reviewed_at,
-                chunk_count=int(count or 0),
+        documents=[_document_out(doc, int(count or 0)) for doc, count in rows],
+    )
+
+
+@router.get("/documents/{document_id}", response_model=KnowledgeDocumentDetailOut)
+async def get_knowledge_document(
+    document_id: UUID,
+    _subject: Annotated[str, Depends(get_ops_subject)],
+) -> KnowledgeDocumentDetailOut:
+    async with session_factory() as session:
+        document = await session.get(KnowledgeDocument, document_id)
+        if document is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+        chunks = list(
+            await session.scalars(
+                select(KnowledgeChunk)
+                .where(KnowledgeChunk.document_id == document_id)
+                .order_by(KnowledgeChunk.chunk_index),
+            ),
+        )
+        base = _document_out(document, len(chunks))
+    return KnowledgeDocumentDetailOut(
+        **base.model_dump(),
+        chunks=[
+            KnowledgeChunkOut(
+                id=chunk.id,
+                chunk_index=chunk.chunk_index,
+                title=chunk.title,
+                content=chunk.content,
+                section_label=chunk.section_label,
+                tags=list(chunk.tags or []),
             )
-            for doc, count in rows
+            for chunk in chunks
         ],
     )
 
@@ -131,35 +205,34 @@ async def list_knowledge_documents(
 @router.patch("/documents/{document_id}", response_model=KnowledgeDocumentOut)
 async def patch_knowledge_document(
     document_id: UUID,
-    payload: PatchReviewRequest,
+    payload: PatchDocumentRequest,
     _subject: Annotated[str, Depends(get_ops_subject)],
 ) -> KnowledgeDocumentOut:
+    updates = payload.model_dump(exclude_unset=True)
     now = datetime.now(UTC)
     async with session_factory() as session, session.begin():
         document = await session.get(KnowledgeDocument, document_id)
         if document is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-        document.review_status = payload.review_status
-        document.reviewed_at = now
+
+        if "review_status" in updates:
+            document.review_status = updates["review_status"]
+            document.reviewed_at = now
+        if "title" in updates and updates["title"] is not None:
+            document.title = updates["title"]
+        if "version_label" in updates:
+            document.version_label = updates["version_label"]
+        if "source_kind" in updates and updates["source_kind"] is not None:
+            document.source_kind = updates["source_kind"]
+        if "source_label" in updates:
+            document.source_label = updates["source_label"]
+        if "source_url" in updates:
+            document.source_url = updates["source_url"]
+        if "source_date" in updates:
+            document.source_date = updates["source_date"]
+
         await session.flush()
-        count = await session.scalar(
-            select(func.count())
-            .select_from(KnowledgeChunk)
-            .where(KnowledgeChunk.document_id == document.id),
-        )
-        out = KnowledgeDocumentOut(
-            id=document.id,
-            slug=document.slug,
-            title=document.title,
-            source_kind=document.source_kind,
-            source_url=document.source_url,
-            source_label=document.source_label,
-            source_date=document.source_date,
-            version_label=document.version_label,
-            review_status=document.review_status,
-            reviewed_at=document.reviewed_at,
-            chunk_count=int(count or 0),
-        )
+        out = _document_out(document, await _chunk_count(session, document.id))
     return out
 
 
@@ -189,4 +262,26 @@ async def list_document_snapshots(
             )
             for row in rows
         ],
+    )
+
+
+@router.get(
+    "/documents/{document_id}/snapshots/{snapshot_id}",
+    response_model=SnapshotDetailOut,
+)
+async def get_document_snapshot(
+    document_id: UUID,
+    snapshot_id: UUID,
+    _subject: Annotated[str, Depends(get_ops_subject)],
+) -> SnapshotDetailOut:
+    async with session_factory() as session:
+        row = await session.get(KnowledgeDocumentSnapshot, snapshot_id)
+        if row is None or row.document_id != document_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found")
+    return SnapshotDetailOut(
+        id=row.id,
+        version_label=row.version_label,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        payload=dict(row.payload),
     )

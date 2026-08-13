@@ -90,10 +90,34 @@ async def test_ops_knowledge_list_patch_and_snapshots(
         await upsert_mma_pa_knowledge(database_session, load_mma_pa_seed())
         await database_session.commit()
 
+        detail = await client.get(f"/v1/ops/knowledge/documents/{document_id}")
+        assert detail.status_code == 200
+        assert detail.json()["chunks"]
+        assert detail.json()["slug"]
+
+        meta = await client.patch(
+            f"/v1/ops/knowledge/documents/{document_id}",
+            json={"title": "Ops patched title", "version_label": "ops-test"},
+        )
+        assert meta.status_code == 200
+        assert meta.json()["title"] == "Ops patched title"
+        assert meta.json()["version_label"] == "ops-test"
+
         snaps = await client.get(f"/v1/ops/knowledge/documents/{document_id}/snapshots")
         assert snaps.status_code == 200
         assert snaps.json()["snapshots"]
         assert snaps.json()["snapshots"][0]["created_by"] == "system"
+        snap_id = snaps.json()["snapshots"][0]["id"]
+        snap_detail = await client.get(
+            f"/v1/ops/knowledge/documents/{document_id}/snapshots/{snap_id}",
+        )
+        assert snap_detail.status_code == 200
+        assert "payload" in snap_detail.json()
+        assert "document" in snap_detail.json()["payload"]
+
+        stats = await client.get("/v1/ops/stats")
+        assert stats.status_code == 200
+        assert stats.json()["knowledge"]["documents_total"] >= 1
 
 
 @pytest.mark.anyio

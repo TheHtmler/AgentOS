@@ -238,12 +238,253 @@ th {
     padding: 20px;
   }
 
-  .doc-list,
-  .snap-list {
+  .doc-list:not(.always),
+  .snap-list:not(.always) {
     display: none;
   }
 
   .desktop-only {
     display: block;
+  }
+}
+
+/* —— Ops shell —— */
+.ops-frame {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+}
+
+.ops-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px max(12px, env(safe-area-inset-right, 0px)) 12px
+    max(12px, env(safe-area-inset-left, 0px));
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.ops-top-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ops-subject {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.ops-menu-btn {
+  display: inline-flex;
+}
+
+.ops-backdrop {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  background: rgb(0 0 0 / 35%);
+  z-index: 30;
+}
+
+.ops-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(280px, 86vw);
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  padding: 16px;
+  z-index: 40;
+  transform: translateX(-105%);
+  transition: transform 0.2s ease;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 16px;
+}
+
+.ops-nav.is-open {
+  transform: translateX(0);
+}
+
+.ops-nav-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ops-nav-list {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.ops-nav-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--tap);
+  padding: 10px 12px;
+  border: 1px solid transparent;
+}
+
+.ops-nav-link.is-active {
+  border-color: var(--line);
+  background: #fff;
+  font-weight: 600;
+}
+
+.ops-nav-link.is-soon {
+  color: var(--muted);
+}
+
+.ops-nav-link em {
+  font-style: normal;
+  font-size: 0.75rem;
+}
+
+.ops-main {
+  padding: 16px max(16px, env(safe-area-inset-right, 0px))
+    calc(32px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.page-title {
+  margin: 8px 0 6px;
+  font-size: 1.3rem;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.stat-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.stat-card {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+}
+
+.stat-card strong {
+  font-size: 1.8rem;
+}
+
+.quick-links {
+  display: grid;
+  gap: 10px;
+}
+
+.quick-link {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-weight: 600;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+button.secondary.is-selected {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.linkish {
+  color: var(--accent);
+}
+
+.chunk-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  max-height: 320px;
+  overflow: auto;
+  background: #f7f4ee;
+  padding: 12px;
+  border: 1px solid var(--line);
+}
+
+.pill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+@media (min-width: 900px) and (hover: hover) and (pointer: fine) {
+  .ops-frame {
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .ops-top {
+    grid-column: 1 / -1;
+  }
+
+  .ops-menu-btn {
+    display: none;
+  }
+
+  .ops-backdrop {
+    display: none;
+  }
+
+  .ops-nav {
+    position: sticky;
+    top: 57px;
+    height: calc(100dvh - 57px);
+    transform: none;
+    width: auto;
+    grid-row: 2;
+  }
+
+  .ops-nav-head button {
+    display: none;
+  }
+
+  .ops-main {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 24px 28px 48px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-links {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
