@@ -78,26 +78,21 @@ uv run --directory services/agent-api alembic upgrade head
 cd /path/to/AgentOS
 git pull
 pnpm --filter ops install
-# apps/ops/.env.local
-# AGENT_API_BASE_URL=http://127.0.0.1:8000
+# apps/ops/.env.local → AGENT_API_BASE_URL=http://127.0.0.1:8000
 pnpm --filter ops build
-
-# 从 example 安装 plist（替换 __AGENTOS_ROOT__ / __NODE_BIN__）
-cp infra/launchd/com.local.agentos-ops.plist.example \
-  ~/Library/LaunchAgents/com.local.agentos-ops.plist
-# 编辑占位符后：
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.local.agentos-ops.plist
-# 或旧系统：launchctl load ~/Library/LaunchAgents/com.local.agentos-ops.plist
+./scripts/install-ops-launchd.sh
 ```
+
+`install-ops-launchd.sh` 会把 `__AGENTOS_ROOT__` / `__NODE_BIN__` 写成真实路径并 bootstrap。  
+若 plist 里仍是占位符，launchd 不会真正启动（本机 `:3001` 连不上 → 公网 502）。
 
 日常更新（对齐 web 习惯）：
 
 ```bash
-cd /path/to/AgentOS
-git pull
-pnpm --filter ops install
-pnpm --filter ops build
-launchctl kickstart -k gui/$(id -u)/com.local.agentos-ops
+./scripts/macmini-reload-ops.sh
+# 或：
+# git pull && pnpm --filter ops install && pnpm --filter ops build
+# launchctl kickstart -k gui/$(id -u)/com.local.agentos-ops
 ```
 
 本地冒烟：

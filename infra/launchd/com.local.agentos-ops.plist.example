@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Install on Mac mini (mirror com.local.agentos-web):
+  Do NOT copy this file by hand with placeholders left in place.
+  On Mac mini, from the AgentOS repo:
 
-  1. Copy to ~/Library/LaunchAgents/com.local.agentos-ops.plist
-  2. Replace __AGENTOS_ROOT__ and __NODE_BIN__ (e.g. $(which node) from the same Node used to build)
-  3. Ensure apps/ops/.env.local has AGENT_API_BASE_URL=http://127.0.0.1:8000
-  4. launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.local.agentos-ops.plist
-  5. After rebuild: launchctl kickstart -k gui/$(id -u)/com.local.agentos-ops
+    ./scripts/install-ops-launchd.sh
+
+  That replaces __AGENTOS_ROOT__ / __NODE_BIN__ and bootstraps launchd.
+  Daily rebuild: ./scripts/macmini-reload-ops.sh
 -->
 <plist version="1.0">
 <dict>
