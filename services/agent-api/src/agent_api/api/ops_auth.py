@@ -70,7 +70,7 @@ async def ops_login(payload: OpsLoginRequest, response: Response) -> OpsLoginRes
     except OpsAuthNotConfiguredError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Ops root password is not configured",
+            detail="Ops root password is not configured (set OPS_ROOT_PASSWORD)",
         ) from error
 
     if not ok:

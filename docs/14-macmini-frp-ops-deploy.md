@@ -47,20 +47,15 @@ remotePort = 13001
 
 ## 3. Agent API（Mac mini）
 
-`services/agent-api/.env` 需有：
+`services/agent-api/.env` 最简单这样写：
 
 ```env
 OPS_ROOT_USERNAME=admin
-OPS_ROOT_PASSWORD_HASH=...   # pwdlib Argon2id，勿用明文
+OPS_ROOT_PASSWORD=你的简单密码
 OPS_SESSION_TTL_HOURS=12
 ```
 
-生成哈希：
-
-```bash
-uv run --directory services/agent-api python -c \
-  "from pwdlib import PasswordHash; print(PasswordHash.recommended().hash('你的强密码'))"
-```
+（可选）也可用 `OPS_ROOT_PASSWORD_HASH`（Argon2id）；两者都设时以 hash 为准。
 
 然后：
 

@@ -18,7 +18,7 @@ PASSWORD_HASHER = PasswordHash.recommended()
 
 
 class OpsAuthNotConfiguredError(RuntimeError):
-    """Raised when OPS_ROOT_PASSWORD_HASH is unset."""
+    """Raised when neither OPS_ROOT_PASSWORD nor OPS_ROOT_PASSWORD_HASH is set."""
 
 
 class InvalidOpsCredentialsError(ValueError):
@@ -49,14 +49,20 @@ def verify_ops_root_password(
     """Return True when credentials match the configured env root."""
 
     cfg = settings or get_settings()
-    if not cfg.ops_root_password_hash.strip():
-        raise OpsAuthNotConfiguredError("OPS_ROOT_PASSWORD_HASH is not configured")
+    password_hash = cfg.ops_root_password_hash.strip()
+    plain_password = cfg.ops_root_password
+    if not password_hash and not plain_password:
+        raise OpsAuthNotConfiguredError(
+            "OPS_ROOT_PASSWORD or OPS_ROOT_PASSWORD_HASH is not configured",
+        )
     if username.strip() != cfg.ops_root_username.strip():
         return False
-    try:
-        return PASSWORD_HASHER.verify(password, cfg.ops_root_password_hash.strip())
-    except Exception:  # noqa: BLE001 — invalid hash format → treat as mismatch
-        return False
+    if password_hash:
+        try:
+            return PASSWORD_HASHER.verify(password, password_hash)
+        except Exception:  # noqa: BLE001 — invalid hash format → treat as mismatch
+            return False
+    return secrets.compare_digest(password, plain_password)
 
 
 async def create_ops_session(

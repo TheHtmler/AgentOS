@@ -28,8 +28,8 @@ def _ops_settings(**updates: object):
 
 
 @pytest.mark.anyio
-async def test_ops_login_503_when_password_hash_unset(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _ops_settings(ops_root_password_hash="")
+async def test_ops_login_503_when_password_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _ops_settings(ops_root_password="", ops_root_password_hash="")
     monkeypatch.setattr(ops_auth_api, "get_settings", lambda: settings)
 
     transport = ASGITransport(app=app)
@@ -40,6 +40,27 @@ async def test_ops_login_503_when_password_hash_unset(monkeypatch: pytest.Monkey
         )
 
     assert response.status_code == 503
+
+
+@pytest.mark.anyio
+async def test_ops_login_accepts_plaintext_password(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _ops_settings(
+        ops_root_username="admin",
+        ops_root_password="simple-pass",
+        ops_root_password_hash="",
+    )
+    monkeypatch.setattr(ops_auth_api, "get_settings", lambda: settings)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        login = await client.post(
+            "/v1/ops/login",
+            json={"username": "admin", "password": "simple-pass"},
+        )
+        assert login.status_code == 200
+        client.cookies.set("ops_session", login.json()["session_token"])
+        me = await client.get("/v1/ops/me")
+        assert me.status_code == 200
 
 
 @pytest.mark.anyio

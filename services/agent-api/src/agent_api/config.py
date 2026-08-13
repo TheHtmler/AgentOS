@@ -31,7 +31,9 @@ class Settings(BaseSettings):
     auth_admin_emails: str = ""
     # Ops console root (env-seeded; independent from AUTH_ADMIN_EMAILS / invite users).
     ops_root_username: str = "admin"
-    # Argon2id hash from pwdlib PasswordHash.recommended(); empty disables ops login.
+    # Plain password for small/home deploys. Prefer OPS_ROOT_PASSWORD_HASH when both are set.
+    ops_root_password: str = ""
+    # Argon2id hash from pwdlib PasswordHash.recommended(); used when set.
     ops_root_password_hash: str = ""
     ops_session_ttl_hours: int = 12
     web_app_origin: str = "http://127.0.0.1:3000"
