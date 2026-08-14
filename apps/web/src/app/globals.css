@@ -1533,6 +1533,36 @@ body {
   color: var(--placeholder);
 }
 
+.agentos-upload-button,
+.agentos-upload-chip {
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+  color: var(--text-muted);
+}
+
+.agentos-upload-button {
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    background 150ms ease;
+}
+
+.agentos-upload-button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--panel-muted);
+  color: var(--text);
+}
+
+.agentos-upload-chip {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border-strong));
+  color: var(--accent-dim);
+}
+
+.agentos-upload-notice {
+  color: var(--accent-dim);
+}
+
 .agentos-send-button {
   min-width: 6.4rem;
   border: 1px solid var(--accent-dim);

@@ -2,6 +2,7 @@
 
 import { HttpAgent, type Message } from "@ag-ui/client";
 import {
+  ChangeEvent,
   FormEvent,
   Fragment,
   KeyboardEvent,
@@ -47,6 +48,12 @@ type ThreadHistory = {
   messages: ChatMessage[];
   toolCalls: ToolCallState[];
   latestRun: ThreadLatestRun | null;
+};
+
+type UploadedArtifact = {
+  artifactId: string;
+  title: string;
+  contentChars: number;
 };
 
 function parsePendingInterrupts(value: unknown): PendingInterrupt[] {
@@ -127,6 +134,9 @@ const AUTO_SCROLL_THRESHOLD = 96;
 /** Only show「回到最新」after the user has clearly left the live edge. */
 const SHOW_SCROLL_TO_LATEST_THRESHOLD = 180;
 const MAX_COMPOSER_HEIGHT = 200;
+const MAX_UPLOAD_FILES = 3;
+const UPLOAD_ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp";
+const SUPPORTED_UPLOAD_EXTENSIONS = new Set(["pdf", "png", "jpg", "jpeg", "webp"]);
 
 function isUuid(value: string): boolean {
   const parts = value.split("-");
@@ -144,6 +154,29 @@ function isUuid(value: string): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isSupportedUpload(file: File): boolean {
+  const extension = file.name.toLowerCase().split(".").at(-1);
+  return extension !== undefined && SUPPORTED_UPLOAD_EXTENSIONS.has(extension);
+}
+
+function parseUploadedArtifact(value: unknown): UploadedArtifact | null {
+  if (
+    !isRecord(value) ||
+    typeof value.artifact_id !== "string" ||
+    !isUuid(value.artifact_id) ||
+    typeof value.title !== "string" ||
+    typeof value.content_chars !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    artifactId: value.artifact_id,
+    title: value.title,
+    contentChars: value.content_chars,
+  };
 }
 
 function parseHistoryToolCalls(value: unknown): ToolCallState[] | null {
@@ -435,6 +468,9 @@ export function ChatPanel({
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [approvalRunId, setApprovalRunId] = useState<string | null>(null);
   const [pendingInterrupts, setPendingInterrupts] = useState<PendingInterrupt[]>([]);
+  const [uploadedArtifacts, setUploadedArtifacts] = useState<UploadedArtifact[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
 
   const agentRef = useRef<HttpAgent | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
@@ -453,6 +489,7 @@ export function ChatPanel({
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   isActiveRef.current = isActive;
 
@@ -467,6 +504,15 @@ export function ChatPanel({
   useEffect(() => {
     onAwaitingApprovalChanged?.(pendingInterrupts.length > 0);
   }, [pendingInterrupts, onAwaitingApprovalChanged]);
+
+  useEffect(() => {
+    if (uploadNotice === null || isUploading) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setUploadNotice(null), 4_000);
+    return () => window.clearTimeout(timeout);
+  }, [isUploading, uploadNotice]);
 
   const clearApprovalState = useCallback(() => {
     setApprovalRunId(null);
@@ -757,6 +803,10 @@ export function ChatPanel({
         }
 
         if (isCurrent) {
+          if (history.thread_id !== threadId) {
+            setUploadedArtifacts([]);
+            setUploadNotice(null);
+          }
           agentRef.current = createAgent(history.thread_id, history.messages, agentId);
           setMessages(history.messages);
           setThreadId(history.thread_id);
@@ -944,8 +994,8 @@ export function ChatPanel({
     requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
-  async function sendMessage() {
-    const content = draft.trim();
+  async function sendMessage(contentOverride?: string) {
+    const content = (contentOverride ?? draft).trim();
 
     if (!content || isStreaming || isLoadingHistory || historyLoadFailed) {
       return;
@@ -972,7 +1022,9 @@ export function ChatPanel({
         message.id === userMessageId ? { ...message, createdAt: sentAt } : message,
       );
     });
-    setDraft("");
+    if (contentOverride === undefined) {
+      setDraft("");
+    }
     setError(null);
     setHistoryToolCalls((current) =>
       mergeHistoryToolCalls(current, toolStatesFromTimeline(timelineSteps)),
@@ -1222,6 +1274,87 @@ export function ChatPanel({
     }
   }
 
+  async function handleFileSelection(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const files = Array.from(input.files ?? []);
+    input.value = "";
+
+    if (files.length === 0) {
+      return;
+    }
+
+    if (threadId === null) {
+      setError("请先发送一条消息建立会话，再上传报告。");
+      return;
+    }
+
+    const remainingSlots = MAX_UPLOAD_FILES - uploadedArtifacts.length;
+    if (files.length > remainingSlots) {
+      setError(`每个会话最多上传 ${MAX_UPLOAD_FILES} 份报告，当前还可上传 ${remainingSlots} 份。`);
+      return;
+    }
+
+    const unsupported = files.find((file) => !isSupportedUpload(file));
+    if (unsupported !== undefined) {
+      setError(`不支持“${unsupported.name}”，请选择 PDF、PNG、JPG 或 WebP 文件。`);
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadNotice(`正在上传 ${files.length} 份报告…`);
+    setError(null);
+
+    const uploaded: UploadedArtifact[] = [];
+    const failedNames: string[] = [];
+
+    try {
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("thread_id", threadId);
+
+        try {
+          const response = await fetch("/api/uploads", {
+            method: "POST",
+            body: formData,
+          });
+          const payload: unknown = await response.json();
+          const artifact = response.ok ? parseUploadedArtifact(payload) : null;
+
+          if (artifact === null) {
+            failedNames.push(file.name);
+            continue;
+          }
+
+          uploaded.push(artifact);
+        } catch {
+          failedNames.push(file.name);
+        }
+      }
+
+      if (uploaded.length > 0) {
+        setUploadedArtifacts((current) => [...current, ...uploaded]);
+        const analysisRequest = uploaded
+          .map((artifact) => `请结合知识库解读我上传的报告。artifact_id=${artifact.artifactId}`)
+          .join("\n");
+        setUploadNotice(
+          failedNames.length === 0
+            ? "报告上传成功，已自动发送解读请求。"
+            : `已上传 ${uploaded.length} 份报告，并自动发送解读请求。`,
+        );
+        await sendMessage(analysisRequest);
+      } else {
+        setUploadNotice(null);
+      }
+
+      if (failedNames.length > 0) {
+        setError(`以下报告上传失败：${failedNames.join("、")}。请检查格式或文件大小后重试。`);
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -1242,6 +1375,8 @@ export function ChatPanel({
 
   function startNewConversation() {
     if (!isLoadingHistory) {
+      setUploadedArtifacts([]);
+      setUploadNotice(null);
       onNewConversation();
     }
   }
@@ -1545,6 +1680,27 @@ export function ChatPanel({
         onSubmit={handleSubmit}
         className="agentos-composer border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4"
       >
+        {uploadedArtifacts.length > 0 ? (
+          <div className="mb-2 flex flex-wrap gap-2" aria-label="已上传报告">
+            {uploadedArtifacts.map((artifact) => (
+              <span
+                key={artifact.artifactId}
+                className="agentos-upload-chip inline-flex max-w-full items-center gap-1.5 px-2.5 py-1 text-xs"
+                title={`${artifact.title} · ${artifact.contentChars.toLocaleString()} 字符`}
+              >
+                <span aria-hidden="true">✓</span>
+                <span className="truncate">{artifact.title}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        {uploadNotice !== null ? (
+          <p role="status" aria-live="polite" className="agentos-upload-notice mb-2 text-xs">
+            {uploadNotice}
+          </p>
+        ) : null}
+
         <textarea
           ref={textareaRef}
           aria-label="输入消息"
@@ -1553,6 +1709,7 @@ export function ChatPanel({
           onKeyDown={handleKeyDown}
           disabled={
             isStreaming ||
+            isUploading ||
             isLoadingHistory ||
             historyLoadFailed ||
             pendingInterrupts.length > 0
@@ -1568,14 +1725,57 @@ export function ChatPanel({
         />
 
         <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="agentos-chat-subheading text-xs">
-            {draft.length}/4000 <span className="hidden sm:inline">Shift + Enter 换行</span>
-          </span>
+          <div className="flex min-w-0 items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={UPLOAD_ACCEPT}
+              multiple
+              className="sr-only"
+              onChange={(event) => void handleFileSelection(event)}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={
+                threadId === null ||
+                isStreaming ||
+                isUploading ||
+                isLoadingHistory ||
+                historyLoadFailed ||
+                pendingInterrupts.length > 0 ||
+                uploadedArtifacts.length >= MAX_UPLOAD_FILES
+              }
+              className="agentos-upload-button inline-flex shrink-0 items-center gap-1.5 px-2.5 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40"
+              title={threadId === null ? "请先发送消息建立会话" : "上传 PDF 或图片报告"}
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                className="h-4 w-4"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m18.4 12.6-6.9 6.9a5 5 0 0 1-7.1-7.1l8.2-8.2a3.5 3.5 0 1 1 5 5l-8.2 8.2a2 2 0 1 1-2.8-2.8l7.5-7.5"
+                />
+              </svg>
+              {isUploading ? "上传中…" : "上传报告"}
+            </button>
+            <span className="agentos-chat-subheading truncate text-xs">
+              {uploadedArtifacts.length}/{MAX_UPLOAD_FILES}
+              <span className="hidden sm:inline"> · {draft.length}/4000 · Shift + Enter 换行</span>
+            </span>
+          </div>
 
           <button
             type="submit"
             disabled={
               isLoadingHistory ||
+              isUploading ||
               historyLoadFailed ||
               pendingInterrupts.length > 0 ||
               (!isStreaming && !draft.trim())
