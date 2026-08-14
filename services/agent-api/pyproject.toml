@@ -20,6 +20,7 @@ dependencies = [
     "pydantic-ai[ag-ui]==2.22.0",
     "pydantic-ai-slim[mcp]==2.22.0",
     "pydantic-settings>=2.14.2",
+    "pymupdf>=1.26.3",
     "sqlalchemy>=2.0.51",
     "trafilatura>=2.2.0",
 ]
