@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     knowledge_search_enabled: bool = True
     # Maximum source size accepted by Ops knowledge imports.
     knowledge_import_max_bytes: int = 20_000_000
+    # Chat report uploads: local originals under UPLOAD_ROOT (not object storage).
+    upload_root: Path = SERVICE_ROOT / "data" / "uploads"
+    upload_max_bytes: int = 20_000_000
+    upload_max_files_per_message: int = 3
     # Mac mini PaddleOCR HTTP (knowledge PDF import); loopback preferred.
     ocr_enabled: bool = True
     ocr_base_url: str = "http://127.0.0.1:8787"
@@ -249,6 +253,22 @@ class Settings(BaseSettings):
     def hitl_approval_timeout_seconds_must_be_positive(cls, value: int) -> int:
         if value < 1:
             raise ValueError("hitl_approval_timeout_seconds must be at least 1")
+
+        return value
+
+    @field_validator("upload_max_bytes")
+    @classmethod
+    def upload_max_bytes_must_be_positive(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("upload_max_bytes must be at least 1")
+
+        return value
+
+    @field_validator("upload_max_files_per_message")
+    @classmethod
+    def upload_max_files_per_message_must_be_positive(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("upload_max_files_per_message must be at least 1")
 
         return value
 

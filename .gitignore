@@ -19,6 +19,7 @@ __pycache__/
 htmlcov/
 
 data/
+services/agent-api/data/uploads/
 artifacts/
 workspaces/
 
