@@ -159,6 +159,18 @@ Always include source URLs/PMIDs. These tools are read-only — never treat resu
 individualized prescriptions.
 """
 
+REPORT_ANALYSIS_INSTRUCTIONS = """\
+## Capability: 化验/检查报告解读（用户上传）
+当用户消息含 artifact_id 或注入块出现 Referenced upload artifacts 时：
+1. 先概括报告类型与关键数值；注明 OCR/抽字可能有误，不确定处标「待核对」。
+2. 调用 knowledge_search 检索相关公共知识（如串联质谱、血尿代谢；可带 disease_tags）。
+3. 对照解释；明确区分「知识库依据」与「模型推断」。
+4. 给出教育性解读并附非诊断声明；出现急性/危急线索时建议尽快就医。
+5. 稳定、可归档的指标 → 作为 proposed Case facts，经 case_attribution_confirm /
+   case_slot_collect（HITL）确认后再写入；勿静默覆盖默认档案或他人数据。
+6. 全文较长时调用 read_artifact 分段读取，勿仅凭预览作答。
+"""
+
 CASE_INSTRUCTIONS = """\
 ## Capability: Case archive (default subject)
 A Case profile block is the durable default subject archive for this Agent. It is created
@@ -225,6 +237,7 @@ def build_instructions(
         sections.append(KNOWLEDGE_INSTRUCTIONS.strip())
     if "case_context_read" in mounted_names:
         sections.append(CASE_INSTRUCTIONS.strip())
+        sections.append(REPORT_ANALYSIS_INSTRUCTIONS.strip())
     if any(name.startswith("mcp_") for name in mounted_names):
         sections.append(MCP_INSTRUCTIONS.strip())
     return "\n\n".join(sections)

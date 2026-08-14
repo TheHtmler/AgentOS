@@ -31,6 +31,39 @@ def test_platform_instructions_require_tools_before_refusal() -> None:
     assert "reference standards/charts/guidelines" in SEARCH_INSTRUCTIONS
 
 
+def test_report_analysis_instructions_key_phrases() -> None:
+    from agent_api.agent import REPORT_ANALYSIS_INSTRUCTIONS
+
+    assert "OCR" in REPORT_ANALYSIS_INSTRUCTIONS
+    assert "knowledge_search" in REPORT_ANALYSIS_INSTRUCTIONS
+    assert "非诊断" in REPORT_ANALYSIS_INSTRUCTIONS
+    assert "case_slot_collect" in REPORT_ANALYSIS_INSTRUCTIONS
+    assert "HITL" in REPORT_ANALYSIS_INSTRUCTIONS
+
+
+def test_build_instructions_includes_report_analysis_for_case_enabled() -> None:
+    text = build_instructions(
+        overlay=None,
+        memory_block=None,
+        mounted_names={"case_context_read", "knowledge_search", "read_artifact"},
+    )
+
+    assert "化验/检查报告解读" in text
+    assert "knowledge_search" in text
+    assert "非诊断" in text
+    assert "case_slot_collect" in text
+
+
+def test_build_instructions_omits_report_analysis_without_case_tools() -> None:
+    text = build_instructions(
+        overlay=None,
+        memory_block=None,
+        mounted_names={"knowledge_search", "read_artifact"},
+    )
+
+    assert "化验/检查报告解读" not in text
+
+
 def test_imd_overlay_is_structured_contract() -> None:
     import importlib.util
     from pathlib import Path
