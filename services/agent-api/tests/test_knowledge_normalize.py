@@ -26,7 +26,7 @@ def test_normalize_json_payload_multi_document() -> None:
             {
                 "slug": "doc-b",
                 "title": "Doc B",
-                "source_kind": "imported_text",
+                "source_kind": "official_reference",
                 "chunks": [
                     {
                         "chunk_index": 0,
@@ -45,7 +45,7 @@ def test_normalize_json_payload_multi_document() -> None:
     assert specs[0].title == "Doc A"
     assert specs[0].chunks[0].content == "Content for document A."
     assert specs[1].slug == "doc-b"
-    assert specs[1].source_kind == "imported_text"
+    assert specs[1].source_kind == "official_reference"
 
 
 def test_normalize_json_payload_legacy_single_document() -> None:
@@ -79,7 +79,7 @@ def test_normalize_plain_text_chunks_body_and_source_fields() -> None:
         body="第一段内容这里够长。\n\n第二段内容这里也够长。",
         source_url="https://example.com/article",
         source_label="Example article",
-        source_kind="imported_text",
+        source_kind="official_reference",
     )
 
     assert spec.slug == "ops-import-a"
@@ -87,7 +87,17 @@ def test_normalize_plain_text_chunks_body_and_source_fields() -> None:
     assert len(spec.chunks) >= 2
     assert spec.source_url == "https://example.com/article"
     assert spec.source_label == "Example article"
-    assert spec.source_kind == "imported_text"
+    assert spec.source_kind == "official_reference"
+
+
+def test_normalize_plain_text_defaults_to_curated() -> None:
+    spec = normalize_plain_text(
+        slug="ops-import-defaults",
+        title="默认状态",
+        body="仅一段正文用于校验默认来源与审核字段。",
+    )
+    assert spec.source_kind == "curated_summary"
+    assert spec.review_status == "curated"
 
 
 def test_normalize_plain_text_requires_slug() -> None:

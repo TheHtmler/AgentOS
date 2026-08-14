@@ -73,8 +73,8 @@ def normalize_plain_text(
         chunks=chunk_text(body),
         source_url=source_fields.get("source_url"),
         source_label=source_fields.get("source_label"),
-        source_kind=str(source_fields.get("source_kind", "imported_text")),
+        source_kind=str(source_fields.get("source_kind", "curated_summary")),
         source_date=source_fields.get("source_date"),
         version_label=source_fields.get("version_label"),
-        review_status=str(source_fields.get("review_status", "draft")),
+        review_status=str(source_fields.get("review_status", "curated")),
     )
