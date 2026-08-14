@@ -35,6 +35,7 @@ from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import AgentRuntime
 from agent_api.thread_title import schedule_auto_thread_title
 from agent_api.tools.search.tool import AgentDeps
+from agent_api.uploads.context import load_upload_injection
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ async def continue_run_after_approval(
         prompt = ""
         memory_block = None
         case_block = None
+        upload_block = None
         case_keys: set[str] = set()
         case_id = thread.case_id if thread is not None else None
         settings = get_settings()
@@ -110,6 +112,15 @@ async def continue_run_after_approval(
                     memory_block = format_memory_block(memories, exclude_keys=case_keys)
                 except Exception:
                     logger.exception("memory recall failed; continuing without memories")
+            try:
+                upload_block = await load_upload_injection(
+                    session,
+                    owner_user_id=user_id,
+                    case_id=case_id,
+                    user_text=prompt,
+                )
+            except Exception:
+                logger.exception("upload context failed; continuing without artifact preview")
 
     if thread is None or version is None:
         logger.error("Missing thread for resume run_id=%s", run_id)
@@ -134,6 +145,7 @@ async def continue_run_after_approval(
         tool_policy_overrides=version.tool_policy_overrides,
         memory_block=memory_block,
         case_block=case_block,
+        upload_block=upload_block,
         case_bound=case_id is not None,
     )
 

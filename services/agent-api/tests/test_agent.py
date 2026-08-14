@@ -4,10 +4,11 @@ from agent_api.agent import build_instructions, create_agent, create_ollama_http
 from agent_api.config import Settings
 
 
-def test_build_instructions_appends_overlay_and_memory() -> None:
+def test_build_instructions_appends_overlay_memory_and_upload_context() -> None:
     text = build_instructions(
         overlay="你是育儿顾问。",
         memory_block="## Known user facts\n- [身高] 75cm",
+        upload_block="## Referenced upload artifacts\n### 血液检查",
         mounted_names=set(),
     )
 
@@ -15,6 +16,8 @@ def test_build_instructions_appends_overlay_and_memory() -> None:
     assert "育儿顾问" in text
     assert "Known user facts" in text
     assert "75cm" in text
+    assert "Referenced upload artifacts" in text
+    assert "血液检查" in text
 
 
 def test_platform_instructions_require_tools_before_refusal() -> None:

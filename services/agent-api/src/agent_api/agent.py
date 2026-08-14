@@ -186,6 +186,7 @@ def build_instructions(
     overlay: str | None,
     memory_block: str | None,
     case_block: str | None = None,
+    upload_block: str | None = None,
     mounted_names: set[str],
     timezone_name: str = "Asia/Shanghai",
     locale: str = "zh-CN",
@@ -208,6 +209,8 @@ def build_instructions(
         sections.append(memory_block.strip())
     if case_block and case_block.strip():
         sections.append(case_block.strip())
+    if upload_block and upload_block.strip():
+        sections.append(upload_block.strip())
     if "web_search" in mounted_names:
         sections.append(SEARCH_INSTRUCTIONS.strip())
     if "fetch_url" in mounted_names:
@@ -264,6 +267,7 @@ def create_agent(
     system_prompt_overlay: str | None = None,
     memory_block: str | None = None,
     case_block: str | None = None,
+    upload_block: str | None = None,
     case_bound: bool = False,
     tool_policy_overrides: dict[str, str] | None = None,
     toolsets: list[AbstractToolset[AgentDeps]] | None = None,
@@ -301,6 +305,7 @@ def create_agent(
         overlay=system_prompt_overlay,
         memory_block=memory_block,
         case_block=case_block,
+        upload_block=upload_block,
         mounted_names=mounted_names,
         timezone_name=settings.runtime_timezone,
         locale=settings.runtime_locale,
