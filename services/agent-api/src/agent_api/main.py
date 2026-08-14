@@ -11,6 +11,7 @@ from agent_api.api.ops_knowledge import router as ops_knowledge_router
 from agent_api.api.ops_stats import router as ops_stats_router
 from agent_api.api.runs import router as runs_router
 from agent_api.api.threads import router as threads_router
+from agent_api.api.uploads import router as uploads_router
 from agent_api.runtime import lifespan
 
 app = FastAPI(
@@ -25,6 +26,7 @@ app.include_router(ag_ui_router)
 app.include_router(agents_router)
 app.include_router(cases_router)
 app.include_router(threads_router)
+app.include_router(uploads_router)
 app.include_router(runs_router)
 app.include_router(auth_router)
 app.include_router(ops_auth_router)
