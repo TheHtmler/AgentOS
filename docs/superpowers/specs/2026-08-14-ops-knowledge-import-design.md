@@ -1,7 +1,7 @@
 # Ops 知识库多途径导入（含本地 OCR）
 
 日期：2026-08-14  
-状态：待实现  
+状态：已实现  
 前置：`2026-08-13-ops-admin-shell-knowledge-agents-design.md`（已实现）
 
 ## 背景

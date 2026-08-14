@@ -178,4 +178,12 @@ log "public"
 printf '  web  https://agentos.lemonbabycare.cn/\n'
 printf '  ops  https://ops-agentos.lemonbabycare.cn/\n'
 log "If public ops still shows old UI: purge 宝塔/nginx cache for ops-agentos, then hard-refresh."
+
+if [[ -n "${OCR_BASE_URL:-}" ]]; then
+  ocr_health="${OCR_BASE_URL%/}/health"
+  printf '  ocr  %s => %s\n' "$ocr_health" "$(http_code "$ocr_health")"
+else
+  log "OCR: set OCR_BASE_URL in agent-api .env for PDF import; verify with: curl \$OCR_BASE_URL/health"
+fi
+
 log "done"
