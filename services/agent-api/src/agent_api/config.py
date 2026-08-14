@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     util_tools_enabled: bool = True
     # Built-in keyword search over curated knowledge_chunks.
     knowledge_search_enabled: bool = True
+    # Maximum source size accepted by Ops knowledge imports.
+    knowledge_import_max_bytes: int = 20_000_000
     # Mac mini PaddleOCR HTTP (knowledge PDF import); loopback preferred.
     ocr_enabled: bool = True
     ocr_base_url: str = "http://127.0.0.1:8787"

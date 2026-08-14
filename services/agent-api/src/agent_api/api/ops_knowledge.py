@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal
+from pathlib import Path
+from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
+from starlette.datastructures import FormData, UploadFile
 
 from agent_api.api.ops_auth import get_ops_subject
+from agent_api.config import get_settings
+from agent_api.db.knowledge_store import upsert_knowledge_document
 from agent_api.db.models import (
     KnowledgeBase,
     KnowledgeChunk,
@@ -18,6 +24,11 @@ from agent_api.db.models import (
     KnowledgeDocumentSnapshot,
 )
 from agent_api.db.session import session_factory
+from agent_api.knowledge.normalize import normalize_json_payload, normalize_plain_text
+from agent_api.knowledge.ocr_client import OcrError
+from agent_api.knowledge.pdf_extract import extract_pdf_text
+from agent_api.knowledge.types import DocumentSpec
+from agent_api.knowledge.url_extract import fetch_url_text
 
 router = APIRouter(prefix="/v1/ops/knowledge", tags=["ops-knowledge"])
 
@@ -98,6 +109,20 @@ class SnapshotDetailOut(SnapshotOut):
     payload: dict[str, Any]
 
 
+class ImportDocumentOut(BaseModel):
+    id: UUID
+    slug: str
+    title: str
+    chunk_count: int
+    overwrote: bool
+    ocr_pages: int
+    text_layer_pages: int
+
+
+class ImportResponse(BaseModel):
+    documents: list[ImportDocumentOut]
+
+
 def _document_out(doc: KnowledgeDocument, chunk_count: int) -> KnowledgeDocumentOut:
     return KnowledgeDocumentOut(
         id=doc.id,
@@ -121,6 +146,170 @@ async def _chunk_count(session: Any, document_id: UUID) -> int:
         .where(KnowledgeChunk.document_id == document_id),
     )
     return int(count or 0)
+
+
+def _required_text(payload: dict[str, Any], field: str) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} is required")
+    return value.strip()
+
+
+def _form_text(form: FormData, field: str, default: str | None = None) -> str | None:
+    value = form.get(field)
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be text")
+    normalized = value.strip()
+    return normalized or default
+
+
+def _slug_from_filename(filename: str | None) -> str:
+    stem = Path(filename or "imported-document").stem.lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", stem).strip("-")
+    return slug or "imported-document"
+
+
+async def _persist_import(
+    specs: list[DocumentSpec],
+    *,
+    base_slug: str,
+    created_by: str,
+    http_client: httpx.AsyncClient | None = None,
+    text_layer_pages: int = 0,
+    ocr_pages: int = 0,
+) -> ImportResponse:
+    documents: list[ImportDocumentOut] = []
+    async with session_factory() as session, session.begin():
+        for spec in specs:
+            document_id, chunk_count, overwrote = await upsert_knowledge_document(
+                session,
+                base_slug=base_slug,
+                spec=spec,
+                created_by=created_by,
+                http_client=http_client,
+            )
+            documents.append(
+                ImportDocumentOut(
+                    id=document_id,
+                    slug=spec.slug,
+                    title=spec.title,
+                    chunk_count=chunk_count,
+                    overwrote=overwrote,
+                    ocr_pages=ocr_pages,
+                    text_layer_pages=text_layer_pages,
+                ),
+            )
+    return ImportResponse(documents=documents)
+
+
+async def _import_json_body(payload: dict[str, Any], subject: str) -> ImportResponse:
+    mode = _required_text(payload, "mode")
+    base_slug = str(payload.get("base") or "mma-pa")
+    if mode == "json":
+        document_payload = payload.get("payload")
+        if not isinstance(document_payload, dict):
+            raise ValueError("payload must be an object")
+        specs = normalize_json_payload(cast(dict[str, Any], document_payload))
+        return await _persist_import(specs, base_slug=base_slug, created_by=subject)
+    if mode == "text":
+        spec = normalize_plain_text(
+            slug=_required_text(payload, "slug"),
+            title=_required_text(payload, "title"),
+            body=_required_text(payload, "body"),
+        )
+        return await _persist_import([spec], base_slug=base_slug, created_by=subject)
+    if mode == "url":
+        url = _required_text(payload, "url")
+        slug = _required_text(payload, "slug")
+        settings = get_settings()
+        async with httpx.AsyncClient(timeout=settings.fetch_url_timeout_seconds) as client:
+            extracted_title, body = await fetch_url_text(
+                url,
+                client=client,
+                max_bytes=settings.knowledge_import_max_bytes,
+            )
+            title = str(payload.get("title") or extracted_title).strip()
+            spec = normalize_plain_text(
+                slug=slug,
+                title=title,
+                body=body,
+                source_url=url,
+                source_label=extracted_title,
+            )
+            return await _persist_import(
+                [spec],
+                base_slug=base_slug,
+                created_by=subject,
+                http_client=client,
+            )
+    raise ValueError(f"unsupported import mode: {mode}")
+
+
+async def _import_multipart(request: Request, subject: str) -> ImportResponse:
+    form = await request.form()
+    mode = _form_text(form, "mode")
+    if mode not in {"file", "pdf"}:
+        raise ValueError("multipart mode must be file or pdf")
+    upload = form.get("file")
+    if not isinstance(upload, UploadFile):
+        raise ValueError("file is required")
+
+    settings = get_settings()
+    data = await upload.read(settings.knowledge_import_max_bytes + 1)
+    if len(data) > settings.knowledge_import_max_bytes:
+        raise ValueError(f"file exceeds {settings.knowledge_import_max_bytes} bytes")
+
+    base_slug = _form_text(form, "base", "mma-pa") or "mma-pa"
+    slug = _form_text(form, "slug") or _slug_from_filename(upload.filename)
+    title = _form_text(form, "title") or Path(upload.filename or slug).stem
+    is_pdf = (
+        mode == "pdf"
+        or upload.content_type == "application/pdf"
+        or (upload.filename or "").lower().endswith(".pdf")
+    )
+    if not is_pdf:
+        body = data.decode("utf-8")
+        spec = normalize_plain_text(slug=slug, title=title, body=body)
+        return await _persist_import([spec], base_slug=base_slug, created_by=subject)
+
+    async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
+        body, text_layer_pages, ocr_pages = await extract_pdf_text(
+            data,
+            client=client,
+            settings=settings,
+        )
+        spec = normalize_plain_text(slug=slug, title=title, body=body)
+        return await _persist_import(
+            [spec],
+            base_slug=base_slug,
+            created_by=subject,
+            http_client=client,
+            text_layer_pages=text_layer_pages,
+            ocr_pages=ocr_pages,
+        )
+
+
+@router.post("/import", response_model=ImportResponse)
+async def import_knowledge(
+    request: Request,
+    subject: Annotated[str, Depends(get_ops_subject)],
+) -> ImportResponse:
+    try:
+        content_type = request.headers.get("content-type", "").lower()
+        if content_type.startswith("application/json"):
+            payload = await request.json()
+            if not isinstance(payload, dict):
+                raise ValueError("request body must be an object")
+            return await _import_json_body(cast(dict[str, Any], payload), subject)
+        if content_type.startswith("multipart/form-data"):
+            return await _import_multipart(request, subject)
+        raise ValueError("content type must be application/json or multipart/form-data")
+    except OcrError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/bases", response_model=KnowledgeBaseListResponse)
