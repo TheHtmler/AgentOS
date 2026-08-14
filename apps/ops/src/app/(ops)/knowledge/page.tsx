@@ -93,20 +93,26 @@ export default function KnowledgePage() {
         <h2>现在能做什么 / 数据从哪来</h2>
         <ul>
           <li>
-            <strong>已有：</strong>查看文档与内容切片、改审核状态、改来源/版本等元数据、只读查看历史快照。
+            <strong>已有：</strong>可通过 JSON、文本、网页链接或文件导入知识，并查看内容切片、修改审核状态与元数据、查看历史快照。
           </li>
           <li>
-            <strong>还没有：</strong>网页上传 PDF/链接、新建文档、在线改切片正文、一键恢复快照（规格里列为后续）。
+            <strong>覆盖规则：</strong>相同文档标识会更新原文档，并自动保留覆盖前的快照。
           </li>
           <li>
-            <strong>现有数据：</strong>仓库策展文件{" "}
+            <strong>初始数据：</strong>仓库策展文件{" "}
             <code>services/agent-api/seed/knowledge/mma_pa_chunks.json</code>
             （约 4 篇文档 / 32 条切片），经 Mac mini 上执行{" "}
             <code>uv run --directory services/agent-api python scripts/seed_knowledge.py</code>{" "}
-            写入数据库；不是用户从前端投递的。
+            写入数据库；后续内容可直接从导入页补充。
           </li>
         </ul>
       </section>
+
+      <div className="filter-row">
+        <Link href="/knowledge/import" className="quick-link">
+          导入
+        </Link>
+      </div>
 
       <div className="filter-row">
         {FILTERS.map((item) => (
