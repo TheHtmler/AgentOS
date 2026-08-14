@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     util_tools_enabled: bool = True
     # Built-in keyword search over curated knowledge_chunks.
     knowledge_search_enabled: bool = True
+    # Mac mini PaddleOCR HTTP (knowledge PDF import); loopback preferred.
+    ocr_enabled: bool = True
+    ocr_base_url: str = "http://127.0.0.1:8787"
+    ocr_api_key: str = ""
+    ocr_text_min_chars: int = 40
+    ocr_timeout_seconds: float = 60.0
     # Read confirmed Case facts for case-enabled Agents (mounted per-run when Case bound).
     case_context_read_enabled: bool = True
     # Comma-separated tool names forced to deny/ask (deny wins if listed in both).
