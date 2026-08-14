@@ -1,14 +1,28 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, type FormEvent } from "react";
+
+/** Always land on overview after auth — never restore prior /knowledge deep links. */
+const POST_LOGIN_PATH = "/";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const me = await fetch("/api/ops/me", { cache: "no-store" });
+        if (me.ok) {
+          window.location.replace(POST_LOGIN_PATH);
+        }
+      } catch {
+        /* stay on login */
+      }
+    })();
+  }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -25,8 +39,8 @@ export default function LoginPage() {
         setError(body?.detail ?? `登录失败（${response.status}）`);
         return;
       }
-      router.replace("/");
-      router.refresh();
+      // Hard navigation avoids soft-router restoring a prior /knowledge entry.
+      window.location.replace(POST_LOGIN_PATH);
     } catch {
       setError("无法连接运营后台服务");
     } finally {
