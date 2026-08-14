@@ -131,7 +131,7 @@
 - `scripts/macmini-deploy.sh` or README: ensure `UPLOAD_ROOT` exists, OCR health
 - `.env.example` complete
 
-- [ ] commit `docs: mark chat report upload analysis implemented`; push
+- [x] commit `docs: mark chat report upload analysis implemented`; push
 
 ---
 

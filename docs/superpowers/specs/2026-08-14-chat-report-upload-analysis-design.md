@@ -1,7 +1,7 @@
 # 聊天报告上传 + 知识综合分析 + Case 闭环
 
 日期：2026-08-14  
-状态：待实现  
+状态：已实现  
 前置：
 - Case / CaseFact / HITL（`2026-08-06-case-memory-knowledge-nhc-design.md`，已实现）
 - Artifact + `read_artifact`（fetch_url 后续已落地）
@@ -212,12 +212,12 @@ tags 建议含 `报告`；`key` 能映射则映射（如已有槽），否则自
 
 ## 验收标准
 
-- [ ] Web 可上传图片/PDF 并看到成功附件
-- [ ] Artifact `upload` 可读；原文件在 UPLOAD_ROOT
-- [ ] 分析回复结合 `knowledge_search`（知识库有命中时）
-- [ ] case_enabled 下可 HITL 确认写入 Case
-- [ ] 用户报告未进入 `knowledge_documents`
-- [ ] AG-UI 仍只接受文本用户消息
+- [x] Web 可上传图片/PDF 并看到成功附件
+- [x] Artifact `upload` 可读；原文件在 UPLOAD_ROOT
+- [x] 分析回复结合 `knowledge_search`（知识库有命中时）
+- [x] case_enabled 下可 HITL 确认写入 Case
+- [x] 用户报告未进入 `knowledge_documents`
+- [x] AG-UI 仍只接受文本用户消息
 
 ---
 

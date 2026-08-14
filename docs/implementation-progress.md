@@ -1,6 +1,6 @@
 # 实施进度
 
-最后更新：2026-08-14（Ops 知识库多途径导入 + 本地 PaddleOCR）
+最后更新：2026-08-14（聊天报告上传 + 知识综合分析 + Case 闭环）
 
 ## 当前状态
 
@@ -102,6 +102,7 @@
 - 工具调用行 UI：折叠行改为线框 SVG + 英文 `toolName` + 关键参数，副行状态（执行中/已完成/失败/待审批）。
 - 助手回合统一气泡：thinking、工具行与最终文字同处一个 `agentos-message-assistant`；去掉气泡外「处理中/已处理」过程组；HITL 审批条仍在泡外。
 - Ops 知识库多途径导入：JSON / 纯文本 / 链接 / 文件（`.txt` / `.md` / `.json`）/ PDF；统一 ingest → 同 slug 快照覆盖 upsert；PDF 文本层不足时调用本机 PaddleOCR HTTP（`OCR_BASE_URL`）；Ops UI 导入页 + BFF `POST /api/ops/knowledge/import`。
+- 聊天报告上传与分析：Web 附件 UI + BFF `POST /api/uploads`；Agent API `POST /v1/uploads` 将原文件存至 `UPLOAD_ROOT`、OCR 文本写入 Artifact（`kind=upload`）；Run 注入报告预览；垂类 Agent 结合 `knowledge_search` 解读，case_enabled 路径经现有 HITL 写入 Case facts；用户报告与 `knowledge_*` 严格隔离。
 
 ## 验证
 
@@ -123,7 +124,7 @@
 ## 未完成
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
-- Artifact 文件上传/下载、完整 `messages.role=tool` 模型历史对齐，以及 Artifact 审计记录。
+- Artifact 原文件下载、完整 `messages.role=tool` 模型历史对齐，以及 Artifact 审计记录（聊天报告上传/OCR 已落地，见上）。
 - Chunk 在线编辑、快照一键恢复（当前已有 ops 多途径导入含 PDF+本地 PaddleOCR、多来源策展切片、混合检索、ops 审核与只读快照）。
 - 运营后台扩展：Agent / MCP / Skills / Session 审计；多 ops 账号表。
 - 更复杂的 Case ACL（邀请生命周期、所有权转移、组织/临床角色）、领域扩展表（如护理计划/化验时间线）；Sandbox；侧栏按工具类型的富展示。

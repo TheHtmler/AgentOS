@@ -123,6 +123,20 @@ else
   log "skip git pull"
 fi
 
+ensure_upload_root() {
+  local upload_root="${UPLOAD_ROOT:-}"
+  local env_file="$ROOT/services/agent-api/.env"
+  if [[ -z "$upload_root" && -f "$env_file" ]]; then
+    upload_root="$(grep -E '^[[:space:]]*UPLOAD_ROOT=' "$env_file" | tail -1 | sed 's/^[^=]*=//' | tr -d ' "'\''"')"
+  fi
+  upload_root="${upload_root:-$ROOT/services/agent-api/data/uploads}"
+  if [[ "$upload_root" != /* ]]; then
+    upload_root="$ROOT/$upload_root"
+  fi
+  log "mkdir -p UPLOAD_ROOT ($upload_root)"
+  mkdir -p "$upload_root"
+}
+
 if [[ "$DO_API" -eq 1 ]]; then
   log "uv sync (agent-api)"
   uv sync --directory "$ROOT/services/agent-api"
@@ -130,6 +144,7 @@ if [[ "$DO_API" -eq 1 ]]; then
     log "alembic upgrade head"
     uv run --directory "$ROOT/services/agent-api" alembic upgrade head
   fi
+  ensure_upload_root
   kick "$API_LABEL" || true
 fi
 
@@ -183,7 +198,7 @@ if [[ -n "${OCR_BASE_URL:-}" ]]; then
   ocr_health="${OCR_BASE_URL%/}/health"
   printf '  ocr  %s => %s\n' "$ocr_health" "$(http_code "$ocr_health")"
 else
-  log "OCR: set OCR_BASE_URL in agent-api .env for PDF import; verify with: curl \$OCR_BASE_URL/health"
+  log "OCR: set OCR_BASE_URL in agent-api .env for Ops PDF import + chat report uploads; verify with: curl \$OCR_BASE_URL/health"
 fi
 
 log "done"
