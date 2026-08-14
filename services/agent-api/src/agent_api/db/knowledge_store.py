@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from uuid import UUID, uuid5
 
 import httpx
@@ -19,7 +19,12 @@ from agent_api.db.models import (
     KnowledgeDocument,
     KnowledgeDocumentSnapshot,
 )
-from agent_api.knowledge.types import ChunkSpec, DocumentSpec
+from agent_api.knowledge.normalize import (
+    document_payloads_from_json,
+    document_spec_from_payload,
+    normalize_json_payload,
+)
+from agent_api.knowledge.types import DocumentSpec
 from agent_api.memory.embed import embed_text
 
 logger = logging.getLogger(__name__)
@@ -55,47 +60,8 @@ def load_mma_pa_seed(path: Path | None = None) -> dict[str, Any]:
     return json.loads((path or SEED_PATH).read_text(encoding="utf-8"))
 
 
-def _document_specs(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Normalize the original single-document seed and the multi-document format."""
-
-    documents = payload.get("documents")
-    if documents is None:
-        document = dict(payload["document"])
-        document["chunks"] = payload["chunks"]
-        return [document]
-    if not isinstance(documents, list) or not documents:
-        raise ValueError("knowledge seed documents must be a non-empty list")
-    document_items = cast(list[object], documents)
-    if not all(isinstance(item, dict) for item in document_items):
-        raise ValueError("knowledge seed documents must contain objects")
-    return [cast(dict[str, Any], item) for item in document_items]
-
-
-def _document_spec_from_payload(payload: dict[str, Any]) -> DocumentSpec:
-    chunks = payload.get("chunks")
-    if not isinstance(chunks, list):
-        raise ValueError(f"knowledge document {payload['slug']} chunks must be a list")
-    chunk_rows = cast(list[dict[str, Any]], chunks)
-    return DocumentSpec(
-        slug=str(payload["slug"]),
-        title=str(payload["title"]),
-        chunks=[
-            ChunkSpec(
-                chunk_index=int(row["chunk_index"]),
-                title=str(row["title"]),
-                content=str(row["content"]),
-                section_label=row.get("section_label"),
-                tags=list(row.get("tags") or []),
-            )
-            for row in chunk_rows
-        ],
-        source_url=payload.get("source_url"),
-        source_label=payload.get("source_label"),
-        source_kind=str(payload.get("source_kind", "curated_summary")),
-        source_date=payload.get("source_date"),
-        version_label=payload.get("version_label"),
-        review_status=str(payload.get("review_status", "curated")),
-    )
+_document_specs = document_payloads_from_json
+_document_spec_from_payload = document_spec_from_payload
 
 
 async def _knowledge_base_for_slug(
@@ -257,7 +223,7 @@ async def upsert_mma_pa_knowledge(
 
     payload = seed if seed is not None else load_mma_pa_seed()
     base_spec = payload["knowledge_base"]
-    document_specs = _document_specs(payload)
+    specs = normalize_json_payload(payload)
 
     base = await session.get(KnowledgeBase, KNOWLEDGE_BASE_ID)
     if base is None:
@@ -279,8 +245,7 @@ async def upsert_mma_pa_knowledge(
     document_ids: list[UUID] = []
     embedded = 0
     total_chunks = 0
-    for doc_spec in document_specs:
-        spec = _document_spec_from_payload(doc_spec)
+    for spec in specs:
         document_id, chunk_count, _, embedded_count = await _upsert_knowledge_document(
             session,
             base_slug="mma-pa",
