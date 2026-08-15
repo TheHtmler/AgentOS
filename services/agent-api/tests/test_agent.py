@@ -32,16 +32,20 @@ def test_platform_instructions_require_tools_before_refusal() -> None:
 
 
 def test_upload_attachment_instructions_key_phrases() -> None:
-    from agent_api.agent import REPORT_ANALYSIS_INSTRUCTIONS, UPLOAD_ATTACHMENT_INSTRUCTIONS
+    from agent_api.agent import REPORT_ANALYSIS_INSTRUCTIONS, UPLOAD_ATTACHMENT_INSTRUCTIONS, SYSTEM_INSTRUCTIONS
 
     assert "用户文字意图" in UPLOAD_ATTACHMENT_INSTRUCTIONS
     assert "read_artifact" in UPLOAD_ATTACHMENT_INSTRUCTIONS
     assert "明确要解读" in UPLOAD_ATTACHMENT_INSTRUCTIONS
+    assert "先给解读正文" in UPLOAD_ATTACHMENT_INSTRUCTIONS
     assert "OCR" in REPORT_ANALYSIS_INSTRUCTIONS
     assert "knowledge_search" in REPORT_ANALYSIS_INSTRUCTIONS
-    assert "非诊断" in REPORT_ANALYSIS_INSTRUCTIONS
+    assert "First line = deliverable" in REPORT_ANALYSIS_INSTRUCTIONS
+    assert "禁止" in REPORT_ANALYSIS_INSTRUCTIONS and "重要提示" in REPORT_ANALYSIS_INSTRUCTIONS
+    assert "非诊疗" in REPORT_ANALYSIS_INSTRUCTIONS or "一句" in REPORT_ANALYSIS_INSTRUCTIONS
     assert "case_slot_collect" in REPORT_ANALYSIS_INSTRUCTIONS
     assert "HITL" in REPORT_ANALYSIS_INSTRUCTIONS
+    assert "Never open a medical/report answer" in SYSTEM_INSTRUCTIONS
 
 
 def test_build_instructions_includes_upload_guidance_when_upload_block_present() -> None:
