@@ -1,13 +1,15 @@
 # 实施进度
 
-最后更新：2026-08-14（聊天报告上传 + 知识综合分析 + Case 闭环）
+最后更新：2026-08-15（Qwen3-VL 模型升级 + 聊天报告上传配套）
 
 ## 当前状态
 
-前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与 MMA/PA `knowledge_search` 已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。Run、Artifact、用户记忆和多看护人基础 ACL 已绑定 Case 作用域。公共知识库已有 P0 策展切片与混合检索、运营审核与文档快照。平台 util 工具（`time_diff` / `calculate`）与薄评测 runner + foundation golden suite 已落地。
+前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与 MMA/PA `knowledge_search` 已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。Run、Artifact、用户记忆和多看护人基础 ACL 已绑定 Case 作用域。公共知识库已有 P0 策展切片与混合检索、运营审核与文档快照。平台 util 工具（`time_diff` / `calculate`）与薄评测 runner + foundation golden suite 已落地。聊天模型已切换为 `agentos-qwen3vl:16k`：16k 上下文、单流并发、Qwen3-VL 报告视觉输入和更大的 OCR 预览均已接入。
 
 已完成：
 
+- 按 `docs/15-model-upgrade-qwen3-vl.md` 拉取 `qwen3-vl:8b-instruct`，依据 `infra/ollama/Modelfile.agentos-qwen3vl-16k` 创建 `agentos-qwen3vl:16k`，并通过 Ollama 与 Agent smoke 验证文本直答。
+- 将 Agent API 默认/示例配置与聊天运行时文案切换为 Qwen3-VL，模型并发默认降为 1；报告附件 OCR 预览扩大到 4000 字符，未绑定 Case 的附件也获得报告分析输出约束。
 - 建立项目目录边界：`apps`、`services`、`packages`、`infra`、`docs`。
 - 沉淀架构基线、MVP 路线图和 ADR 约定。
 - 明确由项目所有者主导代码实现，Codex 负责设计、示例、评审、验证建议和文档维护。

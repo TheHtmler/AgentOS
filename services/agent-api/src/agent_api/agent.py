@@ -247,8 +247,8 @@ def build_instructions(
     if upload_block and upload_block.strip():
         sections.append(upload_block.strip())
         sections.append(UPLOAD_ATTACHMENT_INSTRUCTIONS.strip())
-        if "case_context_read" in mounted_names:
-            sections.append(REPORT_ANALYSIS_INSTRUCTIONS.strip())
+        # Report formatting applies to every upload-capable Agent, including unbound Agents.
+        sections.append(REPORT_ANALYSIS_INSTRUCTIONS.strip())
     if "web_search" in mounted_names:
         sections.append(SEARCH_INSTRUCTIONS.strip())
     if "fetch_url" in mounted_names:

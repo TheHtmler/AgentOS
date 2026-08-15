@@ -19,12 +19,13 @@ class Settings(BaseSettings):
     )
 
     ollama_base_url: str = "http://127.0.0.1:11434/v1"
-    ollama_model: str = "agentos-gemma4:8k"
+    ollama_model: str = "agentos-qwen3vl:16k"
     # Keep enough room for code and tool-grounded answers; prompt controls concision.
     model_max_output_tokens: int = 4_096
     model_temperature: float = 0.3
     # How many model streams may execute at once across threads in one API process.
-    model_max_concurrent_runs: int = 3
+    # Keep the 16 GB Mac mini within the Qwen3-VL model and KV-cache budget.
+    model_max_concurrent_runs: int = 1
     history_max_runs: int = 4  # max runs in next context
     auth_session_ttl_days: int = 30
     auth_invite_ttl_minutes: int = 1_440
@@ -47,7 +48,7 @@ class Settings(BaseSettings):
     fetch_provider_order: str = "firecrawl,local"
     firecrawl_api_key: str = ""
     fetch_url_timeout_seconds: float = 20.0
-    # Keep previews small for local 8k-context models; full text lives in Artifacts.
+    # Keep previews bounded for local models; full text lives in Artifacts.
     fetch_url_max_chars: int = 2_500
     # Persist fetch bodies + expose read_artifact (Postgres text; no object store yet).
     artifact_enabled: bool = True

@@ -41,7 +41,7 @@ function isUuid(value: string): boolean {
 
 const runtimeItems = [
   { label: "执行入口", value: "FastAPI Agent API" },
-  { label: "模型路由", value: "Ollama · agentos-gemma4:8k" },
+  { label: "模型路由", value: "Ollama · agentos-qwen3vl:16k" },
   { label: "会话存储", value: "PostgreSQL Thread" },
 ];
 

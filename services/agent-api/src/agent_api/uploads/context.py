@@ -30,7 +30,8 @@ async def load_upload_injection(
     owner_user_id: UUID,
     case_id: UUID | None,
     user_text: str,
-    preview_chars: int = 1_500,
+    # Qwen3-VL has enough context to cross-check a larger OCR preview against the image.
+    preview_chars: int = 4_000,
 ) -> str | None:
     """Load referenced Artifacts visible to the owner in the active Case scope."""
 

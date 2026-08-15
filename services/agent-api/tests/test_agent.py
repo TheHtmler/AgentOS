@@ -73,6 +73,18 @@ def test_build_instructions_omits_upload_report_without_upload_block() -> None:
     assert "化验/检查报告解读" not in text
 
 
+def test_build_instructions_includes_report_guidance_without_case_tool() -> None:
+    text = build_instructions(
+        overlay=None,
+        memory_block=None,
+        upload_block="## Referenced upload artifacts\n### shot",
+        mounted_names=set(),
+    )
+
+    assert "化验/检查报告解读" in text
+    assert "First line = deliverable" in text
+
+
 def test_imd_overlay_is_structured_contract() -> None:
     import importlib.util
     from pathlib import Path
@@ -99,9 +111,9 @@ def test_default_settings() -> None:
     )
 
     assert settings.ollama_base_url == "http://127.0.0.1:11434/v1"
-    assert settings.ollama_model == "agentos-gemma4:8k"
+    assert settings.ollama_model == "agentos-qwen3vl:16k"
     assert settings.model_temperature == 0.3
-    assert settings.model_max_concurrent_runs == 3
+    assert settings.model_max_concurrent_runs == 1
     # Class default (local .env may still override the instance value).
     assert Settings.model_fields["model_max_output_tokens"].default == 4_096
 
