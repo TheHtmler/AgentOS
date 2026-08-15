@@ -125,17 +125,38 @@ launchctl kickstart -k gui/$(id -u)/com.local.agentos-api
 - **Ollama 版本旧**:< 0.12.7 不认识 qwen3-vl 模板，升级后重试。
 - **体感速度**:8B Q4 在 M 系芯片约 15–25 tok/s，长报告解读比 e4b 慢是正常的，质量优先。
 
+## 事故记录：双 PDF 上传 400 溢出（2026-08-15)
+
+**现象**：一次上传两份 PDF 报告，前端显示 canceled。**根因**：请求实测 17,883 tokens > 16,384 窗口，Ollama 返回 400；与内存无关（Ollama 进程正常）。教训与修复：
+
+- 一页 144dpi A4 渲染图在 qwen3-vl 上约 **2.5k tokens**（动态分辨率），不是直觉的 1.2k——`VISION_RESERVE_PER_IMAGE` 已按此校准。
+- 多附件轮次现在自动降级：预览 3000 字符/份（合计 6000)、每个 PDF 只渲染第 1 页、图片总数 ≤2；全文仍可由 read_artifact 分页读取（有 step 级护栏兜底）。
+- 进一步加硬：`cap_vision_to_budget` 按校准后的页价估算整个请求头，**装不下就先丢图片**（OCR 文本 + read_artifact 才是数据通道，视觉只是交叉核对）——双 PDF 轮次在 16k 下通常纯文本运行，保证不再 400。
+- 溢出时两条聊天链路都会给用户明确文案（「一次分析一份报告」)，不再裸显示 canceled。
+
+**如果双 PDF 场景是刚需**：把 Modelfile 的 `num_ctx` 提到 24576(KV 约 3.7GB,16GB 机器需先 `sudo sysctl iogpu.wired_limit_mb=12288`，并确认 `OLLAMA_NUM_PARALLEL=1`),`.env` 的 `MODEL_CONTEXT_WINDOW` 同步改为 24576，重建模型实例后重启服务。改完用同样的双 PDF 用例复测，并观察 swap。
+
 ## 参数预算说明（换模型后哪些动、哪些不动)
 
 - `MODEL_MAX_OUTPUT_TOKENS=4096` **保持不变**。它是单轮输出上限而非上下文大小：4096 token ≈ 2500–3000 中文字，对报告解读已充裕；调大只会挤占 16k 窗口里的输入预算并助长啰嗦。输出被截断时产品层已有提示（`output_limits.py`)。
-- `READ_ARTIFACT_MAX_CHARS` 已随升级从 1500 调到 3000：报告全文分段读的轮次减半，降低小模型多轮读文件失败率。
+- `READ_ARTIFACT_MAX_CHARS` 已随升级从 1500 调到 6000，上传预览从 1500 提到单附件 6000 / 单轮合计 12000：单页报告通常一次注入即可，无需 read_artifact 翻页；长文翻页轮次也减半。每个模型 step 前还有 `context_budget.make_step_history_processor` 做压力检查（对应 deepseek-harness 的 pre-step 压缩触发点），翻页堆积不再能顶爆窗口。
 - `MODEL_TEMPERATURE=0.3` 保持：事实型回答要稳定。若观察到重复循环（Qwen instruct 低温度的已知倾向），再上调到 0.6。
 - `HISTORY_MAX_RUNS=4` 保持：若验收时 `runs.input_tokens` 频繁逼近 12k，先把它降到 3。
 - `num_ctx` 是唯一真正的扩容杠杆：内存验证有余量后可重建为 24576(`ollama create` 改 Modelfile 即可）,KV 约增至 3.7GB，需先 `sudo sysctl iogpu.wired_limit_mb=12288`。
 - Mac mini 上建议给 Ollama 服务设 `OLLAMA_NUM_PARALLEL=1`，与应用层 `MODEL_MAX_CONCURRENT_RUNS=1` 对齐，防止并发请求翻倍占 KV。
 
+## 上下文工程改造（2026-08-15，参考 deepseek-harness)
+
+对照 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的 `token-meter` / `compaction` / system-prompt 组装设计落地，详见 `docs/implementation-progress.md`:
+
+- **指令/数据分离**:`build_instructions()` 只产出稳定指令（基础契约 + 能力段 + Agent overlay);时间、memory、Case、附件预览由 `build_context_snapshot()` 组成 user 角色快照，随当轮注入、不落库（新 run 放历史末尾，HITL resume 放历史开头以免拆散工具配对）。
+- **输入预算护栏**:`context_budget.apply_context_budget()` 在每轮 run 前估算历史 token，超预算先首尾裁剪旧工具结果，再按 user 消息边界整段丢最老 run；裁剪动作全部记服务端日志，不再依赖 Ollama 静默截断。`MODEL_CONTEXT_WINDOW`(=Modelfile 的 num_ctx）是预算基准。
+- **溢出兜底**:SSE 链路捕获 provider 侧 context overflow 后只保留最新 run 重试一次；run 完成后 `input_tokens` 逼近输入预算时打 warning。
+- **报告解读指令重写**：指标面板表（数值逐字取自附件，读不清标「待核对」)+ 每条结论标注「知识库依据 / 模型推断」，小模型可执行、结果可审计。
+- 未做：LLM 摘要压缩（小模型摘要质量差，16k 场景剪枝已够）、插件框架（不适配 pydantic-ai 栈）。
+
 ## 可选的配套小修（独立于模型切换，建议后续单独一轮做）
 
 1. ~~`agent.py` 报告解读指令与 Case 绑定解耦~~（已随本次升级完成）。
 2. ~~`uploads/context.py` OCR 预览 1500 → 4000~~（已随本次升级完成）。
-3. 输入侧仍无 token 预算护栏（只有输出截断检测 `output_limits.py`)，后续可按「历史 > memory > 预览」优先级裁剪。
+3. ~~输入侧 token 预算护栏~~（已由 `context_budget.py` 落地，见上节）。

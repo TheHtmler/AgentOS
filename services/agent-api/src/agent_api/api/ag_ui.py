@@ -14,7 +14,7 @@ from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.ui import NativeEvent
 from pydantic_ai.ui.ag_ui import AGUIAdapter
 
-from agent_api.agent import AgentOutput
+from agent_api.agent import AgentOutput, build_context_snapshot, inject_context_snapshot
 from agent_api.api.auth import get_current_user
 from agent_api.api.chat import (
     format_run_failure_message,
@@ -25,10 +25,12 @@ from agent_api.api.chat import (
     persist_failed_run,
     persist_text_delta,
     strip_thinking_parts,
+    user_facing_run_error_message,
 )
 from agent_api.case.extract import schedule_case_extract
 from agent_api.case.recall import load_case_injection
 from agent_api.config import get_settings
+from agent_api.context_budget import apply_context_budget, cap_vision_to_budget
 from agent_api.db.agent_store import (
     AgentNotFoundError,
     PublishedAgentVersionNotFoundError,
@@ -220,18 +222,47 @@ async def stream_ag_ui_run(
                 logger.exception("upload vision failed; continuing without image parts")
                 vision_parts = []
 
+        snapshot = build_context_snapshot(
+            memory_block=memory_block,
+            case_block=case_block,
+            upload_block=upload_block,
+            timezone_name=settings.runtime_timezone,
+            locale=settings.runtime_locale,
+        )
+        allowed_vision = cap_vision_to_budget(
+            snapshot_text=snapshot,
+            user_text=prompt,
+            vision_count=len(vision_parts),
+            context_window=settings.model_context_window,
+            output_reserve=settings.model_max_output_tokens,
+        )
+        if allowed_vision < len(vision_parts):
+            logger.warning(
+                "run %s: dropping %d vision part(s) to fit the context window",
+                started.run_id,
+                len(vision_parts) - allowed_vision,
+            )
+            vision_parts = vision_parts[:allowed_vision]
+
         user_message = enrich_ag_ui_user_message(
             user_message,
             text=prompt,
             vision_parts=vision_parts,
         )
 
+        history, budget_report = apply_context_budget(
+            history,
+            context_window=settings.model_context_window,
+            output_reserve=settings.model_max_output_tokens,
+            snapshot_text=snapshot,
+            user_text=prompt,
+            vision_count=len(vision_parts),
+        )
+        budget_report.log(run_id=started.run_id)
+        history = inject_context_snapshot(history, snapshot)
         agent = runtime.build_run_agent(
             system_prompt_overlay=version.system_prompt_overlay,
             tool_policy_overrides=version.tool_policy_overrides,
-            memory_block=memory_block,
-            case_block=case_block,
-            upload_block=upload_block,
             case_bound=case_id is not None,
         )
     except PublishedAgentVersionNotFoundError as error:
@@ -308,7 +339,7 @@ async def stream_ag_ui_run(
                 started.run_id,
                 error_message=format_run_failure_message(error),
             )
-            raise AGUIExecutionError("模型服务暂时不可用，请稍后重试。") from error
+            raise AGUIExecutionError(user_facing_run_error_message(error)) from error
 
     async def persist_completed(result: AgentRunResult[AgentOutput]) -> None:
         try:

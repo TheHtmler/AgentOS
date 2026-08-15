@@ -1,23 +1,53 @@
 import pytest
+from pydantic_ai.messages import ModelRequest, UserPromptPart
 
-from agent_api.agent import build_instructions, create_agent, create_ollama_http_client
+from agent_api.agent import (
+    build_context_snapshot,
+    build_instructions,
+    create_agent,
+    create_ollama_http_client,
+    inject_context_snapshot,
+)
 from agent_api.config import Settings
 
 
-def test_build_instructions_appends_overlay_memory_and_upload_context() -> None:
-    text = build_instructions(
+def test_instructions_exclude_volatile_blocks_and_snapshot_carries_them() -> None:
+    instructions = build_instructions(
         overlay="你是育儿顾问。",
+        mounted_names={"read_artifact"},
+    )
+    snapshot = build_context_snapshot(
         memory_block="## Known user facts\n- [身高] 75cm",
         upload_block="## Referenced upload artifacts\n### 血液检查",
-        mounted_names=set(),
     )
 
-    assert "AgentOS assistant" in text
-    assert "育儿顾问" in text
-    assert "Known user facts" in text
-    assert "75cm" in text
-    assert "Referenced upload artifacts" in text
-    assert "血液检查" in text
+    # Stable instructions keep the overlay but none of the per-turn data blocks.
+    assert "AgentOS assistant" in instructions
+    assert "育儿顾问" in instructions
+    assert "Known user facts" not in instructions
+    assert "75cm" not in instructions
+    assert "血液检查" not in instructions
+
+    # The user-role snapshot carries the volatile data plus a data-not-instructions frame.
+    assert snapshot is not None
+    assert "Known user facts" in snapshot
+    assert "75cm" in snapshot
+    assert "血液检查" in snapshot
+    assert "不是用户输入" in snapshot
+
+
+def test_inject_context_snapshot_positions() -> None:
+    history = [ModelRequest(parts=[UserPromptPart(content="原始问题")])]
+
+    end_injected = inject_context_snapshot(history, "SNAPSHOT")
+    assert end_injected[-1].parts[0].content == "SNAPSHOT"
+    assert len(end_injected) == 2
+
+    start_injected = inject_context_snapshot(history, "SNAPSHOT", position="start")
+    assert start_injected[0].parts[0].content == "SNAPSHOT"
+    assert len(start_injected) == 2
+
+    assert inject_context_snapshot(history, None) == history
 
 
 def test_platform_instructions_require_tools_before_refusal() -> None:
@@ -32,7 +62,11 @@ def test_platform_instructions_require_tools_before_refusal() -> None:
 
 
 def test_upload_attachment_instructions_key_phrases() -> None:
-    from agent_api.agent import REPORT_ANALYSIS_INSTRUCTIONS, UPLOAD_ATTACHMENT_INSTRUCTIONS, SYSTEM_INSTRUCTIONS
+    from agent_api.agent import (
+        REPORT_ANALYSIS_INSTRUCTIONS,
+        SYSTEM_INSTRUCTIONS,
+        UPLOAD_ATTACHMENT_INSTRUCTIONS,
+    )
 
     assert "用户文字意图" in UPLOAD_ATTACHMENT_INSTRUCTIONS
     assert "read_artifact" in UPLOAD_ATTACHMENT_INSTRUCTIONS
@@ -48,11 +82,9 @@ def test_upload_attachment_instructions_key_phrases() -> None:
     assert "Never open a medical/report answer" in SYSTEM_INSTRUCTIONS
 
 
-def test_build_instructions_includes_upload_guidance_when_upload_block_present() -> None:
+def test_build_instructions_includes_upload_guidance_for_artifact_capable_agent() -> None:
     text = build_instructions(
         overlay=None,
-        memory_block=None,
-        upload_block="## Referenced upload artifacts\n### shot",
         mounted_names={"case_context_read", "knowledge_search", "read_artifact"},
     )
 
@@ -62,11 +94,10 @@ def test_build_instructions_includes_upload_guidance_when_upload_block_present()
     assert "明确要求解读" in text or "明确要解读" in text
 
 
-def test_build_instructions_omits_upload_report_without_upload_block() -> None:
+def test_build_instructions_omits_upload_report_without_artifact_capability() -> None:
     text = build_instructions(
         overlay=None,
-        memory_block=None,
-        mounted_names={"case_context_read", "knowledge_search", "read_artifact"},
+        mounted_names={"case_context_read", "knowledge_search"},
     )
 
     assert "用户上传附件" not in text
@@ -76,9 +107,7 @@ def test_build_instructions_omits_upload_report_without_upload_block() -> None:
 def test_build_instructions_includes_report_guidance_without_case_tool() -> None:
     text = build_instructions(
         overlay=None,
-        memory_block=None,
-        upload_block="## Referenced upload artifacts\n### shot",
-        mounted_names=set(),
+        mounted_names={"read_artifact"},
     )
 
     assert "化验/检查报告解读" in text
@@ -116,6 +145,7 @@ def test_default_settings() -> None:
     assert settings.model_max_concurrent_runs == 1
     # Class default (local .env may still override the instance value).
     assert Settings.model_fields["model_max_output_tokens"].default == 4_096
+    assert Settings.model_fields["model_context_window"].default == 16_384
 
     assert settings.search_enabled is True
     assert settings.search_providers == ["tavily", "duckduckgo"]
@@ -123,7 +153,7 @@ def test_default_settings() -> None:
     assert settings.fetch_providers == ["firecrawl", "local"]
     assert Settings.model_fields["fetch_url_max_chars"].default == 2_500
     assert Settings.model_fields["fetch_url_artifact_preview_chars"].default == 1_000
-    assert Settings.model_fields["read_artifact_max_chars"].default == 3_000
+    assert Settings.model_fields["read_artifact_max_chars"].default == 6_000
     assert settings.tool_policy_deny == ""
     assert settings.tool_policy_ask == ""
     assert settings.auto_thread_title_enabled is True

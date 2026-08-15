@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Annotated, Any, cast
 from uuid import UUID
 
@@ -9,13 +9,21 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_ai import Agent, ModelMessagesTypeAdapter
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    UserContent,
+    UserPromptPart,
+)
 
-from agent_api.agent import AgentOutput
+from agent_api.agent import AgentOutput, build_context_snapshot, inject_context_snapshot
 from agent_api.api.auth import get_current_user
 from agent_api.case.extract import schedule_case_extract
 from agent_api.case.recall import load_case_injection
 from agent_api.config import get_settings
+from agent_api.context_budget import apply_context_budget, cap_vision_to_budget, drop_oldest_runs
 from agent_api.db.agent_store import (
     AgentNotFoundError,
     PublishedAgentVersionNotFoundError,
@@ -248,6 +256,26 @@ def format_run_failure_message(error: BaseException, *, limit: int = 500) -> str
     return text[:limit]
 
 
+def is_context_overflow_error(error: BaseException) -> bool:
+    """Best-effort detection of a provider-side context-window rejection."""
+
+    text = str(error).lower()
+    return "context" in text and any(
+        marker in text for marker in ("length", "exceed", "overflow", "too long", "window")
+    )
+
+
+def user_facing_run_error_message(error: BaseException) -> str:
+    """Map provider failures to actionable user-facing text instead of a generic 500."""
+
+    if is_context_overflow_error(error):
+        return (
+            "当前内容超出了模型上下文窗口（16k tokens)。"
+            "建议一次分析一份报告，或另起一段对话后重试。"
+        )
+    return "模型服务暂时不可用，请稍后重试。"
+
+
 async def persist_failed_run(
     run_id: UUID,
     *,
@@ -276,7 +304,7 @@ def chunk_assistant_text(text: str, *, chunk_size: int = 32) -> list[str]:
 
 async def event_stream(
     request: Request,
-    message: str | list[object],
+    message: str | Sequence[UserContent],
     thread_id: UUID,
     run_id: UUID,
     user_id: UUID,
@@ -299,9 +327,13 @@ async def event_stream(
     input_tokens: int | None = None
     output_tokens: int | None = None
     model_request_count: int | None = None
-    user_text = message if isinstance(message, str) else next(
-        (part for part in message if isinstance(part, str)),
-        "",
+    user_text = (
+        message
+        if isinstance(message, str)
+        else next(
+            (part for part in message if isinstance(part, str)),
+            "",
+        )
     )
 
     try:
@@ -311,23 +343,46 @@ async def event_stream(
                 await persist_cancelled_run(run_id)
                 return
 
+            deps = AgentDeps(
+                search_router=runtime.search_router,
+                fetch_router=runtime.fetch_router,
+                run_id=run_id,
+                case_id=case_id,
+                user_id=user_id,
+                thread_id=thread_id,
+                http_client=runtime.ollama_http_client,
+            )
+
             # Prefer run() over run_stream() so web_search and other tools finish
             # before any assistant text is treated as the final answer.
-            result = await agent.run(
-                message,
-                message_history=message_history or None,
-                conversation_id=str(thread_id),
-                run_id=str(run_id),
-                deps=AgentDeps(
-                    search_router=runtime.search_router,
-                    fetch_router=runtime.fetch_router,
-                    run_id=run_id,
-                    case_id=case_id,
-                    user_id=user_id,
-                    thread_id=thread_id,
-                    http_client=runtime.ollama_http_client,
-                ),
-            )
+            try:
+                result = await agent.run(
+                    message,
+                    message_history=message_history or None,
+                    conversation_id=str(thread_id),
+                    run_id=str(run_id),
+                    deps=deps,
+                )
+            except Exception as first_error:
+                # Provider-confirmed context overflow: fall back to the newest run and
+                # retry once (the pre-run budget guard should make this rare).
+                if not message_history or not is_context_overflow_error(first_error):
+                    raise
+                reduced, dropped = drop_oldest_runs(message_history, keep_runs=1)
+                if dropped == 0:
+                    raise
+                logger.warning(
+                    "context overflow for run %s; retrying with %d oldest run(s) dropped",
+                    run_id,
+                    dropped,
+                )
+                result = await agent.run(
+                    message,
+                    message_history=reduced or None,
+                    conversation_id=str(thread_id),
+                    run_id=str(run_id),
+                    deps=deps,
+                )
 
             if await request.is_disconnected():
                 await persist_cancelled_run(run_id)
@@ -374,6 +429,19 @@ async def event_stream(
             input_tokens = usage.input_tokens or None
             output_tokens = usage.output_tokens or None
             model_request_count = usage.requests
+            settings = get_settings()
+            if (
+                input_tokens is not None
+                and input_tokens >= settings.model_context_window - settings.model_max_output_tokens
+            ):
+                logger.warning(
+                    "run %s input_tokens=%d reached the model input budget "
+                    "(window=%d, output_reserve=%d); provider-side truncation risk",
+                    run_id,
+                    input_tokens,
+                    settings.model_context_window,
+                    settings.model_max_output_tokens,
+                )
     except asyncio.CancelledError:
         # A cancelled response must not leave the durable Run marked as running.
         try:
@@ -395,7 +463,7 @@ async def event_stream(
         if not await request.is_disconnected():
             yield encode_sse_event(
                 "error",
-                {"message": "模型服务暂时不可用，请稍后重试。"},
+                {"message": user_facing_run_error_message(error)},
             )
         return
 
@@ -549,12 +617,41 @@ async def stream_chat(
             except Exception:
                 logger.exception("upload vision failed; continuing without image parts")
                 vision_parts = []
-        agent = runtime.build_run_agent(
-            system_prompt_overlay=version.system_prompt_overlay,
-            tool_policy_overrides=version.tool_policy_overrides,
+        snapshot = build_context_snapshot(
             memory_block=memory_block,
             case_block=case_block,
             upload_block=upload_block,
+            timezone_name=settings.runtime_timezone,
+            locale=settings.runtime_locale,
+        )
+        allowed_vision = cap_vision_to_budget(
+            snapshot_text=snapshot,
+            user_text=payload.message,
+            vision_count=len(vision_parts),
+            context_window=settings.model_context_window,
+            output_reserve=settings.model_max_output_tokens,
+        )
+        if allowed_vision < len(vision_parts):
+            logger.warning(
+                "run %s: dropping %d vision part(s) to fit the context window",
+                started.run_id,
+                len(vision_parts) - allowed_vision,
+            )
+            vision_parts = vision_parts[:allowed_vision]
+        message_history, budget_report = apply_context_budget(
+            message_history,
+            context_window=settings.model_context_window,
+            output_reserve=settings.model_max_output_tokens,
+            snapshot_text=snapshot,
+            user_text=payload.message,
+            vision_count=len(vision_parts),
+        )
+        budget_report.log(run_id=started.run_id)
+        # Snapshot rides as the last history message so facts sit next to this turn.
+        message_history = inject_context_snapshot(message_history, snapshot)
+        agent = runtime.build_run_agent(
+            system_prompt_overlay=version.system_prompt_overlay,
+            tool_policy_overrides=version.tool_policy_overrides,
             case_bound=case_id is not None,
         )
     except PublishedAgentVersionNotFoundError as error:

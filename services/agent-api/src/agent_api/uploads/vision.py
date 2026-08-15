@@ -42,6 +42,25 @@ def _pdf_page_pngs(data: bytes, *, max_pages: int) -> list[bytes]:
     return images
 
 
+def resolve_vision_limits(
+    artifact_count: int,
+    *,
+    max_images: int,
+    max_pdf_pages: int,
+) -> tuple[int, int]:
+    """(total image cap, PDF pages per document) with multi-attachment degradation.
+
+    One dense 144dpi page render prices ~2.5k tokens on qwen3-vl; two PDFs at the
+    single-upload limits (3 images) plus previews overflow a 16k window (observed
+    17,883 tokens vs 16,384). Multi-attachment turns fall back to one page per
+    document and at most two images total.
+    """
+
+    if artifact_count >= 2:
+        return min(2, max_images), min(1, max_pdf_pages)
+    return max_images, max_pdf_pages
+
+
 async def load_upload_vision_parts(
     session: AsyncSession,
     *,
@@ -56,13 +75,16 @@ async def load_upload_vision_parts(
     if not cfg.upload_vision_enabled:
         return []
 
+    artifact_ids = list(dict.fromkeys(parse_artifact_ids(user_text)))
+    max_images, pdf_pages = resolve_vision_limits(
+        len(artifact_ids),
+        max_images=cfg.upload_vision_max_images,
+        max_pdf_pages=cfg.upload_vision_max_pdf_pages,
+    )
+
     parts: list[BinaryContent] = []
-    seen: set[UUID] = set()
-    for artifact_id in parse_artifact_ids(user_text):
-        if artifact_id in seen:
-            continue
-        seen.add(artifact_id)
-        if len(parts) >= cfg.upload_vision_max_images:
+    for artifact_id in artifact_ids:
+        if len(parts) >= max_images:
             break
 
         artifact = await get_owned_artifact(
@@ -92,12 +114,12 @@ async def load_upload_vision_parts(
 
         if mime == "application/pdf":
             try:
-                page_pngs = _pdf_page_pngs(data, max_pages=cfg.upload_vision_max_pdf_pages)
+                page_pngs = _pdf_page_pngs(data, max_pages=pdf_pages)
             except Exception:
                 logger.exception("failed rendering PDF pages for artifact %s", artifact.id)
                 continue
             for png in page_pngs:
-                if len(parts) >= cfg.upload_vision_max_images:
+                if len(parts) >= max_images:
                     break
                 parts.append(BinaryContent(data=png, media_type="image/png"))
 

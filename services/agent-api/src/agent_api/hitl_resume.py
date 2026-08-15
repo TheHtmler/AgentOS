@@ -14,6 +14,7 @@ from pydantic_ai.tools import (
     ToolDenied,
 )
 
+from agent_api.agent import build_context_snapshot, inject_context_snapshot
 from agent_api.api.chat import (
     format_run_failure_message,
     parse_model_messages_json,
@@ -24,6 +25,7 @@ from agent_api.api.chat import (
 from agent_api.case.extract import schedule_case_extract
 from agent_api.case.recall import load_case_injection
 from agent_api.config import get_settings
+from agent_api.context_budget import apply_context_budget
 from agent_api.db.agent_store import get_published_version
 from agent_api.db.chat_store import get_run, get_run_message_history, list_thread_messages
 from agent_api.db.models import Interrupt, Thread
@@ -140,12 +142,26 @@ async def continue_run_after_approval(
         return
 
     deferred = deferred_results_from_interrupts(interrupts)
-    agent = runtime.build_run_agent(
-        system_prompt_overlay=version.system_prompt_overlay,
-        tool_policy_overrides=version.tool_policy_overrides,
+    snapshot = build_context_snapshot(
         memory_block=memory_block,
         case_block=case_block,
         upload_block=upload_block,
+        timezone_name=settings.runtime_timezone,
+        locale=settings.runtime_locale,
+    )
+    message_history, budget_report = apply_context_budget(
+        message_history,
+        context_window=settings.model_context_window,
+        output_reserve=settings.model_max_output_tokens,
+        snapshot_text=snapshot,
+        user_text=prompt,
+    )
+    budget_report.log(run_id=run_id)
+    # Prepend on resume: appending would split the checkpoint's trailing tool pair.
+    message_history = inject_context_snapshot(message_history, snapshot, position="start")
+    agent = runtime.build_run_agent(
+        system_prompt_overlay=version.system_prompt_overlay,
+        tool_policy_overrides=version.tool_policy_overrides,
         case_bound=case_id is not None,
     )
 

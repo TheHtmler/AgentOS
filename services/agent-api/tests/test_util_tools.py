@@ -61,7 +61,6 @@ async def test_create_agent_registers_util_tools() -> None:
 def test_util_instructions_when_mounted() -> None:
     text = build_instructions(
         overlay=None,
-        memory_block=None,
         mounted_names={"time_diff", "calculate"},
     )
     assert "time_diff" in text

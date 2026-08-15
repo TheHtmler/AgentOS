@@ -1,6 +1,6 @@
 # 实施进度
 
-最后更新：2026-08-15（Qwen3-VL 模型升级 + 聊天报告上传配套）
+最后更新：2026-08-15（Qwen3-VL 模型升级 + 上下文工程改造）
 
 ## 当前状态
 
@@ -10,6 +10,7 @@
 
 - 按 `docs/15-model-upgrade-qwen3-vl.md` 拉取 `qwen3-vl:8b-instruct`，依据 `infra/ollama/Modelfile.agentos-qwen3vl-16k` 创建 `agentos-qwen3vl:16k`，并通过 Ollama 与 Agent smoke 验证文本直答。
 - 将 Agent API 默认/示例配置与聊天运行时文案切换为 Qwen3-VL，模型并发默认降为 1；报告附件 OCR 预览扩大到 4000 字符，未绑定 Case 的附件也获得报告分析输出约束。
+- 参考 deepseek-harness 的上下文工程（token-meter / compaction / PromptSection-PromptContext 分离）重做 prompt 组装：稳定指令（基础契约 + 能力段）与易变数据（时间、memory、Case、附件预览）分离，后者以 user 角色上下文快照注入且不落库；新增 `context_budget` 输入预算护栏（先首尾裁剪旧工具结果、再按 user 边界丢最老 run，保持工具调用配对，动作记日志）；基础契约精简约 40%，报告解读改为「指标面板 + 知识库/推断依据标注」结构；SSE 链路增加 context 溢出降载重试与 input_tokens 顶格告警；新增 `MODEL_CONTEXT_WINDOW` 配置。
 - 建立项目目录边界：`apps`、`services`、`packages`、`infra`、`docs`。
 - 沉淀架构基线、MVP 路线图和 ADR 约定。
 - 明确由项目所有者主导代码实现，Codex 负责设计、示例、评审、验证建议和文档维护。

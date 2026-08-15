@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from agent_api.agent import build_instructions
+from agent_api.agent import build_context_snapshot, build_instructions
 from agent_api.config import Settings
 from agent_api.runtime_context import format_runtime_context_pack
 
@@ -23,21 +23,23 @@ def test_runtime_context_pack_includes_time_locale_and_bounds() -> None:
     assert "guessing" in text
 
 
-def test_build_instructions_injects_runtime_context_before_overlay() -> None:
+def test_context_snapshot_carries_runtime_pack_before_data_blocks() -> None:
     fixed = datetime(2026, 8, 5, 3, 0, 0, tzinfo=UTC)
-    text = build_instructions(
-        overlay="VERTICAL_OVERLAY_MARKER",
-        memory_block=None,
-        mounted_names=set(),
+    text = build_context_snapshot(
+        memory_block="## Known user facts\n- x",
         timezone_name="Asia/Shanghai",
         locale="zh-CN",
         now=fixed,
     )
 
+    assert text is not None
     assert "Runtime context" in text
-    assert "VERTICAL_OVERLAY_MARKER" in text
-    assert text.index("Runtime context") < text.index("VERTICAL_OVERLAY_MARKER")
-    assert text.index("AgentOS assistant") < text.index("Runtime context")
+    assert "2026-08-05" in text
+    assert text.index("Runtime context") < text.index("Known user facts")
+
+    # Stable instructions no longer carry the per-second runtime pack.
+    instructions = build_instructions(overlay=None, mounted_names=set())
+    assert "Runtime context" not in instructions
 
 
 def test_settings_accept_runtime_timezone_and_locale() -> None:

@@ -20,6 +20,8 @@ class Settings(BaseSettings):
 
     ollama_base_url: str = "http://127.0.0.1:11434/v1"
     ollama_model: str = "agentos-qwen3vl:16k"
+    # Model context window (num_ctx in the Ollama Modelfile); drives input budgeting.
+    model_context_window: int = 16_384
     # Keep enough room for code and tool-grounded answers; prompt controls concision.
     model_max_output_tokens: int = 4_096
     model_temperature: float = 0.3
@@ -57,8 +59,9 @@ class Settings(BaseSettings):
     # Model-facing window after Artifact persist (stricter than fetch_url_max_chars).
     fetch_url_artifact_preview_chars: int = 1_000
     fetch_url_artifact_outline_chars: int = 600
-    # Sized for the 16k-context model: fewer read_artifact round-trips per report.
-    read_artifact_max_chars: int = 3_000
+    # Sized for the 16k-context model with the per-step budget guard as backstop:
+    # fewer read_artifact round-trips per report.
+    read_artifact_max_chars: int = 6_000
     # Built-in WHO growth assessment (anthro); no external router required.
     growth_assess_enabled: bool = True
     # Platform util tools: time_diff + calculate (deterministic; no external API).
@@ -129,11 +132,11 @@ class Settings(BaseSettings):
 
         return value
 
-    @field_validator("model_max_output_tokens")
+    @field_validator("model_context_window", "model_max_output_tokens")
     @classmethod
-    def model_max_output_tokens_must_be_positive(cls, value: int) -> int:
+    def model_token_limits_must_be_positive(cls, value: int) -> int:
         if value < 1:
-            raise ValueError("model_max_output_tokens must be at least 1")
+            raise ValueError("model token limits must be at least 1")
 
         return value
 

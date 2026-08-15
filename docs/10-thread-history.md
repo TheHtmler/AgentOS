@@ -71,7 +71,7 @@ GET /api/threads/{threadId}/messages
 
 当前助手 Message 仅在 Run `completed` 时写入。AG-UI 的浏览器 SSE 断开后，Agent API 进程内的 Run 会继续执行并持久化最终结果；用户回到前台后，页面等待 Run 进入终态，再刷新该 Thread 的历史，不拼接不完整的 `text_delta`。显式点击停止时才会调用取消接口。服务进程重启仍会中断内存中的未完成 Run，持久化任务队列属于后续能力。若该 Run 已有终态 `tool_result`，仍可显示完成态工具卡。
 
-续聊时，Agent API 会把服务端历史注入模型：优先使用各 Run 的 `run_message_histories`；若缺失则回退为 `messages` 表中的 user/assistant 成对内容（窗口受 `HISTORY_MAX_RUNS` 约束）。完整 `role=tool` 工具轨迹写回模型上下文仍为后续能力。
+续聊时，Agent API 会把服务端历史注入模型：优先使用各 Run 的 `run_message_histories`；若缺失则回退为 `messages` 表中的 user/assistant 成对内容（窗口受 `HISTORY_MAX_RUNS` 约束）。注入前再经 `context_budget.apply_context_budget()` 按 `MODEL_CONTEXT_WINDOW` 做输入预算裁剪（先裁旧工具结果、再丢最老 run）。完整 `role=tool` 工具轨迹写回模型上下文仍为后续能力。
 
 ## 验收标准
 
