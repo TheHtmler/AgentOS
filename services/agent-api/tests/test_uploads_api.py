@@ -141,10 +141,13 @@ async def test_upload_rejects_foreign_thread_before_extracting(
 
 
 @pytest.mark.anyio
-async def test_upload_ocr_failure_leaves_no_artifact(
+async def test_upload_ocr_failure_still_stores_original(
     authenticated_api_user: UUID,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
+    """OCR is best-effort: originals land in UPLOAD_ROOT for vision analysis."""
+
     async with session_factory() as session, session.begin():
         started = await start_run(
             session,
@@ -158,6 +161,8 @@ async def test_upload_ocr_failure_leaves_no_artifact(
     async def fail_extract(**_kwargs: object) -> tuple[str, dict[str, int]]:
         raise OcrError("OCR unavailable")
 
+    settings = get_settings().model_copy(update={"upload_root": tmp_path})
+    monkeypatch.setattr("agent_api.api.uploads.get_settings", lambda: settings)
     monkeypatch.setattr("agent_api.api.uploads.extract_upload_text", fail_extract)
 
     async with AsyncClient(
@@ -170,17 +175,24 @@ async def test_upload_ocr_failure_leaves_no_artifact(
             files={"file": ("scan.jpg", b"jpeg bytes", "image/jpeg")},
         )
 
-    assert response.status_code == 502
+    assert response.status_code == 200
+    body = response.json()
+    assert body["content_chars"] == 0
+    assert body["ocr_pages"] == 0
+    artifact_id = UUID(body["artifact_id"])
+
     async with session_factory() as session:
-        artifacts = list(
-            await session.scalars(
-                select(Artifact).where(
-                    Artifact.owner_user_id == authenticated_api_user,
-                    Artifact.thread_id == thread_id,
-                )
-            )
+        artifact = await session.get(Artifact, artifact_id)
+        assert artifact is not None
+        assert artifact.content == ""
+        assert artifact.meta["ocr_status"] == "failed"
+        assert artifact.meta["ocr_error"] == "OCR unavailable"
+        assert artifact.meta["stored_path"] == (
+            f"{authenticated_api_user}/{artifact_id}/scan.jpg"
         )
-    assert artifacts == []
+
+    stored = tmp_path / str(authenticated_api_user) / str(artifact_id) / "scan.jpg"
+    assert stored.read_bytes() == b"jpeg bytes"
 
 
 @pytest.mark.anyio

@@ -100,7 +100,7 @@ multipart：`file`（必填）、`thread_id`（必填）、可选 `title`。
 
 1. 校验用户拥有该 Thread；解析绑定 `case_id`（若有）。
 2. 校验扩展名/mime：`pdf, png, jpg, jpeg, webp`；大小 ≤ 20MB。
-3. OCR/抽字；失败 → 4xx/502（OCR 宕机），不落半成品 Artifact（或落 `meta.status=failed` 由实现二选一：**推荐失败不建 Artifact**）。
+3. OCR/抽字为可选备份；失败仍落盘并建 Artifact（`meta.ocr_status=failed`），解读优先依赖 Vision 看原图。
 4. 写磁盘 + `create_artifact`。
 5. 返回：
 

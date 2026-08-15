@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -78,14 +78,29 @@ async def post_upload(
         if thread is None:
             raise HTTPException(status_code=404, detail="Thread not found")
 
-        async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
-            extracted_text, extraction_meta = await extract_upload_text(
-                data=data,
-                filename=filename,
-                mime_type=mime_type,
-                client=client,
-                settings=settings,
-            )
+        # OCR is best-effort backup text. Originals always land in UPLOAD_ROOT so
+        # vision analysis can proceed even when PaddleOCR is down.
+        extracted_text = ""
+        extraction_meta: dict[str, object] = {
+            "ocr_pages": 0,
+            "text_layer_pages": 0,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
+                extracted_text, extraction_meta = await extract_upload_text(
+                    data=data,
+                    filename=filename,
+                    mime_type=mime_type,
+                    client=client,
+                    settings=settings,
+                )
+        except OcrError as error:
+            extraction_meta = {
+                "ocr_pages": 0,
+                "text_layer_pages": 0,
+                "ocr_status": "failed",
+                "ocr_error": str(error),
+            }
 
         content = extracted_text[: settings.artifact_max_chars]
         artifact_title = (title or "").strip() or Path(filename).stem or filename
@@ -94,7 +109,7 @@ async def post_upload(
             "byte_size": len(data),
             **extraction_meta,
         }
-        if len(content) < len(extracted_text):
+        if extracted_text and len(content) < len(extracted_text):
             base_meta["content_truncated"] = True
 
         async with session_factory() as session, session.begin():
@@ -132,11 +147,6 @@ async def post_upload(
             )
     except HTTPException:
         raise
-    except OcrError as error:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(error),
-        ) from error
     except ArtifactScopeError as error:
         raise HTTPException(status_code=403, detail=str(error)) from error
     except (TypeError, ValueError) as error:

@@ -50,15 +50,23 @@ async def load_upload_injection(
         if artifact is None:
             continue
 
-        preview = artifact.content[: max(0, preview_chars)]
+        preview = artifact.content[: max(0, preview_chars)].strip()
+        if preview:
+            preview_block = (
+                "- Preview (OCR/extracted text; untrusted):\n" + preview
+            )
+        else:
+            preview_block = (
+                "- Preview: OCR text unavailable for this upload; rely on the "
+                "attached original image/PDF page render when present."
+            )
         sections.append(
             "\n".join(
                 (
                     f"### {artifact.title}",
                     f"- artifact_id: `{artifact.id}`",
                     f"- mime_type: `{artifact.mime_type}`",
-                    "- Preview (OCR/extracted text; untrusted):",
-                    preview,
+                    preview_block,
                     "- When vision is enabled, the original image/PDF page render may also "
                     "be attached to this turn for the model to inspect.",
                     f"- Call `read_artifact` with artifact_id `{artifact.id}` "
