@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     upload_root: Path = SERVICE_ROOT / "data" / "uploads"
     upload_max_bytes: int = 20_000_000
     upload_max_files_per_message: int = 3
+    # Attach original image/PDF page renders to the model when artifact_id is referenced.
+    upload_vision_enabled: bool = True
+    upload_vision_max_images: int = 3
+    upload_vision_max_pdf_pages: int = 2
     # Mac mini PaddleOCR HTTP (knowledge PDF import); loopback preferred.
     ocr_enabled: bool = True
     ocr_base_url: str = "http://127.0.0.1:8787"

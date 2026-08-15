@@ -162,7 +162,8 @@ individualized prescriptions.
 REPORT_ANALYSIS_INSTRUCTIONS = """\
 ## Capability: 化验/检查报告解读（用户上传）
 当用户消息含 artifact_id 或注入块出现 Referenced upload artifacts 时：
-1. 先概括报告类型与关键数值；注明 OCR/抽字可能有误，不确定处标「待核对」。
+1. 先概括报告类型与关键数值；若本轮附带了原图/PDF 页渲染，优先结合视觉内容，并与
+   OCR/抽字预览交叉核对；不确定处标「待核对」。
 2. 调用 knowledge_search 检索相关公共知识（如串联质谱、血尿代谢；可带 disease_tags）。
 3. 对照解释；明确区分「知识库依据」与「模型推断」。
 4. 给出教育性解读并附非诊断声明；出现急性/危急线索时建议尽快就医。

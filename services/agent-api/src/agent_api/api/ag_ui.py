@@ -46,6 +46,8 @@ from agent_api.runtime import get_runtime
 from agent_api.thread_title import schedule_auto_thread_title
 from agent_api.tools.search.tool import AgentDeps
 from agent_api.uploads.context import load_upload_injection
+from agent_api.uploads.prompt import enrich_ag_ui_user_message
+from agent_api.uploads.vision import load_upload_vision_parts
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +170,7 @@ async def stream_ag_ui_run(
             memory_block = None
             case_block = None
             upload_block = None
+            vision_parts = []
             case_keys: set[str] = set()
             case_id = thread.case_id
             runtime = get_runtime(request)
@@ -205,6 +208,23 @@ async def stream_ag_ui_run(
                 )
             except Exception:
                 logger.exception("upload context failed; continuing without artifact preview")
+            try:
+                vision_parts = await load_upload_vision_parts(
+                    session,
+                    owner_user_id=user.id,
+                    case_id=case_id,
+                    user_text=prompt,
+                    settings=settings,
+                )
+            except Exception:
+                logger.exception("upload vision failed; continuing without image parts")
+                vision_parts = []
+
+        user_message = enrich_ag_ui_user_message(
+            user_message,
+            text=prompt,
+            vision_parts=vision_parts,
+        )
 
         agent = runtime.build_run_agent(
             system_prompt_overlay=version.system_prompt_overlay,

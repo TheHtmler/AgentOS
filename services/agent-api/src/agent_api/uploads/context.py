@@ -57,10 +57,12 @@ async def load_upload_injection(
                     f"### {artifact.title}",
                     f"- artifact_id: `{artifact.id}`",
                     f"- mime_type: `{artifact.mime_type}`",
-                    "- Preview (untrusted uploaded content):",
+                    "- Preview (OCR/extracted text; untrusted):",
                     preview,
+                    "- When vision is enabled, the original image/PDF page render may also "
+                    "be attached to this turn for the model to inspect.",
                     f"- Call `read_artifact` with artifact_id `{artifact.id}` "
-                    "when the full content or another window is needed.",
+                    "when the full OCR text or another window is needed.",
                 )
             )
         )

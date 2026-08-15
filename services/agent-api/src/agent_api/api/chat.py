@@ -42,6 +42,8 @@ from agent_api.runtime import AgentRuntime, get_runtime
 from agent_api.thread_title import schedule_auto_thread_title
 from agent_api.tools.search.tool import AgentDeps
 from agent_api.uploads.context import load_upload_injection
+from agent_api.uploads.prompt import user_prompt_with_vision
+from agent_api.uploads.vision import load_upload_vision_parts
 
 logger = logging.getLogger(__name__)
 
@@ -274,7 +276,7 @@ def chunk_assistant_text(text: str, *, chunk_size: int = 32) -> list[str]:
 
 async def event_stream(
     request: Request,
-    message: str,
+    message: str | list[object],
     thread_id: UUID,
     run_id: UUID,
     user_id: UUID,
@@ -297,6 +299,10 @@ async def event_stream(
     input_tokens: int | None = None
     output_tokens: int | None = None
     model_request_count: int | None = None
+    user_text = message if isinstance(message, str) else next(
+        (part for part in message if isinstance(part, str)),
+        "",
+    )
 
     try:
         # The lock protects the configured resource budget for the model's full execution.
@@ -421,7 +427,7 @@ async def event_stream(
     if runtime.ollama_http_client is not None:
         schedule_auto_thread_title(
             thread_id=thread_id,
-            user_message=message,
+            user_message=user_text,
             assistant_content=assistant_content,
             model_semaphore=runtime.model_semaphore,
             http_client=runtime.ollama_http_client,
@@ -431,7 +437,7 @@ async def event_stream(
             agent_id=agent_id,
             thread_id=thread_id,
             run_id=run_id,
-            user_message=message,
+            user_message=user_text,
             assistant_content=assistant_content,
             model_semaphore=runtime.model_semaphore,
             http_client=runtime.ollama_http_client,
@@ -444,7 +450,7 @@ async def event_stream(
             case_enabled=case_enabled,
             thread_id=thread_id,
             run_id=run_id,
-            user_message=message,
+            user_message=user_text,
             assistant_content=assistant_content,
             model_semaphore=runtime.model_semaphore,
             http_client=runtime.ollama_http_client,
@@ -493,6 +499,7 @@ async def stream_chat(
             memory_block = None
             case_block = None
             upload_block = None
+            vision_parts = []
             case_keys: set[str] = set()
             case_id = thread.case_id
             runtime = get_runtime(request)
@@ -531,6 +538,17 @@ async def stream_chat(
                 )
             except Exception:
                 logger.exception("upload context failed; continuing without artifact preview")
+            try:
+                vision_parts = await load_upload_vision_parts(
+                    session,
+                    owner_user_id=user.id,
+                    case_id=case_id,
+                    user_text=payload.message,
+                    settings=settings,
+                )
+            except Exception:
+                logger.exception("upload vision failed; continuing without image parts")
+                vision_parts = []
         agent = runtime.build_run_agent(
             system_prompt_overlay=version.system_prompt_overlay,
             tool_policy_overrides=version.tool_policy_overrides,
@@ -564,7 +582,7 @@ async def stream_chat(
     return StreamingResponse(
         event_stream(
             request,
-            payload.message,
+            user_prompt_with_vision(payload.message, vision_parts),
             started.thread_id,
             started.run_id,
             user.id,
