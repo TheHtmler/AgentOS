@@ -1274,6 +1274,45 @@ export function ChatPanel({
     }
   }
 
+  async function ensureThreadForUpload(): Promise<string | null> {
+    if (threadId !== null) {
+      return threadId;
+    }
+
+    try {
+      const response = await fetch("/api/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(agentId === null ? {} : { agent_id: agentId }),
+      });
+      const payload: unknown = await response.json().catch(() => null);
+      if (
+        !response.ok ||
+        !isRecord(payload) ||
+        typeof payload.id !== "string" ||
+        !isUuid(payload.id)
+      ) {
+        setError("无法创建会话，请稍后重试后再上传报告。");
+        return null;
+      }
+
+      const createdId = payload.id;
+      const createdAgentId =
+        typeof payload.agent_id === "string" && isUuid(payload.agent_id)
+          ? payload.agent_id
+          : agentId;
+
+      agentRef.current = createAgent(createdId, messages, createdAgentId);
+      setThreadId(createdId);
+      updateThreadInUrl(createdId);
+      onThreadChanged(createdId, createdAgentId ?? undefined);
+      return createdId;
+    } catch {
+      setError("无法创建会话，请检查网络后重试。");
+      return null;
+    }
+  }
+
   async function handleFileSelection(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
     const files = Array.from(input.files ?? []);
@@ -1283,8 +1322,8 @@ export function ChatPanel({
       return;
     }
 
-    if (threadId === null) {
-      setError("请先发送一条消息建立会话，再上传报告。");
+    const activeThreadId = await ensureThreadForUpload();
+    if (activeThreadId === null) {
       return;
     }
 
@@ -1311,7 +1350,7 @@ export function ChatPanel({
       for (const file of files) {
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("thread_id", threadId);
+        formData.append("thread_id", activeThreadId);
 
         try {
           const response = await fetch("/api/uploads", {
@@ -1738,7 +1777,6 @@ export function ChatPanel({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={
-                threadId === null ||
                 isStreaming ||
                 isUploading ||
                 isLoadingHistory ||
@@ -1747,7 +1785,7 @@ export function ChatPanel({
                 uploadedArtifacts.length >= MAX_UPLOAD_FILES
               }
               className="agentos-upload-button inline-flex shrink-0 items-center gap-1.5 px-2.5 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40"
-              title={threadId === null ? "请先发送消息建立会话" : "上传 PDF 或图片报告"}
+              title="上传 PDF 或图片报告（新建会话会自动创建）"
             >
               <svg
                 aria-hidden="true"

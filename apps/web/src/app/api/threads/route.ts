@@ -60,3 +60,38 @@ export async function GET(request: Request) {
     return unavailableResponse();
   }
 }
+
+export async function POST(request: Request) {
+  let payload: unknown = {};
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    try {
+      payload = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "invalid_request" },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+  }
+
+  try {
+    const upstream = await fetch(`${agentApiBaseUrl()}/v1/threads`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(await agentApiSessionHeaders()),
+      },
+      body: JSON.stringify(payload ?? {}),
+      cache: "no-store",
+      signal: request.signal,
+    });
+
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: upstreamResponseHeaders(upstream),
+    });
+  } catch {
+    return unavailableResponse();
+  }
+}

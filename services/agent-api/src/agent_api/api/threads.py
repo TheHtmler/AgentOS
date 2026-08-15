@@ -6,8 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
 
 from agent_api.api.auth import get_current_user
+from agent_api.db.agent_store import AgentNotFoundError, PublishedAgentVersionNotFoundError
+from agent_api.db.case_store import CaseNotFoundError
 from agent_api.db.chat_store import (
     ThreadNotFoundError,
+    create_empty_thread,
     get_thread_latest_run,
     list_thread_messages,
     list_thread_tool_calls,
@@ -35,6 +38,24 @@ class ThreadListResponse(BaseModel):
     """Recent Threads ordered by their latest durable activity."""
 
     threads: list[ThreadSummaryResponse]
+
+
+class ThreadCreateRequest(BaseModel):
+    """Create an empty Thread before the first chat message (e.g. for uploads)."""
+
+    agent_id: UUID | None = None
+    case_id: UUID | None = None
+
+
+class ThreadCreateResponse(BaseModel):
+    """Newly created empty Thread."""
+
+    id: UUID
+    agent_id: UUID
+    case_id: UUID | None
+    title: str | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class ThreadMessageResponse(BaseModel):
@@ -132,6 +153,41 @@ async def get_threads(
             for thread in threads
         ],
     )
+
+
+@router.post("", response_model=ThreadCreateResponse, status_code=201)
+async def post_thread(
+    user: Annotated[User, Depends(get_current_user)],
+    body: ThreadCreateRequest | None = None,
+) -> ThreadCreateResponse:
+    """Create an empty Thread so the client can upload reports before chatting."""
+
+    payload = body or ThreadCreateRequest()
+    try:
+        async with session_factory() as session, session.begin():
+            thread = await create_empty_thread(
+                session,
+                user_id=user.id,
+                agent_id=payload.agent_id,
+                case_id=payload.case_id,
+            )
+            return ThreadCreateResponse(
+                id=thread.id,
+                agent_id=thread.agent_id,
+                case_id=thread.case_id,
+                title=thread.title,
+                created_at=thread.created_at,
+                updated_at=thread.updated_at,
+            )
+    except AgentNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Agent not found") from error
+    except PublishedAgentVersionNotFoundError as error:
+        raise HTTPException(
+            status_code=409,
+            detail="Agent configuration has no published version",
+        ) from error
+    except CaseNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Case not found") from error
 
 
 @router.patch("/{thread_id}", response_model=ThreadUpdateResponse)

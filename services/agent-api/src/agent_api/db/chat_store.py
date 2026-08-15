@@ -85,6 +85,34 @@ async def _create_thread(
     return thread
 
 
+async def create_empty_thread(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    agent_id: UUID | None = None,
+    case_id: UUID | None = None,
+) -> Thread:
+    """Create a Thread with no messages (e.g. so the client can upload before chatting)."""
+
+    resolved_agent_id = await resolve_agent_for_new_thread(session, agent_id)
+    version = await get_published_version(session, resolved_agent_id)
+    resolved_case_id = await resolve_case_for_new_thread(
+        session,
+        user_id=user_id,
+        agent_id=resolved_agent_id,
+        case_id=case_id,
+        case_enabled=version.case_enabled,
+    )
+    thread = await _create_thread(
+        session,
+        user_id=user_id,
+        agent_id=resolved_agent_id,
+        case_id=resolved_case_id,
+    )
+    await session.refresh(thread)
+    return thread
+
+
 async def _get_active_thread(
     session: AsyncSession,
     *,
