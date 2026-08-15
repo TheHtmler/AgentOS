@@ -117,8 +117,13 @@ http_code() {
 }
 
 if [[ "$DO_PULL" -eq 1 ]]; then
-  log "git pull --ff-only"
-  git pull --ff-only
+  # Avoid bare `git pull --ff-only`: with multi-merge / multi-ref pull.* config
+  # Git errors with "Cannot fast-forward to multiple branches."
+  branch="$(git rev-parse --abbrev-ref HEAD)"
+  remote="$(git config --get "branch.${branch}.remote" 2>/dev/null || echo origin)"
+  log "git fetch ${remote} ${branch} && merge --ff-only"
+  git fetch "$remote" "$branch"
+  git merge --ff-only "${remote}/${branch}"
 else
   log "skip git pull"
 fi
