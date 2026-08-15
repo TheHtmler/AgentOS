@@ -15,6 +15,7 @@ from agent_api.config import Settings, get_settings
 from agent_api.db.artifact_store import get_owned_artifact
 from agent_api.db.models import Artifact
 from agent_api.uploads.context import parse_artifact_ids
+from agent_api.uploads.storage import resolve_stored_upload_path
 
 logger = logging.getLogger(__name__)
 
@@ -22,19 +23,10 @@ _IMAGE_MIME = frozenset({"image/png", "image/jpeg", "image/jpg", "image/webp"})
 
 
 def _resolve_stored_file(artifact: Artifact, *, upload_root: Path) -> Path | None:
-    meta = artifact.meta if isinstance(artifact.meta, dict) else {}
-    relative = meta.get("stored_path")
-    if not isinstance(relative, str) or not relative.strip():
-        return None
-    root = upload_root.resolve()
-    path = (root / relative).resolve()
-    try:
-        path.relative_to(root)
-    except ValueError:
+    meta = artifact.meta if isinstance(artifact.meta, dict) else None
+    path = resolve_stored_upload_path(root=upload_root, meta=meta)
+    if path is None and isinstance(meta, dict) and meta.get("stored_path"):
         logger.warning("upload path escapes UPLOAD_ROOT for artifact %s", artifact.id)
-        return None
-    if not path.is_file():
-        return None
     return path
 
 

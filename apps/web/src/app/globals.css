@@ -1563,6 +1563,34 @@ body {
   color: var(--accent-dim);
 }
 
+.agentos-upload-thumb {
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+}
+
+.agentos-upload-thumb-image {
+  display: block;
+  border-radius: 8px;
+  background: var(--panel-muted);
+}
+
+.agentos-upload-pending {
+  border-radius: 8px;
+}
+
+.agentos-upload-remove {
+  border: 1px solid var(--border-strong);
+  background: var(--surface-elevated);
+  color: var(--text-muted);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+.agentos-upload-remove:hover {
+  color: var(--text);
+  border-color: var(--accent-border);
+}
+
 .agentos-send-button {
   min-width: 6.4rem;
   border: 1px solid var(--accent-dim);

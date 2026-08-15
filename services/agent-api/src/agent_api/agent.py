@@ -160,8 +160,9 @@ individualized prescriptions.
 """
 
 REPORT_ANALYSIS_INSTRUCTIONS = """\
-## Capability: 化验/检查报告解读（用户上传）
-当用户消息含 artifact_id 或注入块出现 Referenced upload artifacts 时：
+## Capability: 化验/检查报告解读（用户明确意图时）
+仅当用户明确要求解读化验单、检查报告、指标对照等时启用下列步骤；
+否则按用户文字意图处理附件（描述图片、对比、提取信息等），不要默认走报告模板。
 1. 先概括报告类型与关键数值；若本轮附带了原图/PDF 页渲染，优先结合视觉内容，并与
    OCR/抽字预览交叉核对；不确定处标「待核对」。
 2. 调用 knowledge_search 检索相关公共知识（如串联质谱、血尿代谢；可带 disease_tags）。
@@ -170,6 +171,16 @@ REPORT_ANALYSIS_INSTRUCTIONS = """\
 5. 稳定、可归档的指标 → 作为 proposed Case facts，经 case_attribution_confirm /
    case_slot_collect（HITL）确认后再写入；勿静默覆盖默认档案或他人数据。
 6. 全文较长时调用 read_artifact 分段读取，勿仅凭预览作答。
+"""
+
+UPLOAD_ATTACHMENT_INSTRUCTIONS = """\
+## Capability: 用户上传附件
+当用户消息含 artifact_id 或注入块出现 Referenced upload artifacts 时：
+1. 以用户文字意图为准（可为空）。无文字时：简要说明你从附件中看到了什么，并询问需要什么帮助。
+2. 若本轮附带了原图/PDF 页渲染，优先结合视觉内容；OCR/抽字预览仅作备份，可能有误。
+3. 需要全文或更多文本时调用 read_artifact。
+4. 仅当用户明确要解读化验/检查报告时，再按「化验/检查报告解读」流程（知识库对照、教育性说明、Case HITL）。
+5. 不要把用户附件写入公共知识库；不要臆造未在附件中出现的数值。
 """
 
 CASE_INSTRUCTIONS = """\
@@ -224,6 +235,9 @@ def build_instructions(
         sections.append(case_block.strip())
     if upload_block and upload_block.strip():
         sections.append(upload_block.strip())
+        sections.append(UPLOAD_ATTACHMENT_INSTRUCTIONS.strip())
+        if "case_context_read" in mounted_names:
+            sections.append(REPORT_ANALYSIS_INSTRUCTIONS.strip())
     if "web_search" in mounted_names:
         sections.append(SEARCH_INSTRUCTIONS.strip())
     if "fetch_url" in mounted_names:
@@ -238,7 +252,6 @@ def build_instructions(
         sections.append(KNOWLEDGE_INSTRUCTIONS.strip())
     if "case_context_read" in mounted_names:
         sections.append(CASE_INSTRUCTIONS.strip())
-        sections.append(REPORT_ANALYSIS_INSTRUCTIONS.strip())
     if any(name.startswith("mcp_") for name in mounted_names):
         sections.append(MCP_INSTRUCTIONS.strip())
     return "\n\n".join(sections)

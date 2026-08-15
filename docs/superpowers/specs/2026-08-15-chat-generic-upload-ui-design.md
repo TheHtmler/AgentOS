@@ -1,7 +1,7 @@
 # 聊天通用附件上传 + 缩略图展示
 
 日期：2026-08-15  
-状态：草案（待实现）  
+状态：已实现  
 前置：`2026-08-14-chat-report-upload-analysis-design.md`、`2026-08-15-chat-upload-vision-design.md`
 
 ## 目标
@@ -72,8 +72,8 @@ artifact_id=<uuid2>
 `GET /v1/uploads/{artifact_id}/content`
 
 - 鉴权：当前用户 session。
-- 校验：`get_owned_artifact`（属主；Case 作用域与现有 read 一致）。
-- 响应：原文件 bytes + 正确 `Content-Type`；可选 `Content-Disposition: inline`。
+- 校验：`kind=upload` 且 `owner_user_id` 为当前用户（聊天缩略图；不依赖 Case 作用域）。
+- 响应：原文件 bytes + 正确 `Content-Type`；`Content-Disposition: inline`。
 - 404：不存在或无权。
 
 Web BFF：`GET /api/uploads/[artifactId]/content` → 转发 cookie/session。

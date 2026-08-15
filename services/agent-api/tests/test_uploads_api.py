@@ -15,7 +15,9 @@ from agent_api.main import app
 
 @pytest.mark.anyio
 async def test_upload_route_is_registered() -> None:
-    assert "post" in app.openapi()["paths"]["/v1/uploads"]
+    paths = app.openapi()["paths"]
+    assert "post" in paths["/v1/uploads"]
+    assert "get" in paths["/v1/uploads/{artifact_id}/content"]
 
 
 @pytest.fixture(autouse=True)
@@ -285,3 +287,101 @@ async def test_upload_rejects_invalid_file_before_extracting(
         )
 
     assert response.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_get_upload_content_returns_original_for_owner(
+    authenticated_api_user: UUID,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    async with session_factory() as session, session.begin():
+        started = await start_run(
+            session,
+            thread_id=None,
+            user_content="准备取回原图",
+            model_name="test",
+            user_id=authenticated_api_user,
+        )
+        thread_id = started.thread_id
+
+    async def fake_extract(**_kwargs: object) -> tuple[str, dict[str, int]]:
+        return "ocr", {"ocr_pages": 1, "text_layer_pages": 0}
+
+    settings = get_settings().model_copy(update={"upload_root": tmp_path})
+    monkeypatch.setattr("agent_api.api.uploads.get_settings", lambda: settings)
+    monkeypatch.setattr("agent_api.api.uploads.extract_upload_text", fake_extract)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        created = await client.post(
+            "/v1/uploads",
+            data={"thread_id": str(thread_id)},
+            files={"file": ("shot.png", b"png-bytes", "image/png")},
+        )
+        assert created.status_code == 200
+        artifact_id = created.json()["artifact_id"]
+        response = await client.get(f"/v1/uploads/{artifact_id}/content")
+
+    assert response.status_code == 200
+    assert response.content == b"png-bytes"
+    assert "image/png" in (response.headers.get("content-type") or "")
+
+
+@pytest.mark.anyio
+async def test_get_upload_content_rejects_foreign_user(
+    authenticated_api_user: UUID,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    async with session_factory() as session, session.begin():
+        started = await start_run(
+            session,
+            thread_id=None,
+            user_content="准备取回原图",
+            model_name="test",
+            user_id=authenticated_api_user,
+        )
+        thread_id = started.thread_id
+
+    async def fake_extract(**_kwargs: object) -> tuple[str, dict[str, int]]:
+        return "ocr", {"ocr_pages": 1, "text_layer_pages": 0}
+
+    settings = get_settings().model_copy(update={"upload_root": tmp_path})
+    monkeypatch.setattr("agent_api.api.uploads.get_settings", lambda: settings)
+    monkeypatch.setattr("agent_api.api.uploads.extract_upload_text", fake_extract)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        created = await client.post(
+            "/v1/uploads",
+            data={"thread_id": str(thread_id)},
+            files={"file": ("shot.png", b"png-bytes", "image/png")},
+        )
+        artifact_id = created.json()["artifact_id"]
+
+    from agent_api.api.auth import get_current_user
+
+    stranger_id = uuid4()
+
+    class _Stranger:
+        id = stranger_id
+
+    app.dependency_overrides[get_current_user] = lambda: _Stranger()
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://testserver",
+        ) as client:
+            response = await client.get(f"/v1/uploads/{artifact_id}/content")
+        assert response.status_code == 404
+    finally:
+        # Restore owner auth for fixture teardown.
+        async with session_factory() as session:
+            owner = await session.get(User, authenticated_api_user)
+            assert owner is not None
+            app.dependency_overrides[get_current_user] = lambda: owner

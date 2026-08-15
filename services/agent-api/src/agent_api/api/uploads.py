@@ -1,4 +1,4 @@
-"""Authenticated report upload API."""
+"""Authenticated chat file upload API."""
 
 from pathlib import Path
 from typing import Annotated
@@ -6,16 +6,18 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
 from agent_api.api.auth import get_current_user
 from agent_api.config import get_settings
 from agent_api.db.artifact_store import ArtifactScopeError, create_artifact
-from agent_api.db.models import Thread, User
+from agent_api.db.models import Artifact, Thread, User
 from agent_api.db.session import session_factory
 from agent_api.knowledge.ocr_client import OcrError
 from agent_api.uploads import extract_upload_text, store_upload
+from agent_api.uploads.storage import resolve_stored_upload_path
 
 router = APIRouter(prefix="/v1/uploads", tags=["uploads"])
 
@@ -55,7 +57,7 @@ async def post_upload(
     thread_id: Annotated[UUID, Form()],
     title: Annotated[str | None, Form()] = None,
 ) -> UploadResponse:
-    """Extract and persist one report owned by the current Thread user."""
+    """Persist one chat upload owned by the current Thread user."""
 
     settings = get_settings()
     filename = file.filename or "upload"
@@ -151,3 +153,37 @@ async def post_upload(
         raise HTTPException(status_code=403, detail=str(error)) from error
     except (TypeError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/{artifact_id}/content")
+async def get_upload_content(
+    artifact_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+) -> FileResponse:
+    """Stream the original upload bytes for the owning user (chat thumbnails)."""
+
+    settings = get_settings()
+    async with session_factory() as session:
+        artifact = await session.get(Artifact, artifact_id)
+
+    if (
+        artifact is None
+        or artifact.owner_user_id != user.id
+        or artifact.kind != "upload"
+    ):
+        raise HTTPException(status_code=404, detail="Upload not found")
+
+    meta = artifact.meta if isinstance(artifact.meta, dict) else None
+    path = resolve_stored_upload_path(root=settings.upload_root, meta=meta)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Upload file missing")
+
+    mime_type = (artifact.mime_type or "application/octet-stream").strip() or (
+        "application/octet-stream"
+    )
+    return FileResponse(
+        path,
+        media_type=mime_type,
+        filename=path.name,
+        content_disposition_type="inline",
+    )

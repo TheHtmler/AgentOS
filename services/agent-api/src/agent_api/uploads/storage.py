@@ -3,6 +3,25 @@ from pathlib import Path
 from uuid import UUID
 
 
+def resolve_stored_upload_path(*, root: Path, meta: dict[str, object] | None) -> Path | None:
+    """Resolve ``meta['stored_path']`` under ``root``; reject path escapes."""
+
+    if not isinstance(meta, dict):
+        return None
+    relative = meta.get("stored_path")
+    if not isinstance(relative, str) or not relative.strip():
+        return None
+    resolved_root = root.resolve()
+    path = (resolved_root / relative).resolve()
+    try:
+        path.relative_to(resolved_root)
+    except ValueError:
+        return None
+    if not path.is_file():
+        return None
+    return path
+
+
 def _safe_filename(filename: str) -> str:
     """Return a basename safe for local disk storage."""
 

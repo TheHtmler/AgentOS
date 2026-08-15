@@ -54,7 +54,72 @@ type UploadedArtifact = {
   artifactId: string;
   title: string;
   contentChars: number;
+  mimeType: string;
 };
+
+const ARTIFACT_ID_LINE_RE =
+  /(?:^|\n)\s*artifact_id\s*=\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s*(?=\n|$)/gi;
+
+function uploadContentUrl(artifactId: string): string {
+  return `/api/uploads/${artifactId}/content`;
+}
+
+function isImageMimeType(mimeType: string): boolean {
+  const normalized = mimeType.trim().toLowerCase();
+  return (
+    normalized === "image/png" ||
+    normalized === "image/jpeg" ||
+    normalized === "image/jpg" ||
+    normalized === "image/webp"
+  );
+}
+
+function mimeTypeFromFilename(filename: string): string {
+  const extension = filename.toLowerCase().split(".").at(-1);
+  switch (extension) {
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "webp":
+      return "image/webp";
+    case "pdf":
+      return "application/pdf";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function parseUserMessageAttachments(content: string): {
+  displayText: string;
+  artifactIds: string[];
+} {
+  const artifactIds: string[] = [];
+  const seen = new Set<string>();
+  for (const match of content.matchAll(ARTIFACT_ID_LINE_RE)) {
+    const id = match[1]?.toLowerCase();
+    if (id !== undefined && isUuid(id) && !seen.has(id)) {
+      seen.add(id);
+      artifactIds.push(id);
+    }
+  }
+  const displayText = content.replace(ARTIFACT_ID_LINE_RE, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { displayText, artifactIds };
+}
+
+function buildMessageWithAttachments(text: string, artifacts: readonly UploadedArtifact[]): string {
+  const lines = artifacts.map((artifact) => `artifact_id=${artifact.artifactId}`);
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    return lines.join("\n");
+  }
+  if (lines.length === 0) {
+    return trimmed;
+  }
+  return `${trimmed}\n\n${lines.join("\n")}`;
+}
+
 
 function parsePendingInterrupts(value: unknown): PendingInterrupt[] {
   if (!Array.isArray(value)) {
@@ -172,10 +237,16 @@ function parseUploadedArtifact(value: unknown): UploadedArtifact | null {
     return null;
   }
 
+  const mimeType =
+    typeof value.mime_type === "string" && value.mime_type.trim()
+      ? value.mime_type.trim().toLowerCase()
+      : "application/octet-stream";
+
   return {
     artifactId: value.artifact_id,
     title: value.title,
     contentChars: value.content_chars,
+    mimeType,
   };
 }
 
@@ -995,7 +1066,12 @@ export function ChatPanel({
   }
 
   async function sendMessage(contentOverride?: string) {
-    const content = (contentOverride ?? draft).trim();
+    const pending = uploadedArtifacts;
+    const rawText = contentOverride ?? draft;
+    const content =
+      contentOverride !== undefined
+        ? contentOverride.trim()
+        : buildMessageWithAttachments(rawText, pending);
 
     if (!content || isStreaming || isLoadingHistory || historyLoadFailed) {
       return;
@@ -1024,6 +1100,8 @@ export function ChatPanel({
     });
     if (contentOverride === undefined) {
       setDraft("");
+      setUploadedArtifacts([]);
+      setUploadNotice(null);
     }
     setError(null);
     setHistoryToolCalls((current) =>
@@ -1329,7 +1407,7 @@ export function ChatPanel({
 
     const remainingSlots = MAX_UPLOAD_FILES - uploadedArtifacts.length;
     if (files.length > remainingSlots) {
-      setError(`每个会话最多上传 ${MAX_UPLOAD_FILES} 份报告，当前还可上传 ${remainingSlots} 份。`);
+      setError(`每个会话最多上传 ${MAX_UPLOAD_FILES} 个附件，当前还可上传 ${remainingSlots} 个。`);
       return;
     }
 
@@ -1340,7 +1418,7 @@ export function ChatPanel({
     }
 
     setIsUploading(true);
-    setUploadNotice(`正在上传 ${files.length} 份报告…`);
+    setUploadNotice(`正在上传 ${files.length} 个文件…`);
     setError(null);
 
     const uploaded: UploadedArtifact[] = [];
@@ -1358,7 +1436,13 @@ export function ChatPanel({
             body: formData,
           });
           const payload: unknown = await response.json();
-          const artifact = response.ok ? parseUploadedArtifact(payload) : null;
+          let artifact = response.ok ? parseUploadedArtifact(payload) : null;
+          if (artifact !== null && artifact.mimeType === "application/octet-stream") {
+            artifact = {
+              ...artifact,
+              mimeType: mimeTypeFromFilename(file.name),
+            };
+          }
 
           if (artifact === null) {
             failedNames.push(file.name);
@@ -1373,21 +1457,17 @@ export function ChatPanel({
 
       if (uploaded.length > 0) {
         setUploadedArtifacts((current) => [...current, ...uploaded]);
-        const analysisRequest = uploaded
-          .map((artifact) => `请结合知识库解读我上传的报告。artifact_id=${artifact.artifactId}`)
-          .join("\n");
         setUploadNotice(
           failedNames.length === 0
-            ? "报告上传成功，已自动发送解读请求。"
-            : `已上传 ${uploaded.length} 份报告，并自动发送解读请求。`,
+            ? `已添加 ${uploaded.length} 个附件，可输入说明后发送，或直接发送。`
+            : `已添加 ${uploaded.length} 个附件；部分文件失败。`,
         );
-        await sendMessage(analysisRequest);
       } else {
         setUploadNotice(null);
       }
 
       if (failedNames.length > 0) {
-        setError(`以下报告上传失败：${failedNames.join("、")}。请检查格式或文件大小后重试。`);
+        setError(`以下文件上传失败：${failedNames.join("、")}。请检查格式或文件大小后重试。`);
       }
     } finally {
       setIsUploading(false);
@@ -1644,7 +1724,56 @@ export function ChatPanel({
                       message.role === "assistant" ? (
                         <AssistantMarkdown content={message.content} />
                       ) : (
-                        <p className="break-words whitespace-pre-wrap">{message.content}</p>
+                        (() => {
+                          const { displayText, artifactIds } = parseUserMessageAttachments(
+                            message.content,
+                          );
+                          return (
+                            <div className="space-y-2">
+                              {artifactIds.length > 0 ? (
+                                <div
+                                  className="agentos-message-attachments flex flex-wrap gap-2"
+                                  aria-label="附件"
+                                >
+                                  {artifactIds.map((artifactId) => (
+                                    <a
+                                      key={artifactId}
+                                      href={uploadContentUrl(artifactId)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="agentos-upload-thumb block overflow-hidden"
+                                      title="查看附件"
+                                    >
+                                      {/* Heuristic: try image; PDF still loads as object/download via link */}
+                                      <img
+                                        src={uploadContentUrl(artifactId)}
+                                        alt=""
+                                        className="agentos-upload-thumb-image h-20 w-20 object-cover"
+                                        onError={(event) => {
+                                          const target = event.currentTarget;
+                                          target.style.display = "none";
+                                          const fallback = target.nextElementSibling;
+                                          if (fallback instanceof HTMLElement) {
+                                            fallback.hidden = false;
+                                          }
+                                        }}
+                                      />
+                                      <span
+                                        hidden
+                                        className="agentos-upload-chip inline-flex h-20 w-20 items-center justify-center px-2 text-center text-[11px] leading-tight"
+                                      >
+                                        文件
+                                      </span>
+                                    </a>
+                                  ))}
+                                </div>
+                              ) : null}
+                              {displayText ? (
+                                <p className="break-words whitespace-pre-wrap">{displayText}</p>
+                              ) : null}
+                            </div>
+                          );
+                        })()
                       )
                     ) : message.role === "assistant" && isStreaming ? (
                       <p aria-live="polite" className="agentos-chat-subheading">
@@ -1720,16 +1849,41 @@ export function ChatPanel({
         className="agentos-composer border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4"
       >
         {uploadedArtifacts.length > 0 ? (
-          <div className="mb-2 flex flex-wrap gap-2" aria-label="已上传报告">
+          <div className="mb-2 flex flex-wrap gap-2" aria-label="待发送附件">
             {uploadedArtifacts.map((artifact) => (
-              <span
+              <div
                 key={artifact.artifactId}
-                className="agentos-upload-chip inline-flex max-w-full items-center gap-1.5 px-2.5 py-1 text-xs"
-                title={`${artifact.title} · ${artifact.contentChars.toLocaleString()} 字符`}
+                className="agentos-upload-pending relative inline-flex flex-col items-stretch"
               >
-                <span aria-hidden="true">✓</span>
-                <span className="truncate">{artifact.title}</span>
-              </span>
+                {isImageMimeType(artifact.mimeType) ? (
+                  <img
+                    src={uploadContentUrl(artifact.artifactId)}
+                    alt={artifact.title}
+                    className="agentos-upload-thumb-image h-16 w-16 rounded-md object-cover"
+                    title={artifact.title}
+                  />
+                ) : (
+                  <span
+                    className="agentos-upload-chip inline-flex h-16 max-w-36 flex-col justify-center gap-0.5 px-2.5 py-1 text-xs"
+                    title={artifact.title}
+                  >
+                    <span className="font-medium">PDF</span>
+                    <span className="truncate">{artifact.title}</span>
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="agentos-upload-remove absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[10px] leading-none"
+                  aria-label={`移除 ${artifact.title}`}
+                  onClick={() =>
+                    setUploadedArtifacts((current) =>
+                      current.filter((item) => item.artifactId !== artifact.artifactId),
+                    )
+                  }
+                >
+                  ×
+                </button>
+              </div>
             ))}
           </div>
         ) : null}
@@ -1785,7 +1939,7 @@ export function ChatPanel({
                 uploadedArtifacts.length >= MAX_UPLOAD_FILES
               }
               className="agentos-upload-button inline-flex shrink-0 items-center gap-1.5 px-2.5 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40"
-              title="上传 PDF 或图片报告（新建会话会自动创建）"
+              title="上传 PDF 或图片（新建会话会自动创建）"
             >
               <svg
                 aria-hidden="true"
@@ -1801,7 +1955,7 @@ export function ChatPanel({
                   d="m18.4 12.6-6.9 6.9a5 5 0 0 1-7.1-7.1l8.2-8.2a3.5 3.5 0 1 1 5 5l-8.2 8.2a2 2 0 1 1-2.8-2.8l7.5-7.5"
                 />
               </svg>
-              {isUploading ? "上传中…" : "上传报告"}
+              {isUploading ? "上传中…" : "上传"}
             </button>
             <span className="agentos-chat-subheading truncate text-xs">
               {uploadedArtifacts.length}/{MAX_UPLOAD_FILES}
@@ -1816,7 +1970,7 @@ export function ChatPanel({
               isUploading ||
               historyLoadFailed ||
               pendingInterrupts.length > 0 ||
-              (!isStreaming && !draft.trim())
+              (!isStreaming && !draft.trim() && uploadedArtifacts.length === 0)
             }
             className={`agentos-send-button min-w-18 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-45 ${
               isStreaming ? "agentos-stop-button" : ""

@@ -31,9 +31,12 @@ def test_platform_instructions_require_tools_before_refusal() -> None:
     assert "reference standards/charts/guidelines" in SEARCH_INSTRUCTIONS
 
 
-def test_report_analysis_instructions_key_phrases() -> None:
-    from agent_api.agent import REPORT_ANALYSIS_INSTRUCTIONS
+def test_upload_attachment_instructions_key_phrases() -> None:
+    from agent_api.agent import REPORT_ANALYSIS_INSTRUCTIONS, UPLOAD_ATTACHMENT_INSTRUCTIONS
 
+    assert "用户文字意图" in UPLOAD_ATTACHMENT_INSTRUCTIONS
+    assert "read_artifact" in UPLOAD_ATTACHMENT_INSTRUCTIONS
+    assert "明确要解读" in UPLOAD_ATTACHMENT_INSTRUCTIONS
     assert "OCR" in REPORT_ANALYSIS_INSTRUCTIONS
     assert "knowledge_search" in REPORT_ANALYSIS_INSTRUCTIONS
     assert "非诊断" in REPORT_ANALYSIS_INSTRUCTIONS
@@ -41,26 +44,28 @@ def test_report_analysis_instructions_key_phrases() -> None:
     assert "HITL" in REPORT_ANALYSIS_INSTRUCTIONS
 
 
-def test_build_instructions_includes_report_analysis_for_case_enabled() -> None:
+def test_build_instructions_includes_upload_guidance_when_upload_block_present() -> None:
+    text = build_instructions(
+        overlay=None,
+        memory_block=None,
+        upload_block="## Referenced upload artifacts\n### shot",
+        mounted_names={"case_context_read", "knowledge_search", "read_artifact"},
+    )
+
+    assert "用户上传附件" in text
+    assert "用户文字意图" in text
+    assert "化验/检查报告解读" in text
+    assert "明确要求解读" in text or "明确要解读" in text
+
+
+def test_build_instructions_omits_upload_report_without_upload_block() -> None:
     text = build_instructions(
         overlay=None,
         memory_block=None,
         mounted_names={"case_context_read", "knowledge_search", "read_artifact"},
     )
 
-    assert "化验/检查报告解读" in text
-    assert "knowledge_search" in text
-    assert "非诊断" in text
-    assert "case_slot_collect" in text
-
-
-def test_build_instructions_omits_report_analysis_without_case_tools() -> None:
-    text = build_instructions(
-        overlay=None,
-        memory_block=None,
-        mounted_names={"knowledge_search", "read_artifact"},
-    )
-
+    assert "用户上传附件" not in text
     assert "化验/检查报告解读" not in text
 
 
