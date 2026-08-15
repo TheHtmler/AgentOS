@@ -1,4 +1,4 @@
 FROM qwen3-vl:8b-instruct
 # 16GB Mac mini 预算平衡：Q4_K_M 权重 6.1GB + 16k KV ≈ 2.5GB。
-# 模型原生支持 256k，但 KV 约 150KB/千 token ×16，不要盲目拉满。
+# 模型原生支持 256k，但 KV 约 150MB/千 token，不要盲目拉满。
 PARAMETER num_ctx 16384

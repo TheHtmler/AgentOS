@@ -14,7 +14,7 @@
 | 项 | 估算 |
 | --- | --- |
 | 模型权重（Q4_K_M) | 6.1GB |
-| KV cache @ num_ctx 16384 | ~2.5GB(约 150KB/千 token) |
+| KV cache @ num_ctx 16384 | ~2.5GB（约 150MB/千 token） |
 | 视觉编码器 + 激活 | ~0.5–1GB |
 | 合计 | ~9–10GB，接近 macOS Metal 默认上限（约 10.6GB) |
 
@@ -125,8 +125,17 @@ launchctl kickstart -k gui/$(id -u)/com.local.agentos-api
 - **Ollama 版本旧**:< 0.12.7 不认识 qwen3-vl 模板，升级后重试。
 - **体感速度**:8B Q4 在 M 系芯片约 15–25 tok/s，长报告解读比 e4b 慢是正常的，质量优先。
 
+## 参数预算说明（换模型后哪些动、哪些不动)
+
+- `MODEL_MAX_OUTPUT_TOKENS=4096` **保持不变**。它是单轮输出上限而非上下文大小：4096 token ≈ 2500–3000 中文字，对报告解读已充裕；调大只会挤占 16k 窗口里的输入预算并助长啰嗦。输出被截断时产品层已有提示（`output_limits.py`)。
+- `READ_ARTIFACT_MAX_CHARS` 已随升级从 1500 调到 3000：报告全文分段读的轮次减半，降低小模型多轮读文件失败率。
+- `MODEL_TEMPERATURE=0.3` 保持：事实型回答要稳定。若观察到重复循环（Qwen instruct 低温度的已知倾向），再上调到 0.6。
+- `HISTORY_MAX_RUNS=4` 保持：若验收时 `runs.input_tokens` 频繁逼近 12k，先把它降到 3。
+- `num_ctx` 是唯一真正的扩容杠杆：内存验证有余量后可重建为 24576(`ollama create` 改 Modelfile 即可）,KV 约增至 3.7GB，需先 `sudo sysctl iogpu.wired_limit_mb=12288`。
+- Mac mini 上建议给 Ollama 服务设 `OLLAMA_NUM_PARALLEL=1`，与应用层 `MODEL_MAX_CONCURRENT_RUNS=1` 对齐，防止并发请求翻倍占 KV。
+
 ## 可选的配套小修（独立于模型切换，建议后续单独一轮做）
 
-1. `services/agent-api/src/agent_api/agent.py:250` — `REPORT_ANALYSIS_INSTRUCTIONS` 目前只在 `case_context_read` 挂载时注入，未绑 Case 的 Agent 解读报告时缺少输出约束；应改为随 `upload_block` 注入。
-2. `services/agent-api/src/agent_api/uploads/context.py:33` — OCR 预览 `preview_chars=1500` 对 16k 上下文过于保守，可提到 4000，减少小模型分段读 `read_artifact` 的失败率。
+1. ~~`agent.py` 报告解读指令与 Case 绑定解耦~~（已随本次升级完成）。
+2. ~~`uploads/context.py` OCR 预览 1500 → 4000~~（已随本次升级完成）。
 3. 输入侧仍无 token 预算护栏（只有输出截断检测 `output_limits.py`)，后续可按「历史 > memory > 预览」优先级裁剪。

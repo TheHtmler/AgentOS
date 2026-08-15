@@ -57,7 +57,8 @@ class Settings(BaseSettings):
     # Model-facing window after Artifact persist (stricter than fetch_url_max_chars).
     fetch_url_artifact_preview_chars: int = 1_000
     fetch_url_artifact_outline_chars: int = 600
-    read_artifact_max_chars: int = 1_500
+    # Sized for the 16k-context model: fewer read_artifact round-trips per report.
+    read_artifact_max_chars: int = 3_000
     # Built-in WHO growth assessment (anthro); no external router required.
     growth_assess_enabled: bool = True
     # Platform util tools: time_diff + calculate (deterministic; no external API).

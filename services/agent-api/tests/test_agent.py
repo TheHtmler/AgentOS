@@ -123,7 +123,7 @@ def test_default_settings() -> None:
     assert settings.fetch_providers == ["firecrawl", "local"]
     assert Settings.model_fields["fetch_url_max_chars"].default == 2_500
     assert Settings.model_fields["fetch_url_artifact_preview_chars"].default == 1_000
-    assert Settings.model_fields["read_artifact_max_chars"].default == 1_500
+    assert Settings.model_fields["read_artifact_max_chars"].default == 3_000
     assert settings.tool_policy_deny == ""
     assert settings.tool_policy_ask == ""
     assert settings.auto_thread_title_enabled is True
