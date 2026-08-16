@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 
 from agent_api.api.ag_ui import router as ag_ui_router
@@ -12,6 +14,14 @@ from agent_api.api.runs import router as runs_router
 from agent_api.api.threads import router as threads_router
 from agent_api.api.uploads import router as uploads_router
 from agent_api.runtime import lifespan
+
+# Uvicorn's own format has no timestamp; without one, errors in the launchd log
+# cannot be correlated with user actions. App/uvicorn.error loggers propagate here.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 app = FastAPI(
     title="AgentOS Agent API",
