@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { Skeleton } from "@/components/skeleton";
 import { displayTitle, formatTime } from "@/lib/format";
 import { MESSAGE_ROLE_LABELS, RUN_STATUS_LABELS, USER_STATUS_LABELS, labelOf } from "@/lib/labels";
 import { opsJson } from "@/lib/ops-fetch";
@@ -67,14 +68,14 @@ export default function SessionDetailPage() {
   }, [load]);
 
   if (!detail && !error) {
-    return <p className="muted">加载中…</p>;
+    return <Skeleton />;
   }
 
   return (
     <div className="stack">
       <div>
-        <Link href="/sessions" className="muted">
-          ← 返回会话
+        <Link href="/sessions" className="crumb">
+          ← 会话
         </Link>
         <h1 className="page-title">{displayTitle(detail?.title)}</h1>
         <p className="muted">只读审计 · 正文超过 2000 字会截断</p>

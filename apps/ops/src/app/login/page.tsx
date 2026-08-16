@@ -61,7 +61,7 @@ export default function LoginPage() {
             <span className="brand-mark__glyph" aria-hidden />
             <div className="brand">AgentOS Ops</div>
           </div>
-          <p className="muted page-lead">运营控制台 · 知识审核与智能体配置（非聊天站）</p>
+          <p className="muted page-lead">知识审核、智能体发版与会话审计。这不是聊天站。</p>
         </div>
         <label>
           用户名

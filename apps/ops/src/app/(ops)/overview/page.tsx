@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { PageHeader } from "@/components/page-header";
+import { Skeleton } from "@/components/skeleton";
 import { displayTitle, formatTime } from "@/lib/format";
 import { RUN_STATUS_LABELS, labelOf } from "@/lib/labels";
 import { opsJson } from "@/lib/ops-fetch";
@@ -54,45 +56,49 @@ export default function OverviewPage() {
 
   return (
     <div className="stack">
-      <div>
-        <h1 className="page-title">概览</h1>
-        <p className="muted page-lead">知识审核、智能体状态与最近会话，一眼看清运营面。</p>
-      </div>
+      <PageHeader
+        title="概览"
+        lead="先看审核进度和待审批，再进知识库或会话处理。"
+        actions={
+          <Link href="/knowledge/import" className="btn">
+            导入知识
+          </Link>
+        }
+      />
 
       {error ? <p className="error">{error}</p> : null}
-      {!stats && !error ? <p className="muted">加载中…</p> : null}
+      {!stats && !error ? <Skeleton rows={3} /> : null}
 
       {stats ? (
         <>
           <div className="stat-grid">
-            <div className="stat-card">
+            <Link className="stat-card" href="/knowledge">
               <div className="muted">知识文档</div>
               <strong>{stats.knowledge.documents_total}</strong>
               <span className="muted">
-                已策展 {stats.knowledge.curated} · 临床已审 {stats.knowledge.clinically_reviewed} ·
-                已撤回 {stats.knowledge.withdrawn}
+                策展 {stats.knowledge.curated} · 已审 {stats.knowledge.clinically_reviewed} · 撤回{" "}
+                {stats.knowledge.withdrawn}
               </span>
-            </div>
-            <div className="stat-card">
+            </Link>
+            <Link className="stat-card" href="/agents">
               <div className="muted">智能体</div>
               <strong>{stats.agents.active + stats.agents.disabled}</strong>
               <span className="muted">
-                启用中 {stats.agents.active} · 已禁用 {stats.agents.disabled}
+                启用 {stats.agents.active} · 禁用 {stats.agents.disabled}
               </span>
-            </div>
-            <div className="stat-card">
+            </Link>
+            <Link className="stat-card" href="/sessions">
               <div className="muted">用户会话</div>
               <strong>{stats.sessions.threads_total}</strong>
               <span className="muted">
-                待审批 {stats.sessions.waiting_approval} · 用户 {stats.users.active}/
-                {stats.users.total}
+                用户 {stats.users.active}/{stats.users.total}
               </span>
-            </div>
-            <div className="stat-card">
+            </Link>
+            <Link className="stat-card" href="/sessions?run_status=waiting_approval">
               <div className="muted">待审批</div>
               <strong>{stats.sessions.waiting_approval}</strong>
-              <span className="muted">当前仍停在 HITL 的 Run</span>
-            </div>
+              <span className="muted">仍停在 HITL 的 Run</span>
+            </Link>
           </div>
 
           <section className="panel stack">
@@ -103,46 +109,29 @@ export default function OverviewPage() {
               </Link>
             </div>
             {stats.recent_threads.length === 0 ? (
-              <p className="muted" style={{ margin: 0 }}>
-                还没有用户会话。
-              </p>
+              <p className="empty">还没有用户会话。</p>
             ) : (
-              <div className="doc-list always">
+              <div className="row-list">
                 {stats.recent_threads.map((thread) => (
-                  <article key={thread.id} className="doc-card">
-                    <Link href={`/sessions/${thread.id}`} className="doc-card__title linkish">
-                      {displayTitle(thread.title)}
-                    </Link>
-                    <div className="doc-card__meta">
-                      <span>{thread.user_email ?? "无账号"}</span>
-                      <span>{thread.agent_name}</span>
-                      <span className={`badge badge--${thread.last_run_status ?? "unknown"}`}>
-                        {labelOf(RUN_STATUS_LABELS, thread.last_run_status)}
-                      </span>
-                      <span>{formatTime(thread.updated_at)}</span>
+                  <Link key={thread.id} href={`/sessions/${thread.id}`} className="row">
+                    <div>
+                      <div className="row__title">{displayTitle(thread.title)}</div>
+                      <div className="row__meta">
+                        <span>{thread.user_email ?? "无账号"}</span>
+                        <span>{thread.agent_name}</span>
+                      </div>
                     </div>
-                  </article>
+                    <span className={`badge badge--${thread.last_run_status ?? "unknown"}`}>
+                      {labelOf(RUN_STATUS_LABELS, thread.last_run_status)}
+                    </span>
+                    <span className="muted">{formatTime(thread.updated_at)}</span>
+                  </Link>
                 ))}
               </div>
             )}
           </section>
         </>
       ) : null}
-
-      <div className="quick-links">
-        <Link className="quick-link" href="/knowledge">
-          进入知识库
-        </Link>
-        <Link className="quick-link" href="/agents">
-          管理智能体
-        </Link>
-        <Link className="quick-link" href="/sessions">
-          审计会话
-        </Link>
-        <Link className="quick-link" href="/knowledge/import">
-          导入知识
-        </Link>
-      </div>
     </div>
   );
 }

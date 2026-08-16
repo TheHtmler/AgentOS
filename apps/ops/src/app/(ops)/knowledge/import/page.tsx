@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
+import { PageHeader } from "@/components/page-header";
 import { OpsFetchError } from "@/lib/ops-fetch";
 
 type ImportMode = "json" | "text" | "url" | "file";
@@ -148,26 +149,23 @@ export default function KnowledgeImportPage() {
   return (
     <div className="stack">
       <div>
-        <Link href="/knowledge" className="linkish">
-          ← 返回知识库
+        <Link href="/knowledge" className="crumb">
+          ← 知识库
         </Link>
-        <h1 className="page-title">导入知识</h1>
-        <p className="muted page-lead">选择来源，将内容写入 MMA/PA 公共知识库。</p>
+        <PageHeader
+          title="导入知识"
+          lead="选择来源写入 MMA/PA 公共知识库。相同标识会覆盖并保留快照。"
+        />
       </div>
 
-      <section className="callout" aria-label="导入说明">
-        <h2>导入前请确认</h2>
-        <p>相同标识会覆盖现有文档，并保留覆盖前的历史快照。PDF 可能需要 OCR，处理时间会较长。</p>
-      </section>
-
-      <div className="filter-row" role="tablist" aria-label="导入方式">
+      <div className="seg" role="tablist" aria-label="导入方式">
         {MODES.map((item) => (
           <button
             key={item.value}
             type="button"
             role="tab"
             aria-selected={mode === item.value}
-            className={`secondary ${mode === item.value ? "is-selected" : ""}`}
+            className={mode === item.value ? "is-selected" : ""}
             disabled={busy}
             onClick={() => {
               setMode(item.value);

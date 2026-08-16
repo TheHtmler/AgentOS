@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
-import { opsJson } from "@/lib/ops-fetch";
+import { PageHeader } from "@/components/page-header";
+import { Skeleton } from "@/components/skeleton";
+import { useToast } from "@/components/toast";
 import { AGENT_KIND_LABELS, AGENT_STATUS_LABELS, boolZh, labelOf } from "@/lib/labels";
+import { opsJson } from "@/lib/ops-fetch";
 
 type OpsAgent = {
   id: string;
@@ -19,8 +22,10 @@ type OpsAgent = {
 };
 
 export default function AgentsPage() {
+  const toast = useToast();
   const [agents, setAgents] = useState<OpsAgent[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -33,6 +38,8 @@ export default function AgentsPage() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载失败");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -60,6 +67,7 @@ export default function AgentsPage() {
       });
       setEditingId(null);
       await load();
+      toast.show("名称已保存");
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存失败");
     } finally {
@@ -67,7 +75,7 @@ export default function AgentsPage() {
     }
   }
 
-  async function patchAgent(id: string, body: Record<string, unknown>) {
+  async function patchAgent(id: string, body: Record<string, unknown>, done: string) {
     setBusyId(id);
     setError(null);
     try {
@@ -76,6 +84,7 @@ export default function AgentsPage() {
         body: JSON.stringify(body),
       });
       await load();
+      toast.show(done);
     } catch (err) {
       setError(err instanceof Error ? err.message : "操作失败");
     } finally {
@@ -85,30 +94,34 @@ export default function AgentsPage() {
 
   return (
     <div className="stack">
-      <div>
-        <h1 className="page-title">智能体</h1>
-        <p className="muted page-lead">启停、描述、默认智能体，以及发布提示词版本</p>
-      </div>
-
+      {toast.node}
+      <PageHeader title="智能体" lead="启停、设默认，或进入详情发布提示词版本。" />
       {error ? <p className="error">{error}</p> : null}
+      {loading ? <Skeleton /> : null}
 
-      <div className="doc-list always">
+      {!loading && agents.length === 0 ? <div className="empty">还没有智能体。</div> : null}
+
+      <div className="row-list">
         {agents.map((agent) => (
-          <article key={agent.id} className="doc-card">
-            <Link href={`/agents/${agent.id}`} className="doc-card__title linkish">
-              {agent.name}
-              {agent.is_default ? <span className="pill">默认</span> : null}
-            </Link>
-            <div className="muted" style={{ fontSize: "0.85rem" }}>
-              标识：{agent.slug} · {labelOf(AGENT_KIND_LABELS, agent.kind)} ·{" "}
+          <article key={agent.id} className="row row--ops">
+            <div>
+              <Link href={`/agents/${agent.id}`} className="row__title linkish">
+                {agent.name}
+                {agent.is_default ? <span className="pill">默认</span> : null}
+              </Link>
+              <div className="row__meta">
+                <span>{agent.slug}</span>
+                <span>{labelOf(AGENT_KIND_LABELS, agent.kind)}</span>
+                <span>记忆 {boolZh(agent.memory_enabled)}</span>
+                <span>档案 {boolZh(agent.case_enabled)}</span>
+              </div>
+              <p className="muted" style={{ margin: "6px 0 0" }}>
+                {agent.description || "无描述"}
+              </p>
+            </div>
+            <span className={`badge badge--${agent.status}`}>
               {labelOf(AGENT_STATUS_LABELS, agent.status)}
-            </div>
-            <div className="doc-card__meta">
-              <span>记忆 {boolZh(agent.memory_enabled)}</span>
-              <span>档案 {boolZh(agent.case_enabled)}</span>
-            </div>
-            <p style={{ margin: 0 }}>{agent.description || "无描述"}</p>
-
+            </span>
             {editingId === agent.id ? (
               <form className="stack" onSubmit={(event) => void saveEdit(event)}>
                 <label>
@@ -119,34 +132,38 @@ export default function AgentsPage() {
                   描述
                   <input value={description} onChange={(e) => setDescription(e.target.value)} />
                 </label>
-                <button type="submit" disabled={busyId === agent.id}>
-                  保存
-                </button>
-                <button type="button" className="secondary" onClick={() => setEditingId(null)}>
-                  取消
-                </button>
+                <div className="btn-row">
+                  <button type="submit" disabled={busyId === agent.id}>
+                    保存
+                  </button>
+                  <button type="button" className="ghost" onClick={() => setEditingId(null)}>
+                    取消
+                  </button>
+                </div>
               </form>
             ) : (
-              <div className="doc-card__actions">
+              <div className="btn-row">
                 <Link href={`/agents/${agent.id}`} className="linkish">
-                  版本与提示词
+                  发版
                 </Link>
                 <button
                   type="button"
-                  className="secondary block"
+                  className="ghost"
                   disabled={busyId === agent.id}
                   onClick={() => startEdit(agent)}
                 >
-                  编辑名称
+                  改名
                 </button>
                 <button
                   type="button"
-                  className="secondary block"
+                  className="secondary"
                   disabled={busyId === agent.id}
                   onClick={() =>
-                    void patchAgent(agent.id, {
-                      status: agent.status === "active" ? "disabled" : "active",
-                    })
+                    void patchAgent(
+                      agent.id,
+                      { status: agent.status === "active" ? "disabled" : "active" },
+                      agent.status === "active" ? "已禁用" : "已启用",
+                    )
                   }
                 >
                   {agent.status === "active" ? "禁用" : "启用"}
@@ -154,9 +171,8 @@ export default function AgentsPage() {
                 {!agent.is_default ? (
                   <button
                     type="button"
-                    className="block"
                     disabled={busyId === agent.id || agent.status !== "active"}
-                    onClick={() => void patchAgent(agent.id, { is_default: true })}
+                    onClick={() => void patchAgent(agent.id, { is_default: true }, "已设为默认")}
                   >
                     设为默认
                   </button>

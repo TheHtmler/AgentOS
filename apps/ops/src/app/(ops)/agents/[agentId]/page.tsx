@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
+import { useToast } from "@/components/toast";
 import { formatTime } from "@/lib/format";
 import { AGENT_KIND_LABELS, AGENT_STATUS_LABELS, boolZh, labelOf } from "@/lib/labels";
 import { opsJson } from "@/lib/ops-fetch";
@@ -35,6 +36,7 @@ export default function AgentDetailPage() {
   const params = useParams<{ agentId: string }>();
   const [agent, setAgent] = useState<OpsAgentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const [saving, setSaving] = useState(false);
   const [overlay, setOverlay] = useState("");
   const [memoryEnabled, setMemoryEnabled] = useState(false);
@@ -92,6 +94,7 @@ export default function AgentDetailPage() {
       });
       setAgent(updated);
       applyVersion(updated.published_version);
+      toast.show("新版本已发布");
     } catch (err) {
       if (err instanceof SyntaxError) {
         setError("工具策略 JSON 格式无效");
@@ -109,9 +112,10 @@ export default function AgentDetailPage() {
 
   return (
     <div className="stack">
+      {toast.node}
       <div>
-        <Link href="/agents" className="muted">
-          ← 返回智能体
+        <Link href="/agents" className="crumb">
+          ← 智能体
         </Link>
         <h1 className="page-title">{agent?.name ?? "智能体"}</h1>
         <p className="muted">

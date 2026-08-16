@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { OpsFetchError, opsJson } from "@/lib/ops-fetch";
+import { PageHeader } from "@/components/page-header";
+import { Skeleton } from "@/components/skeleton";
+import { useToast } from "@/components/toast";
 import { REVIEW_STATUS_LABELS, labelOf } from "@/lib/labels";
+import { OpsFetchError, opsJson } from "@/lib/ops-fetch";
 
 type KnowledgeDocument = {
   id: string;
@@ -29,6 +32,7 @@ const FILTER_LABELS: Record<(typeof FILTERS)[number], string> = {
 
 export default function KnowledgePage() {
   const router = useRouter();
+  const toast = useToast();
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,6 +87,7 @@ export default function KnowledgePage() {
       setDocuments((prev) =>
         prev.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
       );
+      toast.show("审核状态已更新");
     } catch (err) {
       setError(err instanceof Error ? err.message : "更新失败");
     } finally {
@@ -92,78 +97,71 @@ export default function KnowledgePage() {
 
   return (
     <div className="stack">
-      <div>
-        <h1 className="page-title">知识库</h1>
-        <p className="muted page-lead">MMA/PA 公共知识 · 审核状态与文档元数据</p>
-      </div>
+      {toast.node}
+      <PageHeader
+        title="知识库"
+        lead="审核公共知识、改状态，或导入新文档。"
+        actions={
+          <Link href="/knowledge/import" className="btn">
+            导入文档
+          </Link>
+        }
+      />
 
-      <section className="callout" aria-label="知识库能力说明">
-        <h2>现在能做什么 / 数据从哪来</h2>
+      <details className="callout">
+        <summary>导入与覆盖规则</summary>
         <ul>
+          <li>支持 JSON、文本、链接和文件；相同标识会覆盖并保留快照。</li>
           <li>
-            <strong>已有：</strong>可通过
-            JSON、文本、网页链接或文件导入知识，并查看内容切片、修改审核状态与元数据、查看历史快照。
-          </li>
-          <li>
-            <strong>覆盖规则：</strong>相同文档标识会更新原文档，并自动保留覆盖前的快照。
-          </li>
-          <li>
-            <strong>初始数据：</strong>仓库策展文件{" "}
-            <code>services/agent-api/seed/knowledge/mma_pa_chunks.json</code>
-            （约 4 篇文档 / 32 条切片），经 Mac mini 上执行{" "}
-            <code>uv run --directory services/agent-api python scripts/seed_knowledge.py</code>{" "}
-            写入数据库；后续内容可直接从导入页补充。
+            初始数据来自 <code>seed/knowledge/mma_pa_chunks.json</code>，用{" "}
+            <code>scripts/seed_knowledge.py</code> 写入。
           </li>
         </ul>
-      </section>
+      </details>
 
-      <div className="filter-row">
-        <Link href="/knowledge/import" className="quick-link">
-          导入
-        </Link>
+      <div className="toolbar">
         <input
           className="search-input"
           value={query}
           placeholder="筛选标题或标识"
           onChange={(event) => setQuery(event.target.value)}
         />
-      </div>
-
-      <div className="filter-row">
-        {FILTERS.map((item) => (
-          <button
-            key={item}
-            type="button"
-            className={`secondary ${filter === item ? "is-selected" : ""}`}
-            onClick={() => setFilter(item)}
-          >
-            {FILTER_LABELS[item]}
-          </button>
-        ))}
+        <div className="seg" role="tablist" aria-label="审核状态">
+          {FILTERS.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className={filter === item ? "is-selected" : ""}
+              onClick={() => setFilter(item)}
+            >
+              {FILTER_LABELS[item]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error ? <p className="error">{error}</p> : null}
-      {loading ? <p className="muted">加载中…</p> : null}
+      {loading ? <Skeleton /> : null}
 
       {!loading && visible.length > 0 ? (
-        <div className="doc-list always">
+        <div className="row-list">
           {visible.map((doc) => (
-            <article key={doc.id} className="doc-card">
-              <Link href={`/knowledge/${doc.id}`} className="doc-card__title linkish">
-                {doc.title}
-              </Link>
-              <div className="muted" style={{ fontSize: "0.85rem", wordBreak: "break-all" }}>
-                标识：{doc.slug}
+            <article key={doc.id} className="row">
+              <div>
+                <Link href={`/knowledge/${doc.id}`} className="row__title linkish">
+                  {doc.title}
+                </Link>
+                <div className="row__meta">
+                  <span>{doc.slug}</span>
+                  <span>v{doc.version_label ?? "—"}</span>
+                  <span>{doc.chunk_count} 条切片</span>
+                </div>
               </div>
-              <div className="doc-card__meta">
-                <span>版本 {doc.version_label ?? "—"}</span>
-                <span className={`badge badge--${doc.review_status}`}>
-                  {labelOf(REVIEW_STATUS_LABELS, doc.review_status)}
-                </span>
-                <span>{doc.chunk_count} 条切片</span>
-              </div>
+              <span className={`badge badge--${doc.review_status}`}>
+                {labelOf(REVIEW_STATUS_LABELS, doc.review_status)}
+              </span>
               <label>
-                审核状态
+                改状态
                 <select
                   value={doc.review_status}
                   disabled={savingId === doc.id}
@@ -182,11 +180,7 @@ export default function KnowledgePage() {
       ) : null}
 
       {!loading && visible.length === 0 ? (
-        <div className="panel">
-          <p className="muted" style={{ margin: 0 }}>
-            暂无文档。若库是空的，请在 API 机器上跑一次知识 seed（见上方说明）。
-          </p>
-        </div>
+        <div className="empty">没有匹配的文档。可以先导入，或检查筛选条件。</div>
       ) : null}
     </div>
   );

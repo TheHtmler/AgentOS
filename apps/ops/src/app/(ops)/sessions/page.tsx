@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 
+import { PageHeader } from "@/components/page-header";
+import { Skeleton } from "@/components/skeleton";
 import { displayTitle, formatTime } from "@/lib/format";
 import { RUN_STATUS_LABELS, labelOf } from "@/lib/labels";
 import { opsJson } from "@/lib/ops-fetch";
@@ -21,14 +24,20 @@ type OpsThread = {
 
 const RUN_FILTERS = ["all", ...Object.keys(RUN_STATUS_LABELS)] as const;
 
-export default function SessionsPage() {
+function SessionsBody() {
+  const searchParams = useSearchParams();
+  const initialStatus = searchParams.get("run_status");
   const [threads, setThreads] = useState<OpsThread[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
-  const [runStatus, setRunStatus] = useState<(typeof RUN_FILTERS)[number]>("all");
+  const [runStatus, setRunStatus] = useState<(typeof RUN_FILTERS)[number]>(
+    initialStatus && initialStatus in RUN_STATUS_LABELS
+      ? (initialStatus as (typeof RUN_FILTERS)[number])
+      : "all",
+  );
   const [includeDeleted, setIncludeDeleted] = useState(false);
 
   const load = useCallback(async () => {
@@ -56,15 +65,23 @@ export default function SessionsPage() {
     })();
   }, [load]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (runStatus === "all") params.delete("run_status");
+    else params.set("run_status", runStatus);
+    const next = params.toString();
+    const current = searchParams.toString();
+    if (next !== current) {
+      window.history.replaceState(null, "", next ? `/sessions?${next}` : "/sessions");
+    }
+  }, [runStatus, searchParams]);
+
   return (
     <div className="stack">
-      <div>
-        <h1 className="page-title">会话</h1>
-        <p className="muted page-lead">只读审计用户对话、Run 状态与待审批，不改写用户数据。</p>
-      </div>
+      <PageHeader title="会话" lead="只读审计对话和 Run，不改写用户数据。" />
 
       <form
-        className="filter-row"
+        className="toolbar"
         onSubmit={(event) => {
           event.preventDefault();
           setQuery(draft);
@@ -79,19 +96,6 @@ export default function SessionsPage() {
         <button type="submit" className="secondary">
           搜索
         </button>
-      </form>
-
-      <div className="filter-row">
-        {RUN_FILTERS.map((item) => (
-          <button
-            key={item}
-            type="button"
-            className={`secondary ${runStatus === item ? "is-selected" : ""}`}
-            onClick={() => setRunStatus(item)}
-          >
-            {item === "all" ? "全部状态" : RUN_STATUS_LABELS[item]}
-          </button>
-        ))}
         <label className="inline-check">
           <input
             type="checkbox"
@@ -100,42 +104,57 @@ export default function SessionsPage() {
           />
           含已删除
         </label>
+      </form>
+
+      <div className="seg" role="tablist" aria-label="Run 状态">
+        {RUN_FILTERS.map((item) => (
+          <button
+            key={item}
+            type="button"
+            className={runStatus === item ? "is-selected" : ""}
+            onClick={() => setRunStatus(item)}
+          >
+            {item === "all" ? "全部" : RUN_STATUS_LABELS[item]}
+          </button>
+        ))}
       </div>
 
       {error ? <p className="error">{error}</p> : null}
-      {loading ? <p className="muted">加载中…</p> : null}
-      {!loading ? <p className="muted">共 {total} 条</p> : null}
+      {loading ? <Skeleton /> : <p className="muted">{total} 条结果</p>}
 
       {!loading && threads.length > 0 ? (
-        <div className="doc-list always">
+        <div className="row-list">
           {threads.map((thread) => (
-            <article key={thread.id} className="doc-card">
-              <Link href={`/sessions/${thread.id}`} className="doc-card__title linkish">
-                {displayTitle(thread.title)}
-                {thread.deleted_at ? <span className="pill pill--danger">已删除</span> : null}
-              </Link>
-              <div className="muted" style={{ fontSize: "0.85rem" }}>
-                {thread.user_email ?? "无账号"} · {thread.agent_name}
+            <Link key={thread.id} href={`/sessions/${thread.id}`} className="row">
+              <div>
+                <div className="row__title">
+                  {displayTitle(thread.title)}
+                  {thread.deleted_at ? <span className="pill pill--danger">已删除</span> : null}
+                </div>
+                <div className="row__meta">
+                  <span>{thread.user_email ?? "无账号"}</span>
+                  <span>{thread.agent_name}</span>
+                  <span>{thread.message_count} 条消息</span>
+                </div>
               </div>
-              <div className="doc-card__meta">
-                <span className={`badge badge--${thread.last_run_status ?? "unknown"}`}>
-                  {labelOf(RUN_STATUS_LABELS, thread.last_run_status)}
-                </span>
-                <span>{thread.message_count} 条消息</span>
-                <span>{formatTime(thread.updated_at)}</span>
-              </div>
-            </article>
+              <span className={`badge badge--${thread.last_run_status ?? "unknown"}`}>
+                {labelOf(RUN_STATUS_LABELS, thread.last_run_status)}
+              </span>
+              <span className="muted">{formatTime(thread.updated_at)}</span>
+            </Link>
           ))}
         </div>
       ) : null}
 
-      {!loading && threads.length === 0 ? (
-        <div className="panel">
-          <p className="muted" style={{ margin: 0 }}>
-            没有匹配的会话。
-          </p>
-        </div>
-      ) : null}
+      {!loading && threads.length === 0 ? <div className="empty">没有匹配的会话。</div> : null}
     </div>
+  );
+}
+
+export default function SessionsPage() {
+  return (
+    <Suspense fallback={<Skeleton />}>
+      <SessionsBody />
+    </Suspense>
   );
 }

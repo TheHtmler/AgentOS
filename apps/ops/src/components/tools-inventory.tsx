@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { PageHeader } from "@/components/page-header";
+import { Skeleton } from "@/components/skeleton";
 import { POLICY_ACTION_LABELS, TOOL_DOMAIN_LABELS, TOOL_RISK_LABELS, labelOf } from "@/lib/labels";
 import { opsJson } from "@/lib/ops-fetch";
 
@@ -50,10 +52,7 @@ export function ToolsInventory({
 
   return (
     <div className="stack">
-      <div>
-        <h1 className="page-title">{title}</h1>
-        <p className="muted page-lead">{lead}</p>
-      </div>
+      <PageHeader title={title} lead={lead} />
 
       {source === "mcp" && data ? (
         <section className="callout">
@@ -66,7 +65,7 @@ export function ToolsInventory({
       ) : null}
 
       {error ? <p className="error">{error}</p> : null}
-      {!data && !error ? <p className="muted">加载中…</p> : null}
+      {!data && !error ? <Skeleton /> : null}
 
       {data && tools.length === 0 ? (
         <section className="panel">

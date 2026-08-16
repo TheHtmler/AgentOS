@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
-import { opsJson } from "@/lib/ops-fetch";
+import { useToast } from "@/components/toast";
 import { REVIEW_STATUS_LABELS, SOURCE_KIND_LABELS } from "@/lib/labels";
+import { opsJson } from "@/lib/ops-fetch";
 
 type Chunk = {
   id: string;
@@ -52,6 +53,7 @@ export default function KnowledgeDetailPage() {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [snapshotDetail, setSnapshotDetail] = useState<SnapshotDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const [saving, setSaving] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -109,6 +111,7 @@ export default function KnowledgeDetailPage() {
         }),
       });
       await load();
+      toast.show("文档信息已保存");
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存失败");
     } finally {
@@ -126,6 +129,7 @@ export default function KnowledgeDetailPage() {
       });
       setSnapshotDetail(null);
       await load();
+      toast.show("已恢复到该快照");
     } catch (err) {
       setError(err instanceof Error ? err.message : "恢复失败");
     } finally {
@@ -152,9 +156,10 @@ export default function KnowledgeDetailPage() {
 
   return (
     <div className="stack">
+      {toast.node}
       <div>
-        <Link href="/knowledge" className="muted">
-          ← 返回列表
+        <Link href="/knowledge" className="crumb">
+          ← 知识库
         </Link>
         <h1 className="page-title">{doc?.title ?? "文档详情"}</h1>
         <p className="muted">标识：{doc?.slug}</p>
