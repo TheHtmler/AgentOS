@@ -21,10 +21,10 @@
 
 生产前端也跑在 Mac mini（`launchctl` 托管），经 FRP 映射到云侧反代：
 
-| 站点 | 域名 | 本机端口 | launchd |
-| --- | --- | --- | --- |
-| 产品 Web | `agentos.lemonbabycare.cn` | `3000` | `com.local.agentos-web` |
-| Ops | `ops-agentos.lemonbabycare.cn` | `3001` | `com.local.agentos-ops` |
+| 站点     | 域名                           | 本机端口 | launchd                 |
+| -------- | ------------------------------ | -------- | ----------------------- |
+| 产品 Web | `agentos.lemonbabycare.cn`     | `3000`   | `com.local.agentos-web` |
+| Ops      | `ops-agentos.lemonbabycare.cn` | `3001`   | `com.local.agentos-ops` |
 
 Ops 部署步骤见 [14-macmini-frp-ops-deploy.md](14-macmini-frp-ops-deploy.md)。
 
@@ -36,7 +36,7 @@ Ops 部署步骤见 [14-macmini-frp-ops-deploy.md](14-macmini-frp-ops-deploy.md)
 
 ### Mac mini（16GB 起）
 
-- Ollama：本地模型推理，优先原生运行以使用 Apple Silicon Metal。
+- Ollama：本地模型推理，优先原生运行以使用 Apple Silicon Metal；当前为 `agentos-qwen3vl:16k`（升级步骤见 [15-model-upgrade-qwen3-vl.md](15-model-upgrade-qwen3-vl.md)，运行时组装细节见 [16-agent-runtime-architecture.md](16-agent-runtime-architecture.md)）。
 - Agent API：FastAPI + Pydantic AI。
 - Next.js：`apps/web`（`:3000`）与 `apps/ops`（`:3001`），BFF 本机访问 Agent API。
 - PostgreSQL：对话、Run、HITL、审计记录的事实来源。
@@ -79,19 +79,19 @@ SSE 负责 Agent 事件输出；普通 HTTP POST 负责创建、恢复和取消�
 
 ## 数据模型最小集合
 
-| 领域       | 表                                                                    |
-| ---------- | --------------------------------------------------------------------- |
-| 身份与租户 | `tenants`、`users`、`memberships`                                     |
-| Agent 配置 | `agents`、`agent_versions`、`model_configs`、`knowledge_bases`        |
-| 领域上下文 | `patient_cases`、`patient_memberships`、`patient_facts`、`care_plans` |
-| 对话与运行 | `threads`、`messages`、`runs`、`run_events`                           |
-| 工具与审批 | `mcp_servers`、`tools`、`tool_calls`、`interrupts`、`approvals`       |
-| 知识与文件 | `knowledge_documents`、`knowledge_chunks`、`artifacts`                |
-| Runtime    | `sandboxes`、`usage_records`、`audit_logs`                            |
+| 领域       | 表                                                              |
+| ---------- | --------------------------------------------------------------- |
+| 身份与租户 | `tenants`、`users`、`memberships`                               |
+| Agent 配置 | `agents`、`agent_versions`、`model_configs`、`knowledge_bases`  |
+| 领域上下文 | `cases`、`case_memberships`、`case_facts`、`care_plans`         |
+| 对话与运行 | `threads`、`messages`、`runs`、`run_events`                     |
+| 工具与审批 | `mcp_servers`、`tools`、`tool_calls`、`interrupts`、`approvals` |
+| 知识与文件 | `knowledge_documents`、`knowledge_chunks`、`artifacts`          |
+| Runtime    | `sandboxes`、`usage_records`、`audit_logs`                      |
 
 `run_events` 采用 append-only 设计，并使用 `(run_id, seq)` 唯一约束。前端断线重连时传入最后一个 `seq`，后端补发缺失事件。审批、恢复、取消和工具调用都必须带 `idempotency_key`。
 
-`users` 是登录账户，`patient_cases` 是被咨询的患者主体，不能用 `user_id` 代替 `patient_case_id`。新 Thread 和 Run 应同时记录 `agent_id`、`patient_case_id` 和所有者范围；公共知识库只读共享，患者 Artifact、事实、计划和历史消息必须按患者授权隔离。
+`users` 是登录账户，`cases` 是被咨询/被照护的主体档案（实现已从早期的 `patient_cases` 命名为平台级 `cases`，见[领域 Agent 与患者上下文架构](12-domain-agents-and-patient-context.md))，不能用 `user_id` 代替 `case_id`。新 Thread 和 Run 应同时记录 `agent_id`、`case_id` 和所有者范围；公共知识库只读共享，主体 Artifact、事实、计划和历史消息必须按主体授权隔离。
 
 ## 领域 Agent 与患者上下文
 
@@ -129,7 +129,7 @@ general-agent
 ## 16GB Mac mini 约束
 
 - 初始只保留一个本地模型，推理并发设为 `1`。
-- Context 先限制在 4K 到 8K。
+- Context 当前为 16k（qwen3-vl，KV 约 2.5GB）；升 24k 需先验证 swap，步骤见 [15](15-model-upgrade-qwen3-vl.md)。
 - 每次最多一个 Sandbox，内存限制为 512MB 到 1GB，超时自动销毁。
 - 初期不常驻 Redis、MinIO、多 Worker 或大量 MCP Server。
 - 若 Memory Pressure 或 Swap 持续增长，先缩小模型/Context，或路由至第三方 API。
