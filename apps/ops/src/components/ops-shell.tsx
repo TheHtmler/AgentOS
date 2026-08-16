@@ -100,7 +100,6 @@ function NavIcon({ name }: { name: NavIconName }) {
 function BrandMark({ subtitle }: { subtitle?: string }) {
   return (
     <div className="brand-mark">
-      <span className="brand-mark__glyph" aria-hidden />
       <div>
         <div className="brand">AgentOS Ops</div>
         {subtitle ? <div className="brand-sub">{subtitle}</div> : null}

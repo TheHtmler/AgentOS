@@ -78,7 +78,7 @@ function SessionsBody() {
 
   return (
     <div className="stack">
-      <PageHeader title="会话" lead="只读审计对话和 Run，不改写用户数据。" />
+      <PageHeader title="会话" lead="只读审计，不改用户数据。" />
 
       <form
         className="toolbar"

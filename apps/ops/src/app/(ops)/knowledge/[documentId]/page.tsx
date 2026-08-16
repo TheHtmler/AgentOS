@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { useToast } from "@/components/toast";
-import { REVIEW_STATUS_LABELS, SOURCE_KIND_LABELS } from "@/lib/labels";
+import { REVIEW_STATUS_HINTS, REVIEW_STATUS_LABELS, SOURCE_KIND_LABELS } from "@/lib/labels";
 import { opsJson } from "@/lib/ops-fetch";
 
 type Chunk = {
@@ -55,6 +55,7 @@ export default function KnowledgeDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -119,6 +120,20 @@ export default function KnowledgeDetailPage() {
     }
   }
 
+  async function removeDocument() {
+    if (!window.confirm("删除后文档和历史快照都不可恢复。确定删除？")) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await opsJson(`/api/ops/knowledge/documents/${documentId}`, { method: "DELETE" });
+      toast.show("文档已删除");
+      router.replace("/knowledge");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除失败");
+      setDeleting(false);
+    }
+  }
+
   async function restoreSnapshot(snapshotId: string) {
     if (!window.confirm("恢复会覆盖当前正文，并先把当前内容存成新快照。确定恢复？")) return;
     setRestoringId(snapshotId);
@@ -161,8 +176,20 @@ export default function KnowledgeDetailPage() {
         <Link href="/knowledge" className="crumb">
           ← 知识库
         </Link>
-        <h1 className="page-title">{doc?.title ?? "文档详情"}</h1>
-        <p className="muted">标识：{doc?.slug}</p>
+        <div className="page-head">
+          <div>
+            <h1 className="page-title">{doc?.title ?? "文档详情"}</h1>
+            <p className="muted page-lead">标识 {doc?.slug}</p>
+          </div>
+          <button
+            type="button"
+            className="danger-link"
+            disabled={deleting}
+            onClick={() => void removeDocument()}
+          >
+            {deleting ? "删除中…" : "删除文档"}
+          </button>
+        </div>
       </div>
 
       {error ? <p className="error">{error}</p> : null}
@@ -191,7 +218,7 @@ export default function KnowledgeDetailPage() {
                 </select>
               </label>
               <label>
-                审核状态
+                状态
                 <select value={reviewStatus} onChange={(e) => setReviewStatus(e.target.value)}>
                   {REVIEW_OPTIONS.map((option) => (
                     <option key={option} value={option}>
@@ -199,6 +226,7 @@ export default function KnowledgeDetailPage() {
                     </option>
                   ))}
                 </select>
+                <span className="field-hint">{REVIEW_STATUS_HINTS[reviewStatus]}</span>
               </label>
               <label>
                 来源名称

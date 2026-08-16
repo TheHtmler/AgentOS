@@ -425,6 +425,18 @@ async def patch_knowledge_document(
     return out
 
 
+@router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_knowledge_document(
+    document_id: UUID,
+    _subject: Annotated[str, Depends(get_ops_subject)],
+) -> None:
+    async with session_factory() as session, session.begin():
+        document = await session.get(KnowledgeDocument, document_id)
+        if document is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+        await session.delete(document)
+
+
 @router.get("/documents/{document_id}/snapshots", response_model=SnapshotListResponse)
 async def list_document_snapshots(
     document_id: UUID,

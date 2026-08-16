@@ -95,7 +95,7 @@ export default function AgentsPage() {
   return (
     <div className="stack">
       {toast.node}
-      <PageHeader title="智能体" lead="启停、设默认，或进入详情发布提示词版本。" />
+      <PageHeader title="智能体" lead="启停、设默认，或进详情发版。" />
       {error ? <p className="error">{error}</p> : null}
       {loading ? <Skeleton /> : null}
 

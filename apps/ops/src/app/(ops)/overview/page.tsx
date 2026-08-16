@@ -58,10 +58,10 @@ export default function OverviewPage() {
     <div className="stack">
       <PageHeader
         title="概览"
-        lead="先看审核进度和待审批，再进知识库或会话处理。"
+        lead="审核进度和待审批。"
         actions={
           <Link href="/knowledge/import" className="btn">
-            导入知识
+            导入
           </Link>
         }
       />
@@ -76,8 +76,8 @@ export default function OverviewPage() {
               <div className="muted">知识文档</div>
               <strong>{stats.knowledge.documents_total}</strong>
               <span className="muted">
-                策展 {stats.knowledge.curated} · 已审 {stats.knowledge.clinically_reviewed} · 撤回{" "}
-                {stats.knowledge.withdrawn}
+                待审核 {stats.knowledge.curated} · 已审核 {stats.knowledge.clinically_reviewed} ·
+                已下架 {stats.knowledge.withdrawn}
               </span>
             </Link>
             <Link className="stat-card" href="/agents">

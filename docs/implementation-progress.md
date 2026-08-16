@@ -1,6 +1,6 @@
 # 实施进度
 
-最后更新：2026-08-16（Ops 控制台 UI：Linear 密度 + Stripe 页头 + 行列表）
+最后更新：2026-08-16（知识文档可删除；审核状态改为待审核/已审核/已下架；Ops UI 收密）
 
 ## 当前状态
 
@@ -106,7 +106,8 @@
 - 工具调用行 UI：折叠行改为线框 SVG + 英文 `toolName` + 关键参数，副行状态（执行中/已完成/失败/待审批）。
 - 助手回合统一气泡：thinking、工具行与最终文字同处一个 `agentos-message-assistant`；去掉气泡外「处理中/已处理」过程组；HITL 审批条仍在泡外。
 - Ops 知识库多途径导入：JSON / 纯文本 / 链接 / 文件（`.txt` / `.md` / `.json`）/ PDF；统一 ingest → 同 slug 快照覆盖 upsert；PDF 文本层不足时调用本机 PaddleOCR HTTP（`OCR_BASE_URL`）；Ops UI 导入页 + BFF `POST /api/ops/knowledge/import`。
-- Ops 控制台视觉与交互抛光：暖石色画布 + 松绿强调 + 深色分组侧栏；列表改为行密度（Linear/Langfuse）；页头主操作与分段筛选（Stripe）；保存/启停/恢复用 toast；加载用 skeleton；概览指标可点进对应列表，待审批带 `run_status` 深链。
+- Ops 控制台视觉与交互抛光：冷灰画布 + 石墨主按钮 + 13px 行列表；页头主操作与分段筛选；保存/启停/恢复用 toast；加载用 skeleton；概览指标可点进对应列表，待审批带 `run_status` 深链。
+- 知识文档 `DELETE /v1/ops/knowledge/documents/{id}`（chunks/snapshots CASCADE）。审核状态 API 仍为 `curated` / `clinically_reviewed` / `withdrawn`，界面改为「待审核 / 已审核 / 已下架」：前两者可被 `knowledge_search` 命中，下架仅排除检索，删除才去掉文档。
 - 聊天报告上传与分析：Web 附件 UI + BFF `POST /api/uploads`；Agent API `POST /v1/uploads` 将原文件存至 `UPLOAD_ROOT`、OCR 文本写入 Artifact（`kind=upload`）；Run 注入报告预览；垂类 Agent 结合 `knowledge_search` 解读，case_enabled 路径经现有 HITL 写入 Case facts；用户报告与 `knowledge_*` 严格隔离。
 
 ## 验证

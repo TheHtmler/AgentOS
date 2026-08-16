@@ -57,11 +57,10 @@ export default function LoginPage() {
       >
         <div>
           <span className="login-kicker">Operations</span>
-          <div className="brand-mark" style={{ marginBottom: 8 }}>
-            <span className="brand-mark__glyph" aria-hidden />
-            <div className="brand">AgentOS Ops</div>
+          <div className="brand" style={{ marginBottom: 6 }}>
+            AgentOS Ops
           </div>
-          <p className="muted page-lead">知识审核、智能体发版与会话审计。这不是聊天站。</p>
+          <p className="muted page-lead">知识审核、智能体发版、会话审计。</p>
         </div>
         <label>
           用户名

@@ -133,6 +133,44 @@ async def test_ops_knowledge_list_patch_and_snapshots(
 
 
 @pytest.mark.anyio
+async def test_ops_knowledge_delete_document(
+    database_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await upsert_mma_pa_knowledge(database_session)
+    await database_session.commit()
+
+    document = await database_session.scalar(
+        select(KnowledgeDocument).order_by(KnowledgeDocument.slug).limit(1),
+    )
+    assert document is not None
+    document_id = document.id
+
+    token = await _ops_cookie(monkeypatch)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        client.cookies.set("ops_session", token)
+
+        missing = await client.delete(
+            "/v1/ops/knowledge/documents/00000000-0000-0000-0000-000000000000",
+        )
+        assert missing.status_code == 404
+
+        deleted = await client.delete(f"/v1/ops/knowledge/documents/{document_id}")
+        assert deleted.status_code == 204
+
+        gone = await client.get(f"/v1/ops/knowledge/documents/{document_id}")
+        assert gone.status_code == 404
+
+        listed = await client.get("/v1/ops/knowledge/documents", params={"base": "mma-pa"})
+        assert listed.status_code == 200
+        assert all(row["id"] != str(document_id) for row in listed.json()["documents"])
+
+        snaps = await client.get(f"/v1/ops/knowledge/documents/{document_id}/snapshots")
+        assert snaps.status_code == 404
+
+
+@pytest.mark.anyio
 async def test_upsert_writes_snapshot_when_chunks_exist(
     database_session: AsyncSession,
 ) -> None:

@@ -1,17 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Instrument_Sans, Source_Serif_4 } from "next/font/google";
+import { IBM_Plex_Sans } from "next/font/google";
 
 import "./globals.css";
 
-const opsSans = Instrument_Sans({
+const opsSans = IBM_Plex_Sans({
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
   variable: "--font-ops-sans",
-  display: "swap",
-});
-
-const opsDisplay = Source_Serif_4({
-  subsets: ["latin"],
-  variable: "--font-ops-display",
   display: "swap",
 });
 
@@ -30,7 +25,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="zh-CN" className={`${opsSans.variable} ${opsDisplay.variable}`}>
+    <html lang="zh-CN" className={opsSans.variable}>
       <body>{children}</body>
     </html>
   );

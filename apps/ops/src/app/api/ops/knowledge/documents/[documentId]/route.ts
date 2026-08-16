@@ -48,3 +48,18 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "agent_api_unavailable" }, { status: 503 });
   }
 }
+
+export async function DELETE(request: Request, context: RouteContext) {
+  const { documentId } = await context.params;
+  try {
+    const upstream = await fetch(`${agentApiBaseUrl()}/v1/ops/knowledge/documents/${documentId}`, {
+      method: "DELETE",
+      headers: await opsSessionHeaders(),
+      cache: "no-store",
+      signal: request.signal,
+    });
+    return proxyUpstreamResponse(upstream);
+  } catch {
+    return NextResponse.json({ error: "agent_api_unavailable" }, { status: 503 });
+  }
+}

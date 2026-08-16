@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
-import { REVIEW_STATUS_LABELS, labelOf } from "@/lib/labels";
+import { REVIEW_STATUS_HINTS, REVIEW_STATUS_LABELS, labelOf } from "@/lib/labels";
 import { OpsFetchError, opsJson } from "@/lib/ops-fetch";
 
 type KnowledgeDocument = {
@@ -39,6 +39,7 @@ export default function KnowledgePage() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [query, setQuery] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const loadDocuments = useCallback(async () => {
     try {
@@ -87,9 +88,28 @@ export default function KnowledgePage() {
       setDocuments((prev) =>
         prev.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
       );
-      toast.show("审核状态已更新");
+      toast.show(`已改为${labelOf(REVIEW_STATUS_LABELS, review_status)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "更新失败");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function removeDocument(documentId: string) {
+    if (confirmId !== documentId) {
+      setConfirmId(documentId);
+      return;
+    }
+    setSavingId(documentId);
+    setError(null);
+    try {
+      await opsJson(`/api/ops/knowledge/documents/${documentId}`, { method: "DELETE" });
+      setDocuments((prev) => prev.filter((row) => row.id !== documentId));
+      setConfirmId(null);
+      toast.show("文档已删除");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除失败");
     } finally {
       setSavingId(null);
     }
@@ -100,30 +120,24 @@ export default function KnowledgePage() {
       {toast.node}
       <PageHeader
         title="知识库"
-        lead="审核公共知识、改状态，或导入新文档。"
+        lead="改状态只影响检索；删除会去掉文档和历史快照。"
         actions={
           <Link href="/knowledge/import" className="btn">
-            导入文档
+            导入
           </Link>
         }
       />
 
-      <details className="callout">
-        <summary>导入与覆盖规则</summary>
-        <ul>
-          <li>支持 JSON、文本、链接和文件；相同标识会覆盖并保留快照。</li>
-          <li>
-            初始数据来自 <code>seed/knowledge/mma_pa_chunks.json</code>，用{" "}
-            <code>scripts/seed_knowledge.py</code> 写入。
-          </li>
-        </ul>
-      </details>
+      <p className="hint">
+        <strong>待审核</strong> 已入库、对话可搜 · <strong>已审核</strong> 人工复核通过 ·{" "}
+        <strong>已下架</strong> 对话搜不到，文件还在
+      </p>
 
       <div className="toolbar">
         <input
           className="search-input"
           value={query}
-          placeholder="筛选标题或标识"
+          placeholder="搜索标题或标识"
           onChange={(event) => setQuery(event.target.value)}
         />
         <div className="seg" role="tablist" aria-label="审核状态">
@@ -146,34 +160,41 @@ export default function KnowledgePage() {
       {!loading && visible.length > 0 ? (
         <div className="row-list">
           {visible.map((doc) => (
-            <article key={doc.id} className="row">
+            <article key={doc.id} className="row row--doc">
               <div>
-                <Link href={`/knowledge/${doc.id}`} className="row__title linkish">
+                <Link href={`/knowledge/${doc.id}`} className="row__title">
                   {doc.title}
                 </Link>
                 <div className="row__meta">
                   <span>{doc.slug}</span>
                   <span>v{doc.version_label ?? "—"}</span>
-                  <span>{doc.chunk_count} 条切片</span>
+                  <span>{doc.chunk_count} 条</span>
                 </div>
               </div>
-              <span className={`badge badge--${doc.review_status}`}>
-                {labelOf(REVIEW_STATUS_LABELS, doc.review_status)}
-              </span>
-              <label>
-                改状态
-                <select
-                  value={doc.review_status}
-                  disabled={savingId === doc.id}
-                  onChange={(event) => void patchStatus(doc.id, event.target.value)}
-                >
-                  {REVIEW_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {REVIEW_STATUS_LABELS[option]}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <select
+                className="status-select"
+                value={doc.review_status}
+                title={REVIEW_STATUS_HINTS[doc.review_status]}
+                disabled={savingId === doc.id}
+                onChange={(event) => void patchStatus(doc.id, event.target.value)}
+              >
+                {REVIEW_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {REVIEW_STATUS_LABELS[option]}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="danger-link"
+                disabled={savingId === doc.id}
+                onClick={() => void removeDocument(doc.id)}
+                onBlur={() => {
+                  if (confirmId === doc.id) setConfirmId(null);
+                }}
+              >
+                {confirmId === doc.id ? "确认删除" : "删除"}
+              </button>
             </article>
           ))}
         </div>
