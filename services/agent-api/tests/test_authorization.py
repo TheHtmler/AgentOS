@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
+from conftest import create_run_via_ag_ui
 from httpx import ASGITransport, AsyncClient
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
@@ -77,7 +78,7 @@ async def test_chat_resources_require_a_session_and_are_owner_scoped() -> None:
 
         async with AsyncClient(transport=transport, base_url="http://testserver") as first_client:
             first_client.cookies.set("agentos_session", first_session)
-            chat_response = await first_client.post("/v1/chat/stream", json={"message": "仅我可见"})
+            chat_response = await create_run_via_ag_ui(first_client, "仅我可见")
             thread_id = UUID(chat_response.headers["x-agentos-thread-id"])
             run_id = UUID(chat_response.headers["x-agentos-run-id"])
 

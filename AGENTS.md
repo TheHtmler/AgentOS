@@ -9,7 +9,7 @@
 - `services/agent-api`(Python 3.13 / FastAPI / pydantic-ai)：Agent 运行时与全部业务 API。
   - `src/agent_api/agent.py` — 稳定指令组装(`build_instructions`)+ 动态上下文快照(`build_context_snapshot` / `inject_context_snapshot`)。
   - `src/agent_api/context_budget.py` — 输入预算护栏(run 前裁剪 + 每 step 压力检查 + 视觉截顶）。
-  - `src/agent_api/api/chat.py` / `api/ag_ui.py` / `hitl_resume.py` — 三条运行链路。
+  - `src/agent_api/api/ag_ui.py`(产品唯一运行链路)/ `hitl_resume.py`(HITL 续跑）;`api/chat.py` 是共享 helper 模块（历史加载、持久化、错误映射，无路由）。
   - `src/agent_api/db/` — SQLAlchemy 模型与 repository;`migrations/` — Alembic。
 - `infra/` — Ollama Modelfile、launchd plist、frp/nginx 配置。
 - `docs/` — 架构事实来源，索引在 `docs/README.md`;`docs/16` 是 Agent 运行时建成态架构。

@@ -28,7 +28,7 @@
 - 接入 Pydantic AI，完成 Ollama 模型地址与名称的环境配置边界。
 - 为 Ollama 专用 HTTP 客户端关闭环境代理继承，避免本机请求误走开发代理。
 - 使用独立 smoke script 验证 `gemma4:e4b` 可以经 Pydantic AI 返回文本。
-- 实现 `POST /v1/chat/stream`，以 SSE 输出文本增量、完成和安全错误事件。
+- 实现 `POST /v1/chat/stream`，以 SSE 输出文本增量、完成和安全错误事件（已于 2026-08-16 退役：前端统一走 AG-UI `/v1/ag-ui/runs`，旧端点与 BFF 代理删除，`api/chat.py` 降为共享 helper；相关 thread/authz 用例已移植到 AG-UI 链路）。
 - 为模型运行时增加共享 HTTP 客户端、生命周期关闭逻辑和单流并发限制。
 - 使用 Pydantic AI `TestModel` 覆盖 SSE 文本、完成事件与输入校验，并验证真实模型流。
 - 实现 Next.js `POST /api/chat/stream` 同域代理，校验请求、转发取消信号并原样透传 SSE 响应体。

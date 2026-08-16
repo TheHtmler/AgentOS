@@ -2,7 +2,7 @@
 
 日期：2026-08-01
 
-状态：已完成
+状态：已退役（2026-08-16)。前端已全面迁移至 AG-UI over SSE(`POST /v1/ag-ui/runs`),`POST /v1/chat/stream` 及其 BFF 代理已删除；`api/chat.py` 仅保留共享 helper。本文仅作历史契约存档。
 
 ## 目标
 

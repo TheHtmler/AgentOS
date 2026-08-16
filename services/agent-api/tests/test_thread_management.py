@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from uuid import UUID
 
 import pytest
+from conftest import create_run_via_ag_ui
 from httpx import ASGITransport, AsyncClient
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
@@ -31,7 +32,7 @@ async def test_rename_and_soft_delete_thread_via_api(authenticated_api_user: UUI
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        chat_response = await client.post("/v1/chat/stream", json={"message": "需要重命名的会话"})
+        chat_response = await create_run_via_ag_ui(client, "需要重命名的会话")
         assert chat_response.status_code == 200
         thread_id = UUID(chat_response.headers["x-agentos-thread-id"])
 
@@ -71,10 +72,7 @@ async def test_rename_and_soft_delete_thread_via_api(authenticated_api_user: UUI
         listed = await client.get("/v1/threads")
         assert all(item["id"] != str(thread_id) for item in listed.json()["threads"])
 
-        continue_chat = await client.post(
-            "/v1/chat/stream",
-            json={"message": "续聊", "thread_id": str(thread_id)},
-        )
+        continue_chat = await create_run_via_ag_ui(client, "续聊", thread_id=thread_id)
         assert continue_chat.status_code == 404
 
 
@@ -119,10 +117,10 @@ async def test_chat_binds_requested_agent_for_new_thread(
     parenting_id = UUID("00000000-0000-0000-0000-000000000002")
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.post(
-            "/v1/chat/stream",
+        response = await create_run_via_ag_ui(
+            client,
+            "育儿问题",
             headers={"X-AgentOS-Agent-Id": str(parenting_id)},
-            json={"message": "育儿问题"},
         )
         assert response.status_code == 200
         thread_id = UUID(response.headers["x-agentos-thread-id"])
@@ -151,14 +149,15 @@ async def test_existing_chat_ignores_malformed_agent_header(
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        created = await client.post("/v1/chat/stream", json={"message": "第一轮"})
+        created = await create_run_via_ag_ui(client, "第一轮")
         assert created.status_code == 200
         thread_id = UUID(created.headers["x-agentos-thread-id"])
 
-        continued = await client.post(
-            "/v1/chat/stream",
+        continued = await create_run_via_ag_ui(
+            client,
+            "第二轮",
+            thread_id=thread_id,
             headers={"X-AgentOS-Agent-Id": "not-a-uuid"},
-            json={"message": "第二轮", "thread_id": str(thread_id)},
         )
 
     assert continued.status_code == 200

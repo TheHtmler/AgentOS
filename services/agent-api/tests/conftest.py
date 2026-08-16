@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from uuid import UUID, uuid4
 
 import pytest
+from httpx import AsyncClient, Response
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -10,6 +11,30 @@ from agent_api.config import get_settings
 from agent_api.db.models import User
 from agent_api.db.session import close_database, session_factory
 from agent_api.main import app
+
+
+async def create_run_via_ag_ui(
+    client: AsyncClient,
+    text: str,
+    *,
+    thread_id: UUID | None = None,
+    headers: dict[str, str] | None = None,
+) -> Response:
+    """Create or continue a thread through the product AG-UI path (test setup helper)."""
+
+    return await client.post(
+        "/v1/ag-ui/runs",
+        headers=headers,
+        json={
+            "threadId": str(thread_id) if thread_id is not None else "new",
+            "runId": f"setup-run-{uuid4().hex[:8]}",
+            "state": {},
+            "messages": [{"id": f"setup-msg-{uuid4().hex[:8]}", "role": "user", "content": text}],
+            "tools": [],
+            "context": [],
+            "forwardedProps": {},
+        },
+    )
 
 
 @pytest.fixture

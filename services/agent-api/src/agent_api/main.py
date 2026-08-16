@@ -4,7 +4,6 @@ from agent_api.api.ag_ui import router as ag_ui_router
 from agent_api.api.agents import router as agents_router
 from agent_api.api.auth import router as auth_router
 from agent_api.api.cases import router as cases_router
-from agent_api.api.chat import router as chat_router
 from agent_api.api.ops_agents import router as ops_agents_router
 from agent_api.api.ops_auth import router as ops_auth_router
 from agent_api.api.ops_knowledge import router as ops_knowledge_router
@@ -21,7 +20,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.include_router(chat_router)
 app.include_router(ag_ui_router)
 app.include_router(agents_router)
 app.include_router(cases_router)
