@@ -98,3 +98,53 @@ async def test_sparse_text_layer_is_kept_when_ocr_is_disabled() -> None:
         )
 
     assert result == ("short", 1, 0)
+
+
+@pytest.mark.anyio
+async def test_ocr_failure_on_one_page_does_not_fail_document(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent_api.knowledge.ocr_client import OcrError
+
+    calls = 0
+
+    async def flaky_ocr(image: bytes, **_kwargs: object) -> str:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OcrError("OCR 服务未识别到文字内容。")
+        return "第二页识别出的正文"
+
+    monkeypatch.setattr("agent_api.knowledge.pdf_extract.ocr_image_bytes", flaky_ocr)
+
+    async with httpx.AsyncClient() as client:
+        result = await extract_pdf_text(
+            _pdf_bytes("", ""),
+            client=client,
+            settings=_settings(ocr_enabled=True, ocr_text_min_chars=40),
+        )
+
+    assert result == ("第二页识别出的正文", 0, 1)
+
+
+@pytest.mark.anyio
+async def test_ocr_render_uses_high_dpi(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen_width = 0
+
+    async def probe_ocr(image: bytes, **_kwargs: object) -> str:
+        nonlocal seen_width
+        # PNG IHDR bytes 16..20 hold the pixel width (big-endian uint32).
+        seen_width = int.from_bytes(image[16:20], "big")
+        return "正文"
+
+    monkeypatch.setattr("agent_api.knowledge.pdf_extract.ocr_image_bytes", probe_ocr)
+
+    async with httpx.AsyncClient() as client:
+        await extract_pdf_text(
+            _pdf_bytes(""),
+            client=client,
+            settings=_settings(ocr_enabled=True, ocr_text_min_chars=40),
+        )
+
+    # A4 at 72dpi is ~595px wide; a 200dpi render must be well above 1000px.
+    assert seen_width > 1000
