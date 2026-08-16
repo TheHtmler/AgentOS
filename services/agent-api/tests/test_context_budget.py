@@ -28,7 +28,6 @@ from agent_api.context_budget import (
     prune_tool_results_before_tail,
     run_with_overflow_retry,
     trim_messages_to_step_budget,
-    warn_if_input_tokens_near_budget,
 )
 
 
@@ -295,26 +294,6 @@ def _overflow_error() -> ModelHTTPError:
 def test_is_context_overflow_error_detects_provider_400() -> None:
     assert is_context_overflow_error(_overflow_error()) is True
     assert is_context_overflow_error(RuntimeError("connection reset")) is False
-
-
-def test_warn_if_input_tokens_near_budget_only_when_tight(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    warn_if_input_tokens_near_budget(
-        run_id="r1",
-        input_tokens=11_000,
-        context_window=16_384,
-        output_reserve=4_096,
-    )
-    assert "input_tokens" not in caplog.text
-
-    warn_if_input_tokens_near_budget(
-        run_id="r1",
-        input_tokens=12_300,
-        context_window=16_384,
-        output_reserve=4_096,
-    )
-    assert "reached the model input budget" in caplog.text
 
 
 @pytest.mark.anyio

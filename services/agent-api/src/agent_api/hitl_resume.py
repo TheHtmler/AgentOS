@@ -30,7 +30,6 @@ from agent_api.config import get_settings
 from agent_api.context_budget import (
     apply_context_budget,
     run_with_overflow_retry,
-    warn_if_input_tokens_near_budget,
 )
 from agent_api.db.agent_store import get_published_version
 from agent_api.db.chat_store import get_run, get_run_message_history, list_thread_messages
@@ -226,12 +225,6 @@ async def continue_run_after_approval(
 
     assistant_content = with_truncation_notice_if_needed(result.output, new_messages)
     usage = result.usage
-    warn_if_input_tokens_near_budget(
-        run_id=run_id,
-        input_tokens=usage.input_tokens or None,
-        context_window=settings.model_context_window,
-        output_reserve=settings.model_max_output_tokens,
-    )
     await persist_completed_run(
         run_id=run_id,
         assistant_content=assistant_content,

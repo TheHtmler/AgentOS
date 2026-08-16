@@ -371,29 +371,6 @@ def is_context_overflow_error(error: BaseException) -> bool:
     )
 
 
-def warn_if_input_tokens_near_budget(
-    *,
-    run_id: object,
-    input_tokens: int | None,
-    context_window: int,
-    output_reserve: int,
-) -> None:
-    """Log when a finished run's prompt side is already pressing against num_ctx."""
-
-    if input_tokens is None:
-        return
-    if input_tokens < context_window - output_reserve:
-        return
-    logger.warning(
-        "run %s input_tokens=%d reached the model input budget "
-        "(window=%d, output_reserve=%d); provider-side truncation risk",
-        run_id,
-        input_tokens,
-        context_window,
-        output_reserve,
-    )
-
-
 async def run_with_overflow_retry[T](
     run: Callable[[list[ModelMessage] | None], Awaitable[T]],
     history: list[ModelMessage],
