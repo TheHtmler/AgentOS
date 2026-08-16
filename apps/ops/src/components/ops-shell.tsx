@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 const NAV = [
-  { href: "/", label: "概览" },
+  { href: "/overview", label: "概览" },
   { href: "/knowledge", label: "知识库" },
   { href: "/agents", label: "智能体" },
   { href: "/sessions", label: "会话" },
@@ -41,7 +41,7 @@ export function OpsShell({ subject, children }: { subject: string; children: Rea
   }
 
   function isActive(href: string) {
-    if (href === "/") return pathname === "/";
+    if (href === "/overview") return pathname === "/" || pathname === "/overview";
     return pathname === href || pathname.startsWith(`${href}/`);
   }
 

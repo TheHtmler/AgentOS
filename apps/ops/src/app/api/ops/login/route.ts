@@ -40,15 +40,31 @@ function isOpsLoginResponse(value: unknown): value is OpsLoginResponse {
   );
 }
 
-export async function POST(request: Request) {
-  let payload: unknown;
-  try {
-    payload = await request.json();
-  } catch {
-    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+async function readLoginPayload(request: Request): Promise<LoginRequest | null> {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (
+    contentType.includes("application/x-www-form-urlencoded") ||
+    contentType.includes("multipart/form-data")
+  ) {
+    const form = await request.formData();
+    const username = form.get("username");
+    const password = form.get("password");
+    if (typeof username !== "string" || typeof password !== "string") {
+      return null;
+    }
+    return { username, password };
   }
+  try {
+    const payload: unknown = await request.json();
+    return isLoginRequest(payload) ? payload : null;
+  } catch {
+    return null;
+  }
+}
 
-  if (!isLoginRequest(payload)) {
+export async function POST(request: Request) {
+  const payload = await readLoginPayload(request);
+  if (payload === null) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
@@ -81,7 +97,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "invalid_upstream_response" }, { status: 502 });
     }
 
-    const response = NextResponse.json({ subject: authSession.subject });
+    const accept = request.headers.get("accept") ?? "";
+    const response = accept.includes("text/html")
+      ? NextResponse.redirect(new URL("/overview", request.url), 303)
+      : NextResponse.json({ subject: authSession.subject });
     response.cookies.set({
       name: OPS_SESSION_COOKIE_NAME,
       value: authSession.session_token,

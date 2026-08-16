@@ -2,8 +2,8 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 
-/** Always land on overview after auth — never restore prior /knowledge deep links. */
-const POST_LOGIN_PATH = "/";
+/** New path so a cached `/` (old knowledge list) or `/knowledge` is never reused. */
+const POST_LOGIN_PATH = "/overview";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("admin");
@@ -39,7 +39,6 @@ export default function LoginPage() {
         setError(body?.detail ?? `登录失败（${response.status}）`);
         return;
       }
-      // Hard navigation avoids soft-router restoring a prior /knowledge entry.
       window.location.replace(POST_LOGIN_PATH);
     } catch {
       setError("无法连接运营后台服务");
@@ -50,7 +49,12 @@ export default function LoginPage() {
 
   return (
     <div className="login-wrap">
-      <form className="panel login-panel stack" onSubmit={onSubmit}>
+      <form
+        className="panel login-panel stack"
+        method="POST"
+        action="/api/ops/login"
+        onSubmit={onSubmit}
+      >
         <div>
           <span className="login-kicker">Operations</span>
           <div className="brand-mark" style={{ marginBottom: 8 }}>
@@ -62,6 +66,7 @@ export default function LoginPage() {
         <label>
           用户名
           <input
+            name="username"
             value={username}
             onChange={(event) => setUsername(event.target.value)}
             autoComplete="username"
@@ -75,6 +80,7 @@ export default function LoginPage() {
         <label>
           密码
           <input
+            name="password"
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
