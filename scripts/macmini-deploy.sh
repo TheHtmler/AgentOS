@@ -12,6 +12,7 @@
 #   AGENTOS_API_LABEL=com.local.agentos-api
 #   AGENTOS_WEB_LABEL=com.local.agentos-web
 #   AGENTOS_OPS_LABEL=com.local.agentos-ops
+#   AGENTOS_API_PORT=8100   # agent-api moved off :8000 (OCR service owns it)
 
 set -euo pipefail
 
@@ -175,7 +176,8 @@ fi
 
 sleep 2
 log "health"
-printf '  api  :8000/health  => %s\n' "$(http_code 'http://127.0.0.1:8000/health')"
+API_PORT="${AGENTOS_API_PORT:-8100}"
+printf '  api  :%s/health  => %s\n' "$API_PORT" "$(http_code "http://127.0.0.1:${API_PORT}/health")"
 printf '  web  :3000/        => %s\n' "$(http_code 'http://127.0.0.1:3000/')"
 printf '  ops  :3001/login   => %s\n' "$(http_code 'http://127.0.0.1:3001/login')"
 

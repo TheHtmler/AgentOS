@@ -2,10 +2,10 @@
 
 与产品站 `https://agentos.lemonbabycare.cn` 同一拓扑：Next 跑在 Mac mini，经 `frpc` 打到云服务器，宝塔 Nginx 终止 HTTPS。
 
-| 站点 | 域名 | Mac mini 端口 | launchd |
-| --- | --- | --- | --- |
-| 产品 Web | `agentos.lemonbabycare.cn` | `3000` | `com.local.agentos-web` |
-| Ops | `ops-agentos.lemonbabycare.cn` | `3001` | `com.local.agentos-ops` |
+| 站点     | 域名                           | Mac mini 端口 | launchd                 |
+| -------- | ------------------------------ | ------------- | ----------------------- |
+| 产品 Web | `agentos.lemonbabycare.cn`     | `3000`        | `com.local.agentos-web` |
+| Ops      | `ops-agentos.lemonbabycare.cn` | `3001`        | `com.local.agentos-ops` |
 
 ```text
 浏览器
@@ -13,7 +13,7 @@
   -> frps 本机端口 (例: 13001)
   -> FRP
   -> Mac mini frpc -> 127.0.0.1:3001 (apps/ops)
-  -> BFF -> 127.0.0.1:8000 (agent-api)
+  -> BFF -> 127.0.0.1:8100 (agent-api;8000 端口归本机 OCR 服务)
 ```
 
 仓库模板：
@@ -76,12 +76,12 @@ OPS_SESSION_TTL_HOURS=12
 ```
 
 （可选）也可用 `OPS_ROOT_PASSWORD_HASH`（Argon2id）；两者都设时以 hash 为准。  
-`apps/web/.env.local` / `apps/ops/.env.local` 建议：`AGENT_API_BASE_URL=http://127.0.0.1:8000`。
+`apps/web/.env.local` / `apps/ops/.env.local` 建议：`AGENT_API_BASE_URL=http://127.0.0.1:8100`(agent-api 已让出 8000 给本机 OCR 服务;OCR_BASE_URL 指向 `http://127.0.0.1:8000`)。
 
 本地冒烟：
 
 ```bash
-curl -sS --noproxy '*' http://127.0.0.1:8000/health
+curl -sS --noproxy '*' http://127.0.0.1:8100/health
 curl -sS --noproxy '*' -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
 curl -sS --noproxy '*' -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3001/login
 ```

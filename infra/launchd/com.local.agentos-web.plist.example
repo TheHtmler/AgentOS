@@ -29,7 +29,7 @@
     <key>HOSTNAME</key>
     <string>127.0.0.1</string>
     <key>AGENT_API_BASE_URL</key>
-    <string>http://127.0.0.1:8000</string>
+    <string>http://127.0.0.1:8100</string>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
   </dict>

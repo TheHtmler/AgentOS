@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 export const SESSION_COOKIE_NAME = "agentos_session";
 
 export function agentApiBaseUrl(): string {
-  return (process.env.AGENT_API_BASE_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+  return (process.env.AGENT_API_BASE_URL ?? "http://127.0.0.1:8100").replace(/\/$/, "");
 }
 
 export async function agentApiSessionHeaders(): Promise<HeadersInit> {

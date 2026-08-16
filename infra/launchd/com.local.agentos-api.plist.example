@@ -22,7 +22,7 @@
     <string>--host</string>
     <string>127.0.0.1</string>
     <string>--port</string>
-    <string>8000</string>
+    <string>8100</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>

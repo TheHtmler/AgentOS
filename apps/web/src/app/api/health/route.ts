@@ -23,7 +23,7 @@ function unavailableResponse(status: 502 | 503) {
 }
 
 export async function GET() {
-  const baseUrl = (process.env.AGENT_API_BASE_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+  const baseUrl = (process.env.AGENT_API_BASE_URL ?? "http://127.0.0.1:8100").replace(/\/$/, "");
 
   try {
     const response = await fetch(`${baseUrl}/health`, {
