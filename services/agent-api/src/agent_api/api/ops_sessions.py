@@ -31,9 +31,17 @@ _DETAIL_MESSAGE_LIMIT = 40
 _DETAIL_RUN_LIMIT = 20
 
 
+class OpsSessionUserOut(BaseModel):
+    id: UUID
+    email: str
+    status: str
+    thread_count: int
+
+
 class OpsThreadListItem(BaseModel):
     id: UUID
     title: str | None
+    user_id: UUID | None
     user_email: str | None
     user_status: str | None
     agent_id: UUID
@@ -51,6 +59,7 @@ class OpsThreadListItem(BaseModel):
 class OpsThreadListResponse(BaseModel):
     threads: list[OpsThreadListItem]
     total: int
+    users: list[OpsSessionUserOut]
 
 
 class OpsMessageOut(BaseModel):
@@ -92,6 +101,7 @@ def _preview(text: str) -> tuple[str, bool]:
 def _list_item(
     thread: Thread,
     *,
+    user_id: UUID | None,
     user_email: str | None,
     user_status: str | None,
     agent_slug: str,
@@ -103,6 +113,7 @@ def _list_item(
     return OpsThreadListItem(
         id=thread.id,
         title=thread.title,
+        user_id=user_id,
         user_email=user_email,
         user_status=user_status,
         agent_id=thread.agent_id,
@@ -123,6 +134,8 @@ def _thread_query(
     q: str | None,
     run_status: str | None,
     include_deleted: bool,
+    user_id: UUID | None,
+    unassigned: bool,
 ):
     last_run_id = (
         select(Run.id)
@@ -149,6 +162,10 @@ def _thread_query(
         stmt = stmt.where(Thread.deleted_at.is_(None))
     if run_status:
         stmt = stmt.where(Run.status == run_status)
+    if unassigned:
+        stmt = stmt.where(Thread.user_id.is_(None))
+    elif user_id is not None:
+        stmt = stmt.where(Thread.user_id == user_id)
     if q:
         needle = _safe_like(q)
         clauses: list[ColumnElement[bool]] = []
@@ -169,28 +186,61 @@ def _thread_query(
     return stmt
 
 
+def _session_users_query(*, include_deleted: bool):
+    stmt = (
+        select(User.id, User.email, User.status, func.count(Thread.id))
+        .join(Thread, Thread.user_id == User.id)
+        .group_by(User.id, User.email, User.status)
+        .order_by(User.email)
+        .limit(300)
+    )
+    if not include_deleted:
+        stmt = stmt.where(Thread.deleted_at.is_(None))
+    return stmt
+
+
 @router.get("", response_model=OpsThreadListResponse)
 async def list_ops_sessions(
     _subject: Annotated[str, Depends(get_ops_subject)],
     q: Annotated[str | None, Query(max_length=128)] = None,
     run_status: Annotated[RunStatus | None, Query()] = None,
+    user_id: UUID | None = None,
+    unassigned: bool = False,
     include_deleted: bool = False,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OpsThreadListResponse:
-    stmt = _thread_query(q=q, run_status=run_status, include_deleted=include_deleted)
+    stmt = _thread_query(
+        q=q,
+        run_status=run_status,
+        include_deleted=include_deleted,
+        user_id=user_id,
+        unassigned=unassigned,
+    )
     count_stmt = select(func.count()).select_from(stmt.subquery())
     page_stmt = stmt.order_by(Thread.updated_at.desc()).limit(limit).offset(offset)
+    users_stmt = _session_users_query(include_deleted=include_deleted)
 
     async with session_factory() as session:
         total = int(await session.scalar(count_stmt) or 0)
         rows = (await session.execute(page_stmt)).all()
+        user_rows = (await session.execute(users_stmt)).all()
 
     return OpsThreadListResponse(
         total=total,
+        users=[
+            OpsSessionUserOut(
+                id=user_id,
+                email=email,
+                status=user_status,
+                thread_count=int(count),
+            )
+            for user_id, email, user_status, count in user_rows
+        ],
         threads=[
             _list_item(
                 thread,
+                user_id=None if user is None else user.id,
                 user_email=None if user is None else user.email,
                 user_status=None if user is None else user.status,
                 agent_slug=agent.slug,
@@ -273,6 +323,7 @@ async def get_ops_session(
     return OpsThreadDetailOut(
         **_list_item(
             thread,
+            user_id=None if user is None else user.id,
             user_email=None if user is None else user.email,
             user_status=None if user is None else user.status,
             agent_slug=agent.slug,

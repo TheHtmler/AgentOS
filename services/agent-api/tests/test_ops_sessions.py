@@ -93,3 +93,16 @@ async def test_ops_sessions_list_and_detail(
 
         missing = await client.get(f"/v1/ops/sessions/{uuid4()}")
         assert missing.status_code == 404
+
+        other = User(email=f"ops-other-{uuid4().hex}@example.com", status="active")
+        other_thread = Thread(user_id=other.id, agent_id=agent.id, title="ops-other-thread")
+        database_session.add_all([other, other_thread])
+        await database_session.commit()
+
+        filtered = await client.get("/v1/ops/sessions", params={"user_id": str(user.id)})
+        assert filtered.status_code == 200
+        filtered_ids = {row["id"] for row in filtered.json()["threads"]}
+        assert str(thread.id) in filtered_ids
+        assert str(other_thread.id) not in filtered_ids
+        assert any(item["id"] == str(user.id) for item in filtered.json()["users"])
+        assert any(item["email"] == user.email for item in filtered.json()["users"])

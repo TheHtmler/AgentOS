@@ -33,6 +33,7 @@ type OpsRun = {
 type OpsThreadDetail = {
   id: string;
   title: string | null;
+  user_id: string | null;
   user_email: string | null;
   user_status: string | null;
   agent_name: string;
@@ -90,7 +91,15 @@ export default function SessionDetailPage() {
             <div className="meta-grid">
               <div>
                 <span className="muted">用户</span>
-                <strong>{detail.user_email ?? "无账号"}</strong>
+                <strong>
+                  {detail.user_id ? (
+                    <Link href={`/sessions?user_id=${detail.user_id}`} className="linkish">
+                      {detail.user_email}
+                    </Link>
+                  ) : (
+                    "无账号"
+                  )}
+                </strong>
               </div>
               <div>
                 <span className="muted">用户状态</span>

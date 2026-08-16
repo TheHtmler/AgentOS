@@ -371,10 +371,20 @@ a.row__title:hover,
   gap: 6px;
 }
 
-.status-select {
+.status-select,
+.user-select {
   width: auto;
   min-width: 96px;
   min-height: 30px;
+}
+
+.user-select {
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.row__main {
+  min-width: 0;
 }
 
 .callout {
@@ -905,6 +915,10 @@ a.stat-card:hover {
 
   .row.row--doc {
     grid-template-columns: minmax(0, 1fr) 108px auto;
+  }
+
+  .row.row--session {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
   }
 }
 
