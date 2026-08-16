@@ -43,12 +43,12 @@ HITL/Sandbox 暂缓；先做只读联网搜索。商业搜索（如 Tavily）有
 
 ### 1. 模型工具契约
 
-| 项 | 约定 |
-| --- | --- |
-| 工具名 | `web_search` |
-| 入参 | `query: str`（必填）；`max_results: int`（可选，默认取配置，上限 8） |
+| 项       | 约定                                                                     |
+| -------- | ------------------------------------------------------------------------ |
+| 工具名   | `web_search`                                                             |
+| 入参     | `query: str`（必填）；`max_results: int`（可选，默认取配置，上限 8）     |
 | 成功返回 | `{ provider, query, results: [{ title, url, snippet, published_at? }] }` |
-| 失败返回 | 结构化错误给模型（可重试或改口），不默认打崩整个 Run |
+| 失败返回 | 结构化错误给模型（可重试或改口），不默认打崩整个 Run                     |
 
 系统提示补充：
 
@@ -137,12 +137,12 @@ SEARCH_MAX_RESULTS=5
 
 ## 错误处理
 
-| 情况 | 行为 |
-| --- | --- |
-| 无可用 Provider | 工具返回错误；模型说明无法检索 |
-| Tavily 额度用尽 | 降级到 duckduckgo |
-| 全部 Provider 失败 | 工具返回汇总错误；Run 可继续由模型收尾，不遗留 `running` |
-| `SEARCH_ENABLED=false` | 无工具；行为与当前纯聊天一致 |
+| 情况                   | 行为                                                     |
+| ---------------------- | -------------------------------------------------------- |
+| 无可用 Provider        | 工具返回错误；模型说明无法检索                           |
+| Tavily 额度用尽        | 降级到 duckduckgo                                        |
+| 全部 Provider 失败     | 工具返回汇总错误；Run 可继续由模型收尾，不遗留 `running` |
+| `SEARCH_ENABLED=false` | 无工具；行为与当前纯聊天一致                             |
 
 ## 测试
 
@@ -169,11 +169,11 @@ SEARCH_MAX_RESULTS=5
 
 ## 主要落地位置（预期）
 
-| 区域 | 路径（预期） |
-| --- | --- |
-| 配置 | `services/agent-api/src/agent_api/config.py`、`.env.example` |
+| 区域              | 路径（预期）                                                   |
+| ----------------- | -------------------------------------------------------------- |
+| 配置              | `services/agent-api/src/agent_api/config.py`、`.env.example`   |
 | Provider / Router | `services/agent-api/src/agent_api/tools/search/`（或等价目录） |
-| Agent 注册 | `services/agent-api/src/agent_api/agent.py` |
-| 系统提示 | 同文件或独立 prompt 模块 |
-| 测试 | `services/agent-api/tests/test_search_*.py` |
-| 进度文档 | `docs/implementation-progress.md`（实现完成后更新） |
+| Agent 注册        | `services/agent-api/src/agent_api/agent.py`                    |
+| 系统提示          | 同文件或独立 prompt 模块                                       |
+| 测试              | `services/agent-api/tests/test_search_*.py`                    |
+| 进度文档          | `docs/implementation-progress.md`（实现完成后更新）            |

@@ -3,6 +3,7 @@
 日期：2026-08-14  
 状态：已实现  
 前置：
+
 - Case / CaseFact / HITL（`2026-08-06-case-memory-knowledge-nhc-design.md`，已实现）
 - Artifact + `read_artifact`（fetch_url 后续已落地）
 - Ops 知识导入 + 本机 PaddleOCR（`2026-08-14-ops-knowledge-import-design.md`，已实现）
@@ -34,15 +35,15 @@
 
 ## 决策摘要
 
-| 项 | 选择 |
-|----|------|
-| 架构 | Artifact 中心 + 文本 AG-UI（方案 B） |
-| 原文件 | 本机磁盘保留 + Artifact 存 OCR 文本（便于复查） |
-| 消息 | 用户消息仍为字符串；携带 `artifact_id` 引用；Run 侧注入报告摘要 |
-| 知识 | 仅 `knowledge_search` 读公共库 |
-| Case | 复用 extract → proposed → HITL confirm |
-| OCR | 复用 `ocr_client` / `pdf_extract` |
-| 上限 | 20MB；PDF ≤ 50 页；单次最多 N=3 个附件（可配置） |
+| 项     | 选择                                                            |
+| ------ | --------------------------------------------------------------- |
+| 架构   | Artifact 中心 + 文本 AG-UI（方案 B）                            |
+| 原文件 | 本机磁盘保留 + Artifact 存 OCR 文本（便于复查）                 |
+| 消息   | 用户消息仍为字符串；携带 `artifact_id` 引用；Run 侧注入报告摘要 |
+| 知识   | 仅 `knowledge_search` 读公共库                                  |
+| Case   | 复用 extract → proposed → HITL confirm                          |
+| OCR    | 复用 `ocr_client` / `pdf_extract`                               |
+| 上限   | 20MB；PDF ≤ 50 页；单次最多 N=3 个附件（可配置）                |
 
 ---
 
@@ -112,7 +113,7 @@ multipart：`file`（必填）、`thread_id`（必填）、可选 `title`。
   "content_chars": 1234,
   "ocr_pages": 2,
   "text_layer_pages": 0,
-  "case_id": "..." 
+  "case_id": "..."
 }
 ```
 
@@ -181,12 +182,12 @@ tags 建议含 `报告`；`key` 能映射则映射（如已有槽），否则自
 
 ## 七、配置
 
-| 变量 | 含义 |
-|------|------|
-| `UPLOAD_ROOT` | 原文件根目录 |
-| `UPLOAD_MAX_BYTES` | 默认 20_000_000 |
-| `UPLOAD_MAX_FILES_PER_MESSAGE` | 默认 3 |
-| `OCR_*` | 与知识导入共用 |
+| 变量                           | 含义            |
+| ------------------------------ | --------------- |
+| `UPLOAD_ROOT`                  | 原文件根目录    |
+| `UPLOAD_MAX_BYTES`             | 默认 20_000_000 |
+| `UPLOAD_MAX_FILES_PER_MESSAGE` | 默认 3          |
+| `OCR_*`                        | 与知识导入共用  |
 
 ---
 
@@ -223,8 +224,8 @@ tags 建议含 `报告`；`key` 能映射则映射（如已有槽），否则自
 
 ## 实现顺序建议
 
-1. Upload API + 磁盘 + Artifact + 测试  
-2. Web BFF + 附件 UI + 分析发送文案  
-3. Run 注入 artifact 预览  
-4. 垂类 prompt 增量 + Case/HITL 联调  
+1. Upload API + 磁盘 + Artifact + 测试
+2. Web BFF + 附件 UI + 分析发送文案
+3. Run 注入 artifact 预览
+4. 垂类 prompt 增量 + Case/HITL 联调
 5. 文档与 deploy（UPLOAD_ROOT、OCR）

@@ -41,21 +41,21 @@
 
 ### 行为
 
-| 状态 | UI |
-|------|-----|
-| Run 进行中 | 过程组展开；标题「处理中…」 |
-| Run 结束 | 自动折叠；标题「已处理 {时长}」（有则显示） |
-| 用户手动展开 | 可回看；不强制再折 |
-| 历史 | 有 tool_calls（及若有的 live 空）时包进「已处理」；时长用 Run 耗时若前端已有 |
+| 状态         | UI                                                                           |
+| ------------ | ---------------------------------------------------------------------------- |
+| Run 进行中   | 过程组展开；标题「处理中…」                                                  |
+| Run 结束     | 自动折叠；标题「已处理 {时长}」（有则显示）                                  |
+| 用户手动展开 | 可回看；不强制再折                                                           |
+| 历史         | 有 tool_calls（及若有的 live 空）时包进「已处理」；时长用 Run 耗时若前端已有 |
 
 ### 工具行文案
 
-| 工具 | 进行中 | 完成 |
-|------|--------|------|
-| `web_search` | 正在搜索：{query} | 已搜索网页：{query} |
-| `fetch_url` | 正在打开：{host/短URL} | 已打开链接：{host/短URL} |
-| 其他 | 正在调用 {name} | 已调用 {name} |
-| 失败 | — | 同行失败态 + 展开错误 |
+| 工具         | 进行中                 | 完成                     |
+| ------------ | ---------------------- | ------------------------ |
+| `web_search` | 正在搜索：{query}      | 已搜索网页：{query}      |
+| `fetch_url`  | 正在打开：{host/短URL} | 已打开链接：{host/短URL} |
+| 其他         | 正在调用 {name}        | 已调用 {name}            |
+| 失败         | —                      | 同行失败态 + 展开错误    |
 
 展开内容沿用现有 args / provider / resultSummary，可读性微调即可。
 
@@ -82,19 +82,19 @@
 
 ## 四、实现落点（预期）
 
-| 区域 | 文件 |
-|------|------|
-| 过程组容器 | 新 `process-group.tsx` 或内联于 `chat-panel.tsx` |
-| 工具行 | `tool-call-card.tsx` + `globals.css` |
-| Thinking | `thinking-step-card.tsx` + CSS |
-| Markdown / token | `assistant-markdown.tsx`、`globals.css` |
-| 邀请 | `invitation-manager.tsx` |
-| 编排 | `chat-panel.tsx`（按 user→过程→assistant 分组） |
+| 区域             | 文件                                             |
+| ---------------- | ------------------------------------------------ |
+| 过程组容器       | 新 `process-group.tsx` 或内联于 `chat-panel.tsx` |
+| 工具行           | `tool-call-card.tsx` + `globals.css`             |
+| Thinking         | `thinking-step-card.tsx` + CSS                   |
+| Markdown / token | `assistant-markdown.tsx`、`globals.css`          |
+| 邀请             | `invitation-manager.tsx`                         |
+| 编排             | `chat-panel.tsx`（按 user→过程→assistant 分组）  |
 
 ## 决策记录
 
-| 决策 | 选择 | 理由 |
-|------|------|------|
-| 交互参照 | Codex 过程/结论分层 | 用户截图明确 |
-| 中间分析段落 | 本轮不做 | 协议未保证 |
-| 范围 | 聊天 + 邀请 + 深色同竖切 | 用户选 A |
+| 决策         | 选择                     | 理由         |
+| ------------ | ------------------------ | ------------ |
+| 交互参照     | Codex 过程/结论分层      | 用户截图明确 |
+| 中间分析段落 | 本轮不做                 | 协议未保证   |
+| 范围         | 聊天 + 邀请 + 深色同竖切 | 用户选 A     |

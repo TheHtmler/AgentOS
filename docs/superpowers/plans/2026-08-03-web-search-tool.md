@@ -24,31 +24,32 @@
 
 ## File Structure
 
-| Path | Responsibility |
-| --- | --- |
-| `services/agent-api/src/agent_api/tools/__init__.py` | Package marker |
-| `services/agent-api/src/agent_api/tools/search/__init__.py` | Public exports for search helpers |
-| `services/agent-api/src/agent_api/tools/search/types.py` | `SearchResult`, `SearchResponse`, `SearchProviderError`, recoverable flag |
-| `services/agent-api/src/agent_api/tools/search/base.py` | `SearchProvider` protocol |
-| `services/agent-api/src/agent_api/tools/search/tavily.py` | Tavily HTTP adapter |
-| `services/agent-api/src/agent_api/tools/search/duckduckgo.py` | DuckDuckGo/`ddgs` adapter |
-| `services/agent-api/src/agent_api/tools/search/router.py` | Ordered failover router |
-| `services/agent-api/src/agent_api/tools/search/tool.py` | Pydantic AI `web_search` function |
-| `services/agent-api/src/agent_api/config.py` | Search settings fields |
-| `services/agent-api/src/agent_api/agent.py` | Instructions + conditional tool registration + deps type |
-| `services/agent-api/src/agent_api/runtime.py` | Shared search httpx client + router on lifespan |
-| `services/agent-api/src/agent_api/api/chat.py` | Pass `deps` into `run_stream` |
-| `services/agent-api/src/agent_api/db/chat_store.py` | `append_tool_call_event` / `append_tool_result_event` helpers |
-| `services/agent-api/.env.example` | Document search env vars |
-| `services/agent-api/pyproject.toml` | Add `ddgs` dependency |
-| `services/agent-api/tests/test_search_*.py` | Unit tests for providers, router, settings, tool wiring |
-| `docs/implementation-progress.md` | Record completion after implementation |
+| Path                                                          | Responsibility                                                            |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `services/agent-api/src/agent_api/tools/__init__.py`          | Package marker                                                            |
+| `services/agent-api/src/agent_api/tools/search/__init__.py`   | Public exports for search helpers                                         |
+| `services/agent-api/src/agent_api/tools/search/types.py`      | `SearchResult`, `SearchResponse`, `SearchProviderError`, recoverable flag |
+| `services/agent-api/src/agent_api/tools/search/base.py`       | `SearchProvider` protocol                                                 |
+| `services/agent-api/src/agent_api/tools/search/tavily.py`     | Tavily HTTP adapter                                                       |
+| `services/agent-api/src/agent_api/tools/search/duckduckgo.py` | DuckDuckGo/`ddgs` adapter                                                 |
+| `services/agent-api/src/agent_api/tools/search/router.py`     | Ordered failover router                                                   |
+| `services/agent-api/src/agent_api/tools/search/tool.py`       | Pydantic AI `web_search` function                                         |
+| `services/agent-api/src/agent_api/config.py`                  | Search settings fields                                                    |
+| `services/agent-api/src/agent_api/agent.py`                   | Instructions + conditional tool registration + deps type                  |
+| `services/agent-api/src/agent_api/runtime.py`                 | Shared search httpx client + router on lifespan                           |
+| `services/agent-api/src/agent_api/api/chat.py`                | Pass `deps` into `run_stream`                                             |
+| `services/agent-api/src/agent_api/db/chat_store.py`           | `append_tool_call_event` / `append_tool_result_event` helpers             |
+| `services/agent-api/.env.example`                             | Document search env vars                                                  |
+| `services/agent-api/pyproject.toml`                           | Add `ddgs` dependency                                                     |
+| `services/agent-api/tests/test_search_*.py`                   | Unit tests for providers, router, settings, tool wiring                   |
+| `docs/implementation-progress.md`                             | Record completion after implementation                                    |
 
 ---
 
 ### Task 1: Search settings and shared types
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/tools/__init__.py`
 - Create: `services/agent-api/src/agent_api/tools/search/__init__.py`
 - Create: `services/agent-api/src/agent_api/tools/search/types.py`
@@ -59,6 +60,7 @@
 - Test: `services/agent-api/tests/test_search_settings.py`
 
 **Interfaces:**
+
 - Consumes: existing `Settings` / `get_settings()` pattern
 - Produces:
   - `Settings.search_enabled: bool` (default `True`)
@@ -209,10 +211,12 @@ EOF
 ### Task 2: Tavily provider
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/tools/search/tavily.py`
 - Test: `services/agent-api/tests/test_search_tavily.py`
 
 **Interfaces:**
+
 - Consumes: `SearchProvider`, `SearchResponse`, `SearchResult`, `SearchProviderError`, `httpx.AsyncClient`
 - Produces: `TavilyProvider(api_key: str, http_client: httpx.AsyncClient)` with `name == "tavily"`
   - `is_available()` → `bool(api_key.strip())`
@@ -316,11 +320,13 @@ EOF
 ### Task 3: DuckDuckGo provider via `ddgs`
 
 **Files:**
+
 - Modify: `services/agent-api/pyproject.toml` (add `ddgs`)
 - Create: `services/agent-api/src/agent_api/tools/search/duckduckgo.py`
 - Test: `services/agent-api/tests/test_search_duckduckgo.py`
 
 **Interfaces:**
+
 - Consumes: `SearchProvider` protocol, `SearchProviderError`
 - Produces: `DuckDuckGoProvider` with `name == "duckduckgo"`, always `is_available() is True`
   - Uses `ddgs.DDGS().text(query, max_results=...)` inside `asyncio.to_thread`
@@ -408,11 +414,13 @@ EOF
 ### Task 4: SearchRouter failover
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/tools/search/router.py`
 - Modify: `services/agent-api/src/agent_api/tools/search/__init__.py` (export router helpers)
 - Test: `services/agent-api/tests/test_search_router.py`
 
 **Interfaces:**
+
 - Consumes: `SearchProvider`, `SearchProviderError`, `SearchResponse`
 - Produces:
   - `SearchRouter(providers: list[SearchProvider])`
@@ -465,6 +473,7 @@ EOF
 ### Task 5: `web_search` tool, agent deps, runtime wiring
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/tools/search/tool.py`
 - Modify: `services/agent-api/src/agent_api/agent.py`
 - Modify: `services/agent-api/src/agent_api/runtime.py`
@@ -472,6 +481,7 @@ EOF
 - Modify: `services/agent-api/tests/test_agent.py` (agent creation still works with search disabled)
 
 **Interfaces:**
+
 - Consumes: `SearchRouter`, settings, Pydantic AI `RunContext`
 - Produces:
   - `@dataclass class AgentDeps:` with fields  
@@ -554,6 +564,7 @@ EOF
 ### Task 6: Chat stream deps + tool run_events
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/db/chat_store.py`
 - Modify: `services/agent-api/src/agent_api/api/chat.py`
 - Modify: `services/agent-api/src/agent_api/tools/search/tool.py` (persist summaries when `run_id` set)
@@ -561,6 +572,7 @@ EOF
 - Check: `services/agent-api/src/agent_api/api/ag_ui.py` — if it also calls the agent, pass compatible `deps` (search_router from runtime, `run_id` when available) so AG-UI does not crash on missing deps
 
 **Interfaces:**
+
 - Consumes: `append_run_event`
 - Produces:
   - `append_tool_call_event(session, *, run_id, tool_name: str, args: dict[str, object])`
@@ -603,11 +615,13 @@ EOF
 ### Task 7: Docs and progress notes
 
 **Files:**
+
 - Modify: `docs/implementation-progress.md`
 - Modify: `docs/README.md` (link plan if not already)
 - Optional short note in `docs/02-mvp-roadmap.md` under Phase 2 that read-only web_search precedes HITL
 
 **Interfaces:**
+
 - Consumes: completed behavior from Tasks 1–6
 - Produces: accurate “已完成 / 下一步” text; no secret values
 
@@ -628,9 +642,9 @@ Add row for `superpowers/plans/2026-08-03-web-search-tool.md`.
 
 On Mac mini Agent API with optional `TAVILY_API_KEY`:
 
-1. Ask a “今天/最近 …” question → answer cites URLs  
-2. Unset key → still works via DuckDuckGo  
-3. Confirm SSE/network tab has no API key  
+1. Ask a “今天/最近 …” question → answer cites URLs
+2. Unset key → still works via DuckDuckGo
+3. Confirm SSE/network tab has no API key
 
 - [ ] **Step 4: Commit** (if authorized)
 
@@ -646,20 +660,20 @@ EOF
 
 ## Spec Coverage Check
 
-| Spec requirement | Task |
-| --- | --- |
-| Unified `web_search` tool contract | 5 |
-| Tavily + DuckDuckGo providers | 2, 3 |
-| Router order + recoverable failover | 4 |
-| No empty-result failover | 4 tests |
-| Settings / `.env.example` | 1 |
-| Separate search httpx `trust_env=False` | 5 |
-| Chat stream integration | 6 |
-| `tool_call` / `tool_result` run_events | 6 |
-| Keys not in SSE/frontend | 5–6 (payload rules) |
-| `SEARCH_ENABLED` switch | 1, 5 |
-| Tests with mocks, no live Tavily in CI | 2–4 |
-| Docs / progress | 7 |
+| Spec requirement                        | Task                |
+| --------------------------------------- | ------------------- |
+| Unified `web_search` tool contract      | 5                   |
+| Tavily + DuckDuckGo providers           | 2, 3                |
+| Router order + recoverable failover     | 4                   |
+| No empty-result failover                | 4 tests             |
+| Settings / `.env.example`               | 1                   |
+| Separate search httpx `trust_env=False` | 5                   |
+| Chat stream integration                 | 6                   |
+| `tool_call` / `tool_result` run_events  | 6                   |
+| Keys not in SSE/frontend                | 5–6 (payload rules) |
+| `SEARCH_ENABLED` switch                 | 1, 5                |
+| Tests with mocks, no live Tavily in CI  | 2–4                 |
+| Docs / progress                         | 7                   |
 
 ## Out of Scope Reminder
 

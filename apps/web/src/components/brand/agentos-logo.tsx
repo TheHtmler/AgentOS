@@ -4,17 +4,20 @@ type AgentOsLogoProps = {
   subtitle?: string;
 };
 
-export function AgentOsLogo({
-  className = "",
-  showWordmark = true,
-  subtitle,
-}: AgentOsLogoProps) {
+export function AgentOsLogo({ className = "", showWordmark = true, subtitle }: AgentOsLogoProps) {
   return (
     <div className={`flex min-w-0 items-center gap-3 ${className}`}>
       <span aria-hidden="true" className="agentos-logo-mark agentos-accent-glow">
         <svg viewBox="0 0 32 32" className="h-5 w-5" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="16" cy="16" r="3.2" fill="currentColor" />
-          <circle cx="16" cy="16" r="7.5" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" />
+          <circle
+            cx="16"
+            cy="16"
+            r="7.5"
+            stroke="currentColor"
+            strokeOpacity="0.55"
+            strokeWidth="1.2"
+          />
           <circle cx="16" cy="7.5" r="1.6" fill="currentColor" />
           <circle cx="24" cy="20.5" r="1.6" fill="currentColor" />
           <circle cx="8" cy="20.5" r="1.6" fill="currentColor" />

@@ -45,6 +45,59 @@ const runtimeItems = [
   { label: "会话存储", value: "PostgreSQL Thread" },
 ];
 
+function RuntimeContext({
+  activeRunId,
+  onClose,
+}: {
+  activeRunId: string | null;
+  onClose?: () => void;
+}) {
+  return (
+    <div className="agentos-runtime-content">
+      <header className="agentos-context-panel-heading">
+        <div>
+          <p className="agentos-context-kicker">Workspace context</p>
+          <h2>本轮上下文</h2>
+          <p>检查当前会话的运行状态与连接。</p>
+        </div>
+        <div className="agentos-context-heading-actions">
+          <span className="agentos-context-live">Live</span>
+          {onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="agentos-context-close"
+              aria-label="关闭上下文"
+            >
+              关闭
+            </button>
+          ) : null}
+        </div>
+      </header>
+
+      <div className="agentos-context-sections">
+        <HealthStatus />
+        <RunInspector runId={activeRunId} />
+
+        <section className="agentos-context-card">
+          <div className="agentos-context-card-heading">
+            <p>运行环境</p>
+            <span aria-hidden="true">···</span>
+          </div>
+          <dl>
+            {runtimeItems.map((item) => (
+              <div key={item.label} className="agentos-runtime-item">
+                <dt>{item.label}</dt>
+                <dd>{item.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      </div>
+    </div>
+  );
+}
+
 const MAX_IDLE_SLOTS = 8;
 
 function createSlotKey(): string {
@@ -87,6 +140,7 @@ export function ChatWorkspace({
   onLogout,
 }: ChatWorkspaceProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileContextOpen, setIsMobileContextOpen] = useState(false);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [agentLoadError, setAgentLoadError] = useState<string | null>(null);
@@ -94,7 +148,7 @@ export function ChatWorkspace({
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadListVersion, setThreadListVersion] = useState(0);
-  const [isRuntimeRailOpen, setIsRuntimeRailOpen] = useState(false);
+  const [isRuntimeRailOpen, setIsRuntimeRailOpen] = useState(true);
   const [slots, setSlots] = useState<ChatSlot[]>([{ key: "boot", threadId: null }]);
   const [visibleSlotKey, setVisibleSlotKey] = useState("boot");
   const [streamingBySlotKey, setStreamingBySlotKey] = useState<Record<string, boolean>>({});
@@ -211,7 +265,7 @@ export function ChatWorkspace({
   }, [hasHydratedFromUrl]);
 
   useEffect(() => {
-    if (!isMobileMenuOpen) {
+    if (!isMobileMenuOpen && !isMobileContextOpen) {
       return;
     }
 
@@ -224,6 +278,7 @@ export function ChatWorkspace({
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsMobileMenuOpen(false);
+        setIsMobileContextOpen(false);
       }
     };
 
@@ -234,13 +289,22 @@ export function ChatWorkspace({
       document.documentElement.style.overflow = previousHtmlOverflow;
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [isMobileMenuOpen]);
+  }, [isMobileContextOpen, isMobileMenuOpen]);
+
+  const openRuntimeContext = useCallback(() => {
+    setIsRuntimeRailOpen(true);
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      setIsMobileMenuOpen(false);
+      setIsMobileContextOpen(true);
+    }
+  }, []);
 
   const focusSlot = useCallback((slotKey: string, threadId: string | null) => {
     setVisibleSlotKey(slotKey);
     setActiveThreadId(threadId);
     setActiveRunId(runIdBySlotKeyRef.current[slotKey] ?? null);
     setIsMobileMenuOpen(false);
+    setIsMobileContextOpen(false);
 
     if (threadId === null) {
       clearThreadFromUrl();
@@ -425,7 +489,10 @@ export function ChatWorkspace({
         <div className="agentos-topbar-inner">
           <button
             type="button"
-            onClick={() => setIsMobileMenuOpen(true)}
+            onClick={() => {
+              setIsMobileContextOpen(false);
+              setIsMobileMenuOpen(true);
+            }}
             className="agentos-mobile-menu-toggle lg:hidden"
             aria-label="打开主菜单"
             aria-expanded={isMobileMenuOpen}
@@ -435,7 +502,7 @@ export function ChatWorkspace({
             <span />
           </button>
 
-          <AgentOsLogo subtitle="Runtime control plane" />
+          <AgentOsLogo subtitle="personal workspace" />
 
           <div className="ml-auto hidden items-center gap-3 lg:flex">
             <button
@@ -444,6 +511,9 @@ export function ChatWorkspace({
               aria-pressed={isRuntimeRailOpen}
               className="agentos-header-action"
             >
+              <span className="agentos-header-action-icon" aria-hidden="true">
+                ◫
+              </span>
               {isRuntimeRailOpen ? "收起检视" : "运行检视"}
             </button>
             <ThemeToggle />
@@ -463,6 +533,15 @@ export function ChatWorkspace({
           </div>
 
           <div className="ml-auto flex items-center gap-2 lg:hidden">
+            <button
+              type="button"
+              onClick={openRuntimeContext}
+              className="agentos-mobile-context-toggle"
+              aria-label="打开上下文"
+              aria-expanded={isMobileContextOpen}
+            >
+              ◫
+            </button>
             <ThemeToggle compact />
             <span className="agentos-runtime-tag">Ready</span>
           </div>
@@ -518,6 +597,7 @@ export function ChatWorkspace({
                         handleSlotThreadChanged(slot.key, threadId, agentId)
                       }
                       onRunFinalized={handleRunFinalized}
+                      onOpenContext={openRuntimeContext}
                     />
                   </div>
                 );
@@ -527,23 +607,13 @@ export function ChatWorkspace({
 
         <aside
           className={`agentos-runtime-rail hidden min-h-0 lg:flex lg:flex-col ${
-            isRuntimeRailOpen ? "" : "agentos-runtime-rail-collapsed"
-          }`}
+            isMobileContextOpen ? "agentos-runtime-rail-mobile-open" : ""
+          } ${isRuntimeRailOpen ? "" : "agentos-runtime-rail-collapsed"}`}
         >
-          <HealthStatus />
-          <RunInspector runId={activeRunId} />
-
-          <section className="agentos-context-card">
-            <p className="text-xs font-medium tracking-wide text-zinc-500">运行上下文</p>
-            <dl className="mt-4 divide-y divide-zinc-100">
-              {runtimeItems.map((item) => (
-                <div key={item.label} className="py-3 first:pt-0 last:pb-0">
-                  <dt className="text-xs text-zinc-500">{item.label}</dt>
-                  <dd className="mt-1 text-sm font-medium">{item.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
+          <RuntimeContext
+            activeRunId={activeRunId}
+            onClose={isMobileContextOpen ? () => setIsMobileContextOpen(false) : undefined}
+          />
         </aside>
       </div>
 
@@ -609,6 +679,17 @@ export function ChatWorkspace({
               </div>
             </footer>
           </aside>
+        </div>
+      ) : null}
+
+      {isMobileContextOpen ? (
+        <div className="agentos-mobile-context-menu lg:hidden">
+          <button
+            type="button"
+            className="agentos-mobile-menu-backdrop"
+            onClick={() => setIsMobileContextOpen(false)}
+            aria-label="关闭上下文"
+          />
         </div>
       ) : null}
     </>

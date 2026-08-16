@@ -24,12 +24,12 @@
 
 ## 决策摘要
 
-| 项 | 选择 |
-|----|------|
-| 主文案 | 英文 `toolName` + 关键参数（非中文动词句） |
-| 过程组 | 保留外壳，只改组内工具行 |
-| 图标 | 线框 SVG（`currentColor`），按工具/域映射；不用 emoji |
-| 耗时 | 仅过程组级 Run 时长；无单工具耗时 |
+| 项     | 选择                                                  |
+| ------ | ----------------------------------------------------- |
+| 主文案 | 英文 `toolName` + 关键参数（非中文动词句）            |
+| 过程组 | 保留外壳，只改组内工具行                              |
+| 图标   | 线框 SVG（`currentColor`），按工具/域映射；不用 emoji |
+| 耗时   | 仅过程组级 Run 时长；无单工具耗时                     |
 
 ---
 
@@ -47,12 +47,12 @@
 
 ### 副行状态
 
-| status | 文案 |
-|--------|------|
-| running | 执行中… |
-| done | 已完成 |
-| error | 失败 |
-| awaiting_approval | 待审批 |
+| status            | 文案    |
+| ----------------- | ------- |
+| running           | 执行中… |
+| done              | 已完成  |
+| error             | 失败    |
+| awaiting_approval | 待审批  |
 
 ### 展开区
 
@@ -64,17 +64,17 @@
 
 从 `argsText` JSON 解析（流式半截失败时不崩 UI）：
 
-| toolName | 主行参数 |
-|----------|----------|
-| `web_search` | `query` |
-| `fetch_url` | 短 URL（hostname + path） |
-| `read_artifact` | `artifact_id`（可截断） |
-| `time_diff` | `start`→`end`（缺 end 则 `start`→now） |
-| `calculate` | `expression` |
-| `growth_assess` | `sex` + 年龄/身高体重要点 |
-| `knowledge_search` | `query` |
-| `case_*` | 有则取首个短字段，否则仅 toolName |
-| 未知 / 解析失败 | 省略参数或 `…` |
+| toolName           | 主行参数                               |
+| ------------------ | -------------------------------------- |
+| `web_search`       | `query`                                |
+| `fetch_url`        | 短 URL（hostname + path）              |
+| `read_artifact`    | `artifact_id`（可截断）                |
+| `time_diff`        | `start`→`end`（缺 end 则 `start`→now） |
+| `calculate`        | `expression`                           |
+| `growth_assess`    | `sex` + 年龄/身高体重要点              |
+| `knowledge_search` | `query`                                |
+| `case_*`           | 有则取首个短字段，否则仅 toolName      |
+| 未知 / 解析失败    | 省略参数或 `…`                         |
 
 ---
 
@@ -82,17 +82,17 @@
 
 线框约 16px，`currentColor`：
 
-| 工具 | 图标语义 |
-|------|----------|
-| `web_search` | search |
-| `fetch_url` / `read_artifact` | link / document |
-| `calculate` | calc |
-| `time_diff` | clock |
-| `growth_assess` | chart |
-| `knowledge_search` | book |
-| `case_*` | folder / user |
-| `mcp_*` | literature / external |
-| 默认 | gear |
+| 工具                          | 图标语义              |
+| ----------------------------- | --------------------- |
+| `web_search`                  | search                |
+| `fetch_url` / `read_artifact` | link / document       |
+| `calculate`                   | calc                  |
+| `time_diff`                   | clock                 |
+| `growth_assess`               | chart                 |
+| `knowledge_search`            | book                  |
+| `case_*`                      | folder / user         |
+| `mcp_*`                       | literature / external |
+| 默认                          | gear                  |
 
 可放在 `tool-call-card.tsx` 或旁路 `tool-icons.tsx`。
 
@@ -100,12 +100,12 @@
 
 ## 四、改动面
 
-| 文件 | 改动 |
-|------|------|
-| `apps/web/src/components/chat/tool-call-card.tsx` | 折叠行结构与摘要逻辑 |
-| `apps/web/src/components/chat/tool-icons.tsx`（新建，可选） | SVG 映射 |
-| `apps/web/src/app/globals.css` | `.agentos-tool-call*` 双行布局 |
-| 若有 headline 单测 | 更新断言 |
+| 文件                                                        | 改动                           |
+| ----------------------------------------------------------- | ------------------------------ |
+| `apps/web/src/components/chat/tool-call-card.tsx`           | 折叠行结构与摘要逻辑           |
+| `apps/web/src/components/chat/tool-icons.tsx`（新建，可选） | SVG 映射                       |
+| `apps/web/src/app/globals.css`                              | `.agentos-tool-call*` 双行布局 |
+| 若有 headline 单测                                          | 更新断言                       |
 
 基本不动：`process-group.tsx`、`chat-panel.tsx` 编排、后端。
 

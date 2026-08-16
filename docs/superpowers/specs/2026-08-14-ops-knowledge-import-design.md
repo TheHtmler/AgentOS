@@ -27,15 +27,15 @@ Mac mini 上已有面向小程序的 **PaddleOCR HTTP 服务**（本地推理，
 
 ## 决策摘要
 
-| 项 | 选择 |
-|----|------|
-| 架构 | 统一 ingest 管道（方案 A） |
-| 冲突 | 同 base + slug → 快照后覆盖（与 seed 一致） |
-| OCR | 复用 Mac mini 已有 PaddleOCR HTTP（本机优先） |
-| PDF 文本层 | PyMuPDF（`pymupdf`） |
-| 链接正文 | 已有依赖 `trafilatura` |
-| 上限 | 单文件 ≤ 20MB；PDF ≤ 50 页 |
-| 默认审核 | `curated`；来源字段可选手填 |
+| 项         | 选择                                          |
+| ---------- | --------------------------------------------- |
+| 架构       | 统一 ingest 管道（方案 A）                    |
+| 冲突       | 同 base + slug → 快照后覆盖（与 seed 一致）   |
+| OCR        | 复用 Mac mini 已有 PaddleOCR HTTP（本机优先） |
+| PDF 文本层 | PyMuPDF（`pymupdf`）                          |
+| 链接正文   | 已有依赖 `trafilatura`                        |
+| 上限       | 单文件 ≤ 20MB；PDF ≤ 50 页                    |
+| 默认审核   | `curated`；来源字段可选手填                   |
 
 ---
 
@@ -74,14 +74,14 @@ Mac mini 上已有面向小程序的 **PaddleOCR HTTP 服务**（本地推理，
 
 ## 二、各途径行为
 
-| mode | 输入 | 处理 |
-|------|------|------|
-| `json` | 粘贴或 `.json` 文件 | 兼容现有 seed：单文档 `{document, chunks}` 或多文档 `{knowledge_base?, documents[]}`；可只导入其中文档到 `mma-pa` |
-| `text` | 标题 + 正文，或 `.txt`/`.md` | 切块；`source_kind` 默认 `curated_summary` |
-| `url` | URL + slug + 标题（标题可空则用页面标题） | `httpx` 拉取 → `trafilatura` 抽正文 → 切块；`source_url`=URL；失败返回明确错误（不静默空写入） |
-| `file` | multipart；按扩展名分流到 json/text/pdf/image | 同上 |
-| `pdf` | `.pdf` 文件 | 见第三节 |
-| `image` | `.jpg` / `.jpeg` / `.png` / `.webp` | 走本机 PaddleOCR，再按文本切块 |
+| mode    | 输入                                          | 处理                                                                                                              |
+| ------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `json`  | 粘贴或 `.json` 文件                           | 兼容现有 seed：单文档 `{document, chunks}` 或多文档 `{knowledge_base?, documents[]}`；可只导入其中文档到 `mma-pa` |
+| `text`  | 标题 + 正文，或 `.txt`/`.md`                  | 切块；`source_kind` 默认 `curated_summary`                                                                        |
+| `url`   | URL + slug + 标题（标题可空则用页面标题）     | `httpx` 拉取 → `trafilatura` 抽正文 → 切块；`source_url`=URL；失败返回明确错误（不静默空写入）                    |
+| `file`  | multipart；按扩展名分流到 json/text/pdf/image | 同上                                                                                                              |
+| `pdf`   | `.pdf` 文件                                   | 见第三节                                                                                                          |
+| `image` | `.jpg` / `.jpeg` / `.png` / `.webp`           | 走本机 PaddleOCR，再按文本切块                                                                                    |
 
 ### 2.1 API
 
@@ -112,11 +112,11 @@ Mac mini 上已有面向小程序的 **PaddleOCR HTTP 服务**（本地推理，
 
 ### 2.2 上限与超时
 
-| 限制 | 值 |
-|------|-----|
-| 上传体积 | 20MB |
-| PDF 页数 | 50 |
-| URL 响应体 | 5MB |
+| 限制         | 值                                              |
+| ------------ | ----------------------------------------------- |
+| 上传体积     | 20MB                                            |
+| PDF 页数     | 50                                              |
+| URL 响应体   | 5MB                                             |
 | 导入请求超时 | PDF+OCR 允许较长（建议 API 120s；Ops BFF 对齐） |
 
 ---
@@ -134,12 +134,12 @@ Mac mini 上已有面向小程序的 **PaddleOCR HTTP 服务**（本地推理，
 
 ### 3.2 配置（agent-api `.env`，不入库）
 
-| 变量 | 含义 |
-|------|------|
-| `OCR_BASE_URL` | 例：`http://127.0.0.1:8787`（本机 OCR，优先于公网 frp） |
-| `OCR_API_KEY` | 与现有服务 `X-API-Key` 一致 |
-| `OCR_TEXT_MIN_CHARS` | 页文字层阈值，默认 40 |
-| `OCR_ENABLED` | 默认 true；false 时 PDF 仅文字层，不足则报错 |
+| 变量                 | 含义                                                    |
+| -------------------- | ------------------------------------------------------- |
+| `OCR_BASE_URL`       | 例：`http://127.0.0.1:8787`（本机 OCR，优先于公网 frp） |
+| `OCR_API_KEY`        | 与现有服务 `X-API-Key` 一致                             |
+| `OCR_TEXT_MIN_CHARS` | 页文字层阈值，默认 40                                   |
+| `OCR_ENABLED`        | 默认 true；false 时 PDF 仅文字层，不足则报错            |
 
 说明：历史上存在两套相近接口文档——Mac mini 教程中的 `POST /ocr`（返回 `{text}`），以及仓库外 `paddleocr-service` 的 `POST /ocr/file`（返回 `{lines:[{text,...}]}`）。实现时做 **适配层**：按响应 JSON 形状归一为纯文本；部署文档写明探测 `/health` 与实际 path。
 
@@ -153,10 +153,10 @@ Mac mini 上已有面向小程序的 **PaddleOCR HTTP 服务**（本地推理，
 
 ## 四、Ops UI
 
-| 路由 | 内容 |
-|------|------|
-| `/knowledge` | 增加「导入」按钮；保留能力说明（更新为已支持多途径） |
-| `/knowledge/import` | Tab：JSON / 文本 / 链接 / 文件（含 PDF） |
+| 路由                | 内容                                                 |
+| ------------------- | ---------------------------------------------------- |
+| `/knowledge`        | 增加「导入」按钮；保留能力说明（更新为已支持多途径） |
+| `/knowledge/import` | Tab：JSON / 文本 / 链接 / 文件（含 PDF）             |
 
 交互：
 

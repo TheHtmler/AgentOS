@@ -19,17 +19,17 @@
 
 ## File map
 
-| Path | Responsibility |
-| --- | --- |
-| `api/ops_stats.py` | `GET /v1/ops/stats` |
-| `api/ops_knowledge.py` | GET detail, expanded PATCH, GET snapshot by id |
-| `api/ops_agents.py` | GET/PATCH agents |
-| `main.py` | include routers |
-| `tests/test_ops_*.py` | cover new endpoints |
-| `apps/ops/src/components/ops-shell.tsx` | nav + drawer |
-| `apps/ops/src/app/(ops)/**` | gated pages |
-| `apps/ops/src/app/api/ops/**` | BFF |
-| docs | progress + spec status |
+| Path                                    | Responsibility                                 |
+| --------------------------------------- | ---------------------------------------------- |
+| `api/ops_stats.py`                      | `GET /v1/ops/stats`                            |
+| `api/ops_knowledge.py`                  | GET detail, expanded PATCH, GET snapshot by id |
+| `api/ops_agents.py`                     | GET/PATCH agents                               |
+| `main.py`                               | include routers                                |
+| `tests/test_ops_*.py`                   | cover new endpoints                            |
+| `apps/ops/src/components/ops-shell.tsx` | nav + drawer                                   |
+| `apps/ops/src/app/(ops)/**`             | gated pages                                    |
+| `apps/ops/src/app/api/ops/**`           | BFF                                            |
+| docs                                    | progress + spec status                         |
 
 ---
 

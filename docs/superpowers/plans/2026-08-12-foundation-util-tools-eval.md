@@ -24,35 +24,37 @@
 
 ## File map
 
-| Path | Responsibility |
-| --- | --- |
-| `tools/util/calculate.py` | Whitelist AST evaluator → `dict` |
-| `tools/util/time_diff.py` | ISO parse + calendar deltas → `dict`; injectable `now` |
-| `tools/util/tool.py` | `time_diff` / `calculate` pydantic-ai tools + `run_*` helpers |
-| `tools/util/__init__.py` | Re-exports if useful |
-| `tools/registry.py` | `ToolDomain.UTIL`, two specs, enable flag |
-| `config.py` | `util_tools_enabled: bool = True` |
-| `.env.example` + `.env` | `UTIL_TOOLS_ENABLED=true` |
-| `agent.py` | `UTIL_INSTRUCTIONS`; mount check; optional `util_enabled=` override |
-| `eval/__init__.py` | Package marker |
-| `eval/runner.py` | Load suite, dispatch handlers, assert expects |
-| `seed/util/foundation_eval.json` | Golden cases |
-| `tests/test_util_calculate.py` | AST / limits unit tests |
-| `tests/test_util_time_diff.py` | Calendar / timezone unit tests |
-| `tests/test_util_tools.py` | Mount / disable / instructions |
-| `tests/test_foundation_evaluation.py` | Runner + full suite |
-| docs | progress + roadmap note |
+| Path                                  | Responsibility                                                      |
+| ------------------------------------- | ------------------------------------------------------------------- |
+| `tools/util/calculate.py`             | Whitelist AST evaluator → `dict`                                    |
+| `tools/util/time_diff.py`             | ISO parse + calendar deltas → `dict`; injectable `now`              |
+| `tools/util/tool.py`                  | `time_diff` / `calculate` pydantic-ai tools + `run_*` helpers       |
+| `tools/util/__init__.py`              | Re-exports if useful                                                |
+| `tools/registry.py`                   | `ToolDomain.UTIL`, two specs, enable flag                           |
+| `config.py`                           | `util_tools_enabled: bool = True`                                   |
+| `.env.example` + `.env`               | `UTIL_TOOLS_ENABLED=true`                                           |
+| `agent.py`                            | `UTIL_INSTRUCTIONS`; mount check; optional `util_enabled=` override |
+| `eval/__init__.py`                    | Package marker                                                      |
+| `eval/runner.py`                      | Load suite, dispatch handlers, assert expects                       |
+| `seed/util/foundation_eval.json`      | Golden cases                                                        |
+| `tests/test_util_calculate.py`        | AST / limits unit tests                                             |
+| `tests/test_util_time_diff.py`        | Calendar / timezone unit tests                                      |
+| `tests/test_util_tools.py`            | Mount / disable / instructions                                      |
+| `tests/test_foundation_evaluation.py` | Runner + full suite                                                 |
+| docs                                  | progress + roadmap note                                             |
 
 ---
 
 ### Task 1: `calculate` core (whitelist AST)
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/tools/util/__init__.py`
 - Create: `services/agent-api/src/agent_api/tools/util/calculate.py`
 - Test: `services/agent-api/tests/test_util_calculate.py`
 
 **Interfaces:**
+
 - Produces:
   ```python
   MAX_EXPRESSION_CHARS = 200
@@ -204,10 +206,12 @@ git push origin HEAD
 ### Task 2: `time_diff` core
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/tools/util/time_diff.py`
 - Test: `services/agent-api/tests/test_util_time_diff.py`
 
 **Interfaces:**
+
 - Produces:
   ```python
   ALL_UNITS = ("days", "hours", "minutes", "months", "years")
@@ -345,6 +349,7 @@ git push origin HEAD
 ### Task 3: Tool wrappers, registry, config, instructions
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/tools/util/tool.py`
 - Modify: `services/agent-api/src/agent_api/tools/registry.py`
 - Modify: `services/agent-api/src/agent_api/config.py` (near `growth_assess_enabled`)
@@ -355,6 +360,7 @@ git push origin HEAD
 - Possibly extend Settings constructions in other tests if they break on unknown kwargs (they should not — new field has default).
 
 **Interfaces:**
+
 - Produces pydantic-ai callables `time_diff` / `calculate` (async or sync matching growth style — prefer async wrappers calling sync cores, like other tools).
 - Produces:
   ```python
@@ -492,12 +498,14 @@ git push origin HEAD
 ### Task 4: Eval runner + foundation golden suite
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/eval/__init__.py`
 - Create: `services/agent-api/src/agent_api/eval/runner.py`
 - Create: `services/agent-api/seed/util/foundation_eval.json`
 - Test: `services/agent-api/tests/test_foundation_evaluation.py`
 
 **Interfaces:**
+
 - Produces:
   ```python
   def load_suite(path: Path) -> dict[str, Any]: ...
@@ -517,8 +525,8 @@ git push origin HEAD
   {
     "id": "calc-basic",
     "tool": "calculate",
-    "input": {"expression": "2+2"},
-    "expect": {"ok": true, "result": 4}
+    "input": { "expression": "2+2" },
+    "expect": { "ok": true, "result": 4 }
   }
   ```
   ```json
@@ -531,7 +539,7 @@ git push origin HEAD
       "units": ["days"]
     },
     "now": "2026-08-12T00:00:00Z",
-    "expect": {"ok": true, "delta.days": 2.0}
+    "expect": { "ok": true, "delta.days": 2.0 }
   }
   ```
 - Assertion rules in runner:
@@ -593,6 +601,7 @@ git push origin HEAD
 ### Task 5: Docs + full verification
 
 **Files:**
+
 - Modify: `docs/implementation-progress.md`
 - Modify: `docs/02-mvp-roadmap.md` (short note under platform / Phase 2.5 or a “platform foundation” bullet)
 - Confirm: local `.env` still has `UTIL_TOOLS_ENABLED=true`
@@ -600,6 +609,7 @@ git push origin HEAD
 - [ ] **Step 1: Update progress**
 
 In `implementation-progress.md`:
+
 - Bump 「最后更新」date.
 - Add completed bullets: util tools, eval runner, foundation suite, env flag.
 - Change 「下一步」away from「时间差/计算」toward next items (Provider 档位 / 知识审核 / Case 医疗扩展 — pick what remains true).
@@ -640,18 +650,18 @@ cd /path/to/AgentOS && git pull
 
 ## Spec coverage checklist
 
-| Spec requirement | Task |
-| --- | --- |
-| `time_diff` API + injectable now | 2, 3 |
-| `calculate` whitelist AST + limits | 1, 3 |
-| `ToolDomain.UTIL` + registry mount | 3 |
-| `UTIL_TOOLS_ENABLED` in `.env.example` **and** `.env` | 3 |
-| `UTIL_INSTRUCTIONS` when mounted | 3 |
-| Thin eval runner | 4 |
-| `foundation_eval.json` golden | 4 |
-| Mount/disable tests | 3 |
-| No LLM e2e / no knowledge migration | Global |
-| Docs progress update | 5 |
+| Spec requirement                                      | Task   |
+| ----------------------------------------------------- | ------ |
+| `time_diff` API + injectable now                      | 2, 3   |
+| `calculate` whitelist AST + limits                    | 1, 3   |
+| `ToolDomain.UTIL` + registry mount                    | 3      |
+| `UTIL_TOOLS_ENABLED` in `.env.example` **and** `.env` | 3      |
+| `UTIL_INSTRUCTIONS` when mounted                      | 3      |
+| Thin eval runner                                      | 4      |
+| `foundation_eval.json` golden                         | 4      |
+| Mount/disable tests                                   | 3      |
+| No LLM e2e / no knowledge migration                   | Global |
+| Docs progress update                                  | 5      |
 
 ## Placeholder / consistency self-review
 

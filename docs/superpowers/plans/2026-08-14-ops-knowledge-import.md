@@ -21,33 +21,35 @@
 
 ## File map
 
-| Path | Responsibility |
-|------|----------------|
-| `services/agent-api/src/agent_api/knowledge/chunking.py` | Text → chunks |
-| `services/agent-api/src/agent_api/knowledge/types.py` | `DocumentSpec`, `ChunkSpec`, `ImportResult` |
-| `services/agent-api/src/agent_api/knowledge/ocr_client.py` | HTTP OCR adapter |
-| `services/agent-api/src/agent_api/knowledge/pdf_extract.py` | PDF → text + OCR stats |
-| `services/agent-api/src/agent_api/knowledge/url_extract.py` | URL → title + text |
-| `services/agent-api/src/agent_api/knowledge/normalize.py` | JSON/text modes → DocumentSpec(s) |
-| `services/agent-api/src/agent_api/db/knowledge_store.py` | Add `upsert_knowledge_document`; keep seed using it |
-| `services/agent-api/src/agent_api/api/ops_knowledge.py` | `POST /v1/ops/knowledge/import` |
-| `services/agent-api/src/agent_api/config.py` | OCR + import limits settings |
-| `services/agent-api/tests/test_knowledge_import_*.py` | Unit + API tests |
-| `apps/ops/src/app/(ops)/knowledge/import/page.tsx` | Import UI |
-| `apps/ops/src/app/api/ops/knowledge/import/route.ts` | BFF |
-| `apps/ops/src/app/(ops)/knowledge/page.tsx` | Link + update callout |
+| Path                                                        | Responsibility                                      |
+| ----------------------------------------------------------- | --------------------------------------------------- |
+| `services/agent-api/src/agent_api/knowledge/chunking.py`    | Text → chunks                                       |
+| `services/agent-api/src/agent_api/knowledge/types.py`       | `DocumentSpec`, `ChunkSpec`, `ImportResult`         |
+| `services/agent-api/src/agent_api/knowledge/ocr_client.py`  | HTTP OCR adapter                                    |
+| `services/agent-api/src/agent_api/knowledge/pdf_extract.py` | PDF → text + OCR stats                              |
+| `services/agent-api/src/agent_api/knowledge/url_extract.py` | URL → title + text                                  |
+| `services/agent-api/src/agent_api/knowledge/normalize.py`   | JSON/text modes → DocumentSpec(s)                   |
+| `services/agent-api/src/agent_api/db/knowledge_store.py`    | Add `upsert_knowledge_document`; keep seed using it |
+| `services/agent-api/src/agent_api/api/ops_knowledge.py`     | `POST /v1/ops/knowledge/import`                     |
+| `services/agent-api/src/agent_api/config.py`                | OCR + import limits settings                        |
+| `services/agent-api/tests/test_knowledge_import_*.py`       | Unit + API tests                                    |
+| `apps/ops/src/app/(ops)/knowledge/import/page.tsx`          | Import UI                                           |
+| `apps/ops/src/app/api/ops/knowledge/import/route.ts`        | BFF                                                 |
+| `apps/ops/src/app/(ops)/knowledge/page.tsx`                 | Link + update callout                               |
 
 ---
 
 ### Task 1: Chunking + DocumentSpec types
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/knowledge/__init__.py`
 - Create: `services/agent-api/src/agent_api/knowledge/types.py`
 - Create: `services/agent-api/src/agent_api/knowledge/chunking.py`
 - Test: `services/agent-api/tests/test_knowledge_chunking.py`
 
 **Interfaces:**
+
 - Produces: `ChunkSpec`, `DocumentSpec`, `chunk_text(text: str, *, max_chars: int = 1200) -> list[ChunkSpec]`
 
 - [ ] **Step 1: Write failing tests**
@@ -121,15 +123,17 @@ git commit -m "feat(knowledge): add text chunking and DocumentSpec types"
 ### Task 2: Single-document upsert with snapshot
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/db/knowledge_store.py`
 - Test: `services/agent-api/tests/test_knowledge_upsert_document.py`
 
 **Interfaces:**
+
 - Consumes: `DocumentSpec`
 - Produces: `async def upsert_knowledge_document(session, *, base_slug: str, spec: DocumentSpec, created_by: str, http_client: httpx.AsyncClient | None = None) -> tuple[UUID, int, bool]`  
   Returns `(document_id, chunk_count, overwrote)`.  
   Ensures KB row exists for `mma-pa` (reuse `KNOWLEDGE_BASE_ID` / create if missing with name from existing seed defaults).  
-  On existing chunks: insert snapshot with `created_by`, then replace chunks (same ID scheme as `chunk_id_for_index` / `document_id_for_slug`).  
+  On existing chunks: insert snapshot with `created_by`, then replace chunks (same ID scheme as `chunk_id_for_index` / `document_id_for_slug`).
 - Refactor `upsert_mma_pa_knowledge` to call `upsert_knowledge_document` per doc (or extract shared body) without changing seed behavior.
 
 - [ ] **Step 1: Failing test — overwrite creates snapshot with created_by**
@@ -191,12 +195,14 @@ git commit -m "feat(knowledge): upsert single document with ops-authored snapsho
 ### Task 3: OCR HTTP client adapter
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/knowledge/ocr_client.py`
 - Modify: `services/agent-api/src/agent_api/config.py` (add settings)
 - Modify: `services/agent-api/.env.example`
 - Test: `services/agent-api/tests/test_ocr_client.py`
 
 **Interfaces:**
+
 - Settings: `ocr_enabled: bool = True`, `ocr_base_url: str = "http://127.0.0.1:8787"`, `ocr_api_key: str = ""`, `ocr_text_min_chars: int = 40`, `ocr_timeout_seconds: float = 60.0`
 - Produces: `async def ocr_image_bytes(image: bytes, *, client: httpx.AsyncClient, settings: Settings) -> str`
   - Try `POST {base}/ocr/file` multipart `file`; if 404, try `POST {base}/ocr`
@@ -231,16 +237,18 @@ git commit -m "feat(knowledge): add PaddleOCR HTTP client adapter"
 ### Task 4: PDF extract (text layer + OCR pages)
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/knowledge/pdf_extract.py`
 - Modify: `services/agent-api/pyproject.toml` — add `pymupdf`
 - Test: `services/agent-api/tests/test_pdf_extract.py`
 - Fixture: tiny text PDF bytes generated in test via pymupdf (no binary in repo required)
 
 **Interfaces:**
+
 - Produces: `async def extract_pdf_text(data: bytes, *, client: httpx.AsyncClient, settings: Settings) -> tuple[str, int, int]`  
-  → `(full_text, text_layer_pages, ocr_pages)`  
-  - Pages > 50 → `ValueError("PDF 超过 50 页上限")`  
-  - Per page: if `len(text.strip()) >= ocr_text_min_chars` use layer; else if `ocr_enabled` render pixmap → `ocr_image_bytes`; else raise if page empty and OCR off  
+  → `(full_text, text_layer_pages, ocr_pages)`
+  - Pages > 50 → `ValueError("PDF 超过 50 页上限")`
+  - Per page: if `len(text.strip()) >= ocr_text_min_chars` use layer; else if `ocr_enabled` render pixmap → `ocr_image_bytes`; else raise if page empty and OCR off
   - All empty → `ValueError("未能从 PDF 提取到正文")`
 
 - [ ] **Step 1: Test text-only PDF uses zero OCR pages (mock ocr never called)**
@@ -260,11 +268,13 @@ git commit -m "feat(knowledge): extract PDF text with optional local OCR pages"
 ### Task 5: Normalize JSON / text / URL → DocumentSpec
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/knowledge/normalize.py`
 - Create: `services/agent-api/src/agent_api/knowledge/url_extract.py`
 - Test: `services/agent-api/tests/test_knowledge_normalize.py`
 
 **Interfaces:**
+
 - `def normalize_json_payload(payload: dict) -> list[DocumentSpec]` — reuse seed `_document_specs` logic (move or import)
 - `def normalize_plain_text(*, slug: str, title: str, body: str, **source_fields) -> DocumentSpec`
 - `async def fetch_url_text(url: str, *, client: httpx.AsyncClient, max_bytes: int = 5_000_000) -> tuple[str, str]` → `(title, text)` via trafilatura; raise on empty
@@ -282,11 +292,13 @@ git commit -m "feat(knowledge): normalize JSON, text, and URL into DocumentSpec"
 ### Task 6: Ops import API
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/api/ops_knowledge.py`
 - Modify: `services/agent-api/src/agent_api/config.py` — `knowledge_import_max_bytes: int = 20_000_000`
 - Test: `services/agent-api/tests/test_ops_knowledge_import.py`
 
 **Interfaces:**
+
 - `POST /v1/ops/knowledge/import`
   - Content-Type `application/json`:  
     `{ "mode": "json"|"text"|"url", "base": "mma-pa", "payload": {...} | "title","slug","body" | "url","slug","title?" }`
@@ -328,6 +340,7 @@ git commit -m "feat(ops): POST /v1/ops/knowledge/import for multi-path ingest"
 ### Task 7: Ops BFF + import UI
 
 **Files:**
+
 - Create: `apps/ops/src/app/api/ops/knowledge/import/route.ts` (timeout 120s; forward JSON or multipart)
 - Create: `apps/ops/src/app/(ops)/knowledge/import/page.tsx`
 - Modify: `apps/ops/src/app/(ops)/knowledge/page.tsx` — 「导入」按钮；更新 callout
@@ -359,6 +372,7 @@ git commit -m "feat(ops): knowledge import UI for JSON, text, URL, and files"
 ### Task 8: Docs + deploy notes + spec status
 
 **Files:**
+
 - Modify: `docs/superpowers/specs/2026-08-14-ops-knowledge-import-design.md` — status → 已实现
 - Modify: `docs/implementation-progress.md` — short bullet
 - Modify: `scripts/macmini-deploy.sh` or nearby README comment — optional `curl $OCR_BASE_URL/health` hint in echo
@@ -376,15 +390,15 @@ git push origin HEAD
 
 ## Spec coverage checklist
 
-| Spec item | Task |
-|-----------|------|
-| JSON / text / url / file / pdf | 5–7 |
-| Unified upsert + snapshot overwrite | 2, 6 |
-| PaddleOCR HTTP reuse | 3–4 |
-| 20MB / 50 pages | 4, 6 |
-| Ops UI + BFF | 7 |
-| Tests + Mac mini acceptance | 1–6, 8 |
-| seed CLI non-regression | 2 |
+| Spec item                           | Task   |
+| ----------------------------------- | ------ |
+| JSON / text / url / file / pdf      | 5–7    |
+| Unified upsert + snapshot overwrite | 2, 6   |
+| PaddleOCR HTTP reuse                | 3–4    |
+| 20MB / 50 pages                     | 4, 6   |
+| Ops UI + BFF                        | 7      |
+| Tests + Mac mini acceptance         | 1–6, 8 |
+| seed CLI non-regression             | 2      |
 
 ## Placeholder scan
 
@@ -396,7 +410,7 @@ None intentional; OCR port `8787` is a default — adjust via env to match the l
 
 **Two execution options:**
 
-1. **Subagent-Driven（推荐）** — 每个 Task 开一个新子代理，任务间复查  
+1. **Subagent-Driven（推荐）** — 每个 Task 开一个新子代理，任务间复查
 2. **Inline Execution** — 本会话按 `executing-plans` 连续做完
 
 回 **1** 或 **2** 开始实现。

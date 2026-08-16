@@ -24,7 +24,7 @@ function RegisterPageContent() {
   const searchParams = useSearchParams();
   // Preserve the token for this page instance after removing it from the URL.
   const [invitationToken] = useState(() => searchParams.get("token"));
-  
+
   const [state, setState] = useState<RegistrationState>("checking");
   const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
@@ -125,7 +125,7 @@ function RegisterPageContent() {
   if (invitationToken === null) {
     return (
       <main className="agentos-auth-shell relative grid place-items-center overflow-auto px-4 py-8">
-        <div className="absolute right-4 top-4">
+        <div className="absolute top-4 right-4">
           <ThemeToggle />
         </div>
         <section className="agentos-auth-card w-full max-w-md p-6 sm:p-8">
@@ -141,7 +141,7 @@ function RegisterPageContent() {
 
   return (
     <main className="agentos-auth-shell relative grid place-items-center overflow-auto px-4 py-8">
-      <div className="absolute right-4 top-4">
+      <div className="absolute top-4 right-4">
         <ThemeToggle />
       </div>
       <section className="agentos-auth-card w-full max-w-md p-6 sm:p-8">
@@ -187,7 +187,11 @@ function RegisterPageContent() {
               />
             </label>
 
-            {error ? <p role="alert" className="mt-4 text-sm text-rose-700">{error}</p> : null}
+            {error ? (
+              <p role="alert" className="mt-4 text-sm text-rose-700">
+                {error}
+              </p>
+            ) : null}
 
             <button
               type="submit"
@@ -200,7 +204,9 @@ function RegisterPageContent() {
         ) : null}
 
         {state === "failed" && email === null ? (
-          <p role="alert" className="mt-4 text-sm text-rose-700">{error}</p>
+          <p role="alert" className="mt-4 text-sm text-rose-700">
+            {error}
+          </p>
         ) : null}
       </section>
     </main>

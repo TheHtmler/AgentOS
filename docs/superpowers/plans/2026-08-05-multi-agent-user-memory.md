@@ -24,38 +24,40 @@
 
 ## File map
 
-| Path | Responsibility |
-| --- | --- |
-| `db/models.py` | `Agent`, `AgentVersion`, `UserMemory`; `Thread.agent_id` |
-| `migrations/versions/*_add_agents_and_user_memories.py` | Schema + seed general/parenting + backfill threads |
-| `db/agent_store.py` | List agents, resolve published version, seed helpers |
-| `db/memory_store.py` | List/match/upsert/archive memories |
-| `memory/recall.py` | Keyword/tag scoring → Top-K → prompt block |
-| `memory/extract.py` | Ollama JSON extract + schedule after completed |
-| `agent.py` / `runtime.py` | Per-run agent build with overlay + memory block |
-| `tools/policy.py` | Optional `overrides` merge for agent version |
-| `db/chat_store.py` | `start_run(..., agent_id=)`, `list_threads(..., agent_id=)` |
-| `api/agents.py` | `GET /v1/agents` |
-| `api/threads.py` | `?agent_id=` filter; include `agent_id` in responses |
-| `api/ag_ui.py` / `api/chat.py` | Read agent on new thread; inject memory; schedule extract |
-| `scripts/seed_agents.py` | Idempotent CLI seed / upsert |
-| `apps/web/.../chat-workspace.tsx` | `selectedAgentId`, filter list, pass agent on new slot |
-| `apps/web/.../conversation-list.tsx` | Agent picker + filtered fetch |
-| `apps/web/.../chat-panel.tsx` / AG-UI proxy | Forward `X-AgentOS-Agent-Id` on new runs |
-| `apps/web/src/app/api/agents/route.ts` | BFF proxy |
-| tests | store / recall / extract / API / policy / isolation |
-| docs | progress + roadmap note that Phase 2.5 first slice is this plan |
+| Path                                                    | Responsibility                                                  |
+| ------------------------------------------------------- | --------------------------------------------------------------- |
+| `db/models.py`                                          | `Agent`, `AgentVersion`, `UserMemory`; `Thread.agent_id`        |
+| `migrations/versions/*_add_agents_and_user_memories.py` | Schema + seed general/parenting + backfill threads              |
+| `db/agent_store.py`                                     | List agents, resolve published version, seed helpers            |
+| `db/memory_store.py`                                    | List/match/upsert/archive memories                              |
+| `memory/recall.py`                                      | Keyword/tag scoring → Top-K → prompt block                      |
+| `memory/extract.py`                                     | Ollama JSON extract + schedule after completed                  |
+| `agent.py` / `runtime.py`                               | Per-run agent build with overlay + memory block                 |
+| `tools/policy.py`                                       | Optional `overrides` merge for agent version                    |
+| `db/chat_store.py`                                      | `start_run(..., agent_id=)`, `list_threads(..., agent_id=)`     |
+| `api/agents.py`                                         | `GET /v1/agents`                                                |
+| `api/threads.py`                                        | `?agent_id=` filter; include `agent_id` in responses            |
+| `api/ag_ui.py` / `api/chat.py`                          | Read agent on new thread; inject memory; schedule extract       |
+| `scripts/seed_agents.py`                                | Idempotent CLI seed / upsert                                    |
+| `apps/web/.../chat-workspace.tsx`                       | `selectedAgentId`, filter list, pass agent on new slot          |
+| `apps/web/.../conversation-list.tsx`                    | Agent picker + filtered fetch                                   |
+| `apps/web/.../chat-panel.tsx` / AG-UI proxy             | Forward `X-AgentOS-Agent-Id` on new runs                        |
+| `apps/web/src/app/api/agents/route.ts`                  | BFF proxy                                                       |
+| tests                                                   | store / recall / extract / API / policy / isolation             |
+| docs                                                    | progress + roadmap note that Phase 2.5 first slice is this plan |
 
 ---
 
 ### Task 1: DB models, migration, seed data
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/db/models.py`
 - Create: `services/agent-api/migrations/versions/d8e9f0a1b2c3_add_agents_and_user_memories.py`
 - Test: `services/agent-api/tests/test_models.py` (extend) or `tests/test_agent_models.py`
 
 **Interfaces:**
+
 - Produces: ORM `Agent`, `AgentVersion`, `UserMemory`; `Thread.agent_id: UUID` (NOT NULL after migration)
 - Produces: seeded slugs `general` (default, memory off) and `parenting` (vertical, memory on)
 
@@ -198,6 +200,7 @@ EOF
 ### Task 2: Agent store + `GET /v1/agents` + Thread filter/bind
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/db/agent_store.py`
 - Create: `services/agent-api/src/agent_api/api/agents.py`
 - Modify: `services/agent-api/src/agent_api/main.py` (include router)
@@ -209,6 +212,7 @@ EOF
 - Test: `services/agent-api/tests/test_agents_api.py`, extend `test_thread_management.py` / `test_chat_store.py`
 
 **Interfaces:**
+
 - Produces:
   ```python
   async def list_active_agents(session) -> list[Agent]
@@ -338,6 +342,7 @@ EOF
 ### Task 3: Runtime instructions assembly (overlay + policy overrides)
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/agent.py`
 - Modify: `services/agent-api/src/agent_api/runtime.py` (keep routers/semaphore; build agent per run or factory)
 - Modify: `services/agent-api/src/agent_api/tools/policy.py` (`overrides` param)
@@ -346,6 +351,7 @@ EOF
 - Test: `tests/test_agent.py`, `tests/test_tool_policy.py`
 
 **Interfaces:**
+
 - Produces:
   ```python
   def build_instructions(
@@ -445,6 +451,7 @@ EOF
 ### Task 4: Memory recall + extract
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/db/memory_store.py`
 - Create: `services/agent-api/src/agent_api/memory/recall.py`
 - Create: `services/agent-api/src/agent_api/memory/extract.py`
@@ -454,6 +461,7 @@ EOF
 - Test: `tests/test_memory_recall.py`, `tests/test_memory_extract.py`
 
 **Interfaces:**
+
 - Produces:
   ```python
   def score_memories(message: str, memories: list[UserMemory]) -> list[UserMemory]
@@ -556,6 +564,7 @@ EOF
 ### Task 5: Frontend Agent selector + filtered threads
 
 **Files:**
+
 - Modify: `apps/web/src/components/chat/chat-workspace.tsx`
 - Modify: `apps/web/src/components/chat/conversation-list.tsx`
 - Modify: `apps/web/src/components/chat/chat-panel.tsx`
@@ -564,6 +573,7 @@ EOF
 - Manual / `tsc` check
 
 **Interfaces:**
+
 - `selectedAgentId: string` in workspace (default from agents list `is_default`)
 - `ChatSlot` may store nothing extra; new runs use workspace `selectedAgentId`
 - `Conversation` type gains `agent_id: string`
@@ -630,6 +640,7 @@ EOF
 ### Task 6: Seed CLI, docs, full verification
 
 **Files:**
+
 - Create: `services/agent-api/scripts/seed_agents.py` (idempotent upsert by slug)
 - Modify: `docs/implementation-progress.md`
 - Modify: `docs/02-mvp-roadmap.md` — note Phase 2.5 first slice = multi-agent + user_memories (PatientCase later)
@@ -680,19 +691,19 @@ cd services/agent-api && uv run alembic upgrade head
 
 ## Spec coverage checklist
 
-| Spec requirement | Task |
-| --- | --- |
-| `agents` / `agent_versions` / `user_memories` | 1 |
-| `threads.agent_id` immutable + backfill | 1–2 |
-| Sidebar switch, default general, filter list | 5 |
-| New thread binds current agent | 2 + 5 |
-| Config-level overlay + memory flag | 1 + 3 |
-| Admin via seed/CLI (API optional) | 1 + 6 |
-| Recall keyword/tags Top-K | 4 |
-| Extract on completed async | 4 |
-| Isolation user×agent | 4 tests |
-| No vector / no PatientCase / no KB RAG | Global + non-goals |
-| published version on each Run | 3 |
+| Spec requirement                              | Task               |
+| --------------------------------------------- | ------------------ |
+| `agents` / `agent_versions` / `user_memories` | 1                  |
+| `threads.agent_id` immutable + backfill       | 1–2                |
+| Sidebar switch, default general, filter list  | 5                  |
+| New thread binds current agent                | 2 + 5              |
+| Config-level overlay + memory flag            | 1 + 3              |
+| Admin via seed/CLI (API optional)             | 1 + 6              |
+| Recall keyword/tags Top-K                     | 4                  |
+| Extract on completed async                    | 4                  |
+| Isolation user×agent                          | 4 tests            |
+| No vector / no PatientCase / no KB RAG        | Global + non-goals |
+| published version on each Run                 | 3                  |
 
 ## Placeholder / consistency self-review
 

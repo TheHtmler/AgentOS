@@ -23,35 +23,37 @@
 
 ## File map
 
-| Path | Responsibility |
-| --- | --- |
-| `migrations/versions/<rev>_hitl_waiting_approval.py` | status check, partial unique index, `interrupts` table |
-| `db/models.py` | `Interrupt` ORM; `Run` status constraint text |
-| `db/chat_store.py` | busy check, pause/resume helpers, checkpoint upsert, interrupt CRUD |
-| `config.py` / `.env.example` | `HITL_APPROVAL_TIMEOUT_SECONDS` |
-| `tools/policy.py` | ask no longer returns fake tool JSON |
-| `tools/registry.py` | mount `Tool(..., requires_approval=)` when ask |
-| `agent.py` | `output_type` includes `DeferredToolRequests` |
-| `api/ag_ui.py` | on deferred output → pause (not complete) |
-| `api/runs.py` | GET pending interrupts; `POST .../resume`; cancel waiting |
-| `hitl_timeout.py` (new) | scan expired pendings → auto deny-resume |
-| `runtime.py` | lifespan hook for timeout loop (optional) |
-| `apps/web/.../runs/[runId]/resume/route.ts` | BFF proxy |
-| `apps/web/.../runs/[runId]/cancel/route.ts` | BFF proxy (missing today; stop button needs it) |
-| `tool-call-card.tsx` / `chat-panel.tsx` / workspace | `awaiting_approval` UI + resume submit |
-| `tests/test_hitl.py` (new) + update `test_tool_policy.py` | coverage |
-| docs | progress / roadmap / spec status |
+| Path                                                      | Responsibility                                                      |
+| --------------------------------------------------------- | ------------------------------------------------------------------- |
+| `migrations/versions/<rev>_hitl_waiting_approval.py`      | status check, partial unique index, `interrupts` table              |
+| `db/models.py`                                            | `Interrupt` ORM; `Run` status constraint text                       |
+| `db/chat_store.py`                                        | busy check, pause/resume helpers, checkpoint upsert, interrupt CRUD |
+| `config.py` / `.env.example`                              | `HITL_APPROVAL_TIMEOUT_SECONDS`                                     |
+| `tools/policy.py`                                         | ask no longer returns fake tool JSON                                |
+| `tools/registry.py`                                       | mount `Tool(..., requires_approval=)` when ask                      |
+| `agent.py`                                                | `output_type` includes `DeferredToolRequests`                       |
+| `api/ag_ui.py`                                            | on deferred output → pause (not complete)                           |
+| `api/runs.py`                                             | GET pending interrupts; `POST .../resume`; cancel waiting           |
+| `hitl_timeout.py` (new)                                   | scan expired pendings → auto deny-resume                            |
+| `runtime.py`                                              | lifespan hook for timeout loop (optional)                           |
+| `apps/web/.../runs/[runId]/resume/route.ts`               | BFF proxy                                                           |
+| `apps/web/.../runs/[runId]/cancel/route.ts`               | BFF proxy (missing today; stop button needs it)                     |
+| `tool-call-card.tsx` / `chat-panel.tsx` / workspace       | `awaiting_approval` UI + resume submit                              |
+| `tests/test_hitl.py` (new) + update `test_tool_policy.py` | coverage                                                            |
+| docs                                                      | progress / roadmap / spec status                                    |
 
 ---
 
 ### Task 1: Schema — `waiting_approval` + `interrupts`
 
 **Files:**
+
 - Create: `services/agent-api/migrations/versions/<rev>_add_hitl_waiting_approval.py`
 - Modify: `services/agent-api/src/agent_api/db/models.py`
 - Test: `services/agent-api/tests/test_hitl_store.py` (new; real Postgres + rollback like `test_chat_store.py`)
 
 **Interfaces:**
+
 - Produces: `Interrupt` model; `Run.status` may be `waiting_approval`; partial unique index includes waiting
 
 - [ ] **Step 1: Write failing store smoke test**
@@ -152,10 +154,12 @@ EOF
 ### Task 2: chat_store — pause, checkpoint, interrupt CRUD, busy check
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/db/chat_store.py`
 - Modify: `services/agent-api/tests/test_hitl_store.py`
 
 **Interfaces:**
+
 - Produces:
   - `async def pause_run_for_approval(session, *, run_id, approvals: list[ApprovalRequest], model_messages: list[dict], expires_at: datetime) -> list[Interrupt]`
   - `async def upsert_run_message_history(session, *, run_id, messages: list[dict]) -> None`
@@ -191,6 +195,7 @@ async def test_apply_decisions_idempotent(...):
 - [ ] **Step 3: Implement helpers**
 
 Key behaviors:
+
 - `pause_run_for_approval`: lock run; require `running`; set `waiting_approval`; upsert history; insert interrupts; `append_run_event(..., "approval_required", payload)`.
 - `upsert_run_message_history`: `INSERT ... ON CONFLICT (run_id) DO UPDATE` via SQLAlchemy merge or delete+add.
 - `apply_interrupt_decisions`: require `waiting_approval`; all pending covered exactly once; if `idempotency_key` already stored on resolved rows for this run, return those rows without change; else write statuses + key + `resolved_at`; **do not** set run back to `running` here (API layer does that when starting the background task) — or do set `running` in the same transaction as apply (prefer **same transaction**: decisions + `status=running` to avoid races).
@@ -214,6 +219,7 @@ EOF
 ### Task 3: Policy + Registry — `requires_approval` Tool mount
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/config.py`
 - Modify: `services/agent-api/.env.example`
 - Modify: `services/agent-api/src/agent_api/tools/policy.py`
@@ -222,6 +228,7 @@ EOF
 - Modify: `services/agent-api/tests/test_tool_policy.py`
 
 **Interfaces:**
+
 - Produces: `mounted_tools(...) -> list[Tool[AgentDeps]]` (or keep handlers but wrap in `Tool`)
 - `Settings.hitl_approval_timeout_seconds: int = 1800`
 - `gate_or_none`: **ASK returns `None`** (deferred owns ask); DENY still returns JSON error
@@ -230,10 +237,12 @@ EOF
 - [ ] **Step 1: Update / replace ask tests**
 
 Delete or rewrite:
+
 - `test_gate_or_none_ask_payload` → assert `gate_or_none` returns `None` when ask
 - `test_run_web_search_respects_ask_without_router_call` → either remove (deferred never calls `run_web_search` until approved) or keep deny-only gate tests
 
 Add:
+
 ```python
 def test_ask_tool_mounted_with_requires_approval(monkeypatch):
     # create_agent with TOOL_POLICY_ASK=fetch_url
@@ -245,6 +254,7 @@ def test_ask_tool_mounted_with_requires_approval(monkeypatch):
 - [ ] **Step 3: Implement**
 
 `registry.py`:
+
 ```python
 from pydantic_ai import Tool
 
@@ -268,6 +278,7 @@ def mounted_tools(...) -> list[Tool[AgentDeps]]:
 Verify `takes_ctx` / name kwargs against pydantic-ai `Tool.__init__` in the installed version before committing — adjust to the actual constructor.
 
 `policy.py` `gate_or_none`:
+
 ```python
 if action == PolicyAction.ASK:
     # Deferred tools handle ask; never return a fake tool result.
@@ -275,6 +286,7 @@ if action == PolicyAction.ASK:
 ```
 
 `agent.py`:
+
 ```python
 from pydantic_ai.tools import DeferredToolRequests
 
@@ -307,11 +319,13 @@ EOF
 ### Task 4: AG-UI pause path when deferred approvals appear
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/api/ag_ui.py`
 - Modify: `services/agent-api/src/agent_api/api/chat.py` (helpers if shared persist lives there)
 - Test: `services/agent-api/tests/test_hitl_ag_ui.py` (new)
 
 **Interfaces:**
+
 - Consumes: `pause_run_for_approval`, timeout setting
 - Produces: Run ends SSE with interrupt outcome; DB `waiting_approval`; no assistant final message
 
@@ -366,6 +380,7 @@ EOF
 ### Task 5: Resume + cancel API (+ Web BFF)
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/api/runs.py`
 - Create: `services/agent-api/src/agent_api/hitl_resume.py` (background continue helper)
 - Create: `apps/web/src/app/api/runs/[runId]/resume/route.ts`
@@ -373,6 +388,7 @@ EOF
 - Test: `services/agent-api/tests/test_hitl_resume.py`
 
 **Interfaces:**
+
 - `POST /v1/runs/{run_id}/resume` body:
   ```json
   {"decisions":[{"tool_call_id":"...","decision":"approve"|"deny","message":null}],"idempotency_key":"..."}
@@ -419,11 +435,13 @@ EOF
 ### Task 6: Approval auto-deny resume
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/hitl_timeout.py`
 - Modify: `services/agent-api/src/agent_api/runtime.py` (lifespan: `asyncio.create_task` loop every N seconds)
 - Test: `services/agent-api/tests/test_hitl_timeout.py`
 
 **Interfaces:**
+
 - `async def sweep_expired_approvals(runtime: AgentRuntime | None = None) -> int`  
   Find `interrupts` pending with `expires_at <= now`, group by `run_id` still `waiting_approval`, mark `timed_out` with synthetic idempotency key `timeout:{run_id}:{expires_at.isoformat()}`, build deny results, start resume background (or inline in tests).
 
@@ -446,6 +464,7 @@ EOF
 ### Task 7: Frontend approval card + recovery
 
 **Files:**
+
 - Modify: `apps/web/src/components/chat/tool-call-card.tsx`
 - Modify: `apps/web/src/components/chat/chat-panel.tsx`
 - Modify: `apps/web/src/components/chat/chat-workspace.tsx` (sidebar「待审批」)
@@ -454,6 +473,7 @@ EOF
 - Optional small: `apps/web/src/components/chat/approval-card.tsx`
 
 **Interfaces:**
+
 - `ToolCallStatus` includes `awaiting_approval`
 - After AG-UI stream ends, if `GET /api/runs/{id}` → `waiting_approval`, render approval UI from `pending_interrupts`
 - Submit all decisions once → `POST /api/runs/{id}/resume` with `crypto.randomUUID()` idempotency key
@@ -486,6 +506,7 @@ EOF
 ### Task 8: Docs, full verification, delivery note
 
 **Files:**
+
 - Modify: `docs/implementation-progress.md`
 - Modify: `docs/02-mvp-roadmap.md` (Phase 2 HITL bullet)
 - Modify: `docs/superpowers/specs/2026-08-04-hitl-approval-resume-design.md` status → accepted
@@ -529,20 +550,20 @@ Mac mini:
 
 ## Spec coverage checklist
 
-| Spec requirement | Task |
-| --- | --- |
-| `waiting_approval` + unique index | Task 1 |
-| `interrupts` table | Task 1–2 |
-| Checkpoint history on pause | Task 2, 4 |
-| Deferred Tools / `requires_approval` | Task 3 |
-| Retire ask JSON placeholder | Task 3 |
-| AG-UI pause | Task 4 |
-| `POST /resume` + idempotency | Task 5 |
-| GET pending_interrupts | Task 5 |
-| Cancel waiting | Task 5 |
-| Timeout = deny continue | Task 6 |
-| Approval card + refresh restore | Task 7 |
-| Env + progress docs | Task 3, 8 |
+| Spec requirement                     | Task      |
+| ------------------------------------ | --------- |
+| `waiting_approval` + unique index    | Task 1    |
+| `interrupts` table                   | Task 1–2  |
+| Checkpoint history on pause          | Task 2, 4 |
+| Deferred Tools / `requires_approval` | Task 3    |
+| Retire ask JSON placeholder          | Task 3    |
+| AG-UI pause                          | Task 4    |
+| `POST /resume` + idempotency         | Task 5    |
+| GET pending_interrupts               | Task 5    |
+| Cancel waiting                       | Task 5    |
+| Timeout = deny continue              | Task 6    |
+| Approval card + refresh restore      | Task 7    |
+| Env + progress docs                  | Task 3, 8 |
 
 ## Notes for implementers
 

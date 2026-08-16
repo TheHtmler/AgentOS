@@ -54,11 +54,11 @@
 
 ### 1.1 触发与条件
 
-| 项 | 约定 |
-|----|------|
-| 时机 | 某 Thread 的一次 Run **成功结束**后（SSE/run 收尾钩子） |
-| 资格 | 该 Thread 至少有 1 条 user 与 1 条 assistant 内容（首轮交换） |
-| 跳过 | `threads.title` 已非空（含用户 rename）；或 `AUTO_THREAD_TITLE_ENABLED=false`；或已有进行中的标题任务（同 thread 去重） |
+| 项   | 约定                                                                                                                           |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------ |
+| 时机 | 某 Thread 的一次 Run **成功结束**后（SSE/run 收尾钩子）                                                                        |
+| 资格 | 该 Thread 至少有 1 条 user 与 1 条 assistant 内容（首轮交换）                                                                  |
+| 跳过 | `threads.title` 已非空（含用户 rename）；或 `AUTO_THREAD_TITLE_ENABLED=false`；或已有进行中的标题任务（同 thread 去重）        |
 | 频率 | 每次成功 Run 结束时若 `title IS NULL` 可尝试生成（失败可在后续 Run 重试）；**一旦写入成功**不再自动改名；换题需用户手动 rename |
 
 占位文案：前端在 `title == null` 时仍显示「新会话」或首条摘要（现有 `conversationLabel` 逻辑）；不把「新会话」四个字写入 DB。
@@ -83,10 +83,10 @@
 
 ### 1.5 环境变量
 
-| 变量 | 默认 | 说明 |
-|------|------|------|
-| `AUTO_THREAD_TITLE_ENABLED` | `true` | 总开关 |
-| `AUTO_THREAD_TITLE_TIMEOUT_SECONDS` | `30` | 标题推理超时 |
+| 变量                                | 默认   | 说明         |
+| ----------------------------------- | ------ | ------------ |
+| `AUTO_THREAD_TITLE_ENABLED`         | `true` | 总开关       |
+| `AUTO_THREAD_TITLE_TIMEOUT_SECONDS` | `30`   | 标题推理超时 |
 
 ---
 
@@ -108,21 +108,21 @@ services/agent-api/src/agent_api/tools/
 
 ### 2.2 ToolSpec 字段
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `name` | str | 与模型可见工具名一致 |
-| `domain` | str | 能力域，对应目录名 |
-| `risk` | enum | `read` \| `write` \| `exec` \| `external`（性质标签，不等于是否审批） |
-| `default_action` | enum | `allow` \| `ask` \| `deny` |
-| `enabled` | bool | 总开关；可与 `SEARCH_ENABLED` / `FETCH_URL_ENABLED` 对齐 |
-| `description` | str | 可选，文档/调试用 |
+| 字段             | 类型 | 说明                                                                  |
+| ---------------- | ---- | --------------------------------------------------------------------- |
+| `name`           | str  | 与模型可见工具名一致                                                  |
+| `domain`         | str  | 能力域，对应目录名                                                    |
+| `risk`           | enum | `read` \| `write` \| `exec` \| `external`（性质标签，不等于是否审批） |
+| `default_action` | enum | `allow` \| `ask` \| `deny`                                            |
+| `enabled`        | bool | 总开关；可与 `SEARCH_ENABLED` / `FETCH_URL_ENABLED` 对齐              |
+| `description`    | str  | 可选，文档/调试用                                                     |
 
 ### 2.3 本轮内置登记
 
-| name | domain | risk | default_action |
-|------|--------|------|----------------|
-| `web_search` | search | `external` | `allow` |
-| `fetch_url` | fetch | `external` | `allow` |
+| name         | domain | risk       | default_action |
+| ------------ | ------ | ---------- | -------------- |
+| `web_search` | search | `external` | `allow`        |
+| `fetch_url`  | fetch  | `external` | `allow`        |
 
 只读联网标 `external`（有出网），但仍默认 `allow`。**risk 描述性质，action 决定门禁。**
 
@@ -152,11 +152,11 @@ services/agent-api/src/agent_api/tools/
 
 ### 3.2 执行结果
 
-| 裁决 | 行为 |
-|------|------|
-| `allow` | 执行既有工具实现 |
-| `ask` | **不执行**；tool result 返回结构化占位，例如 `{"status":"approval_required","tool":"..."}`（英文 message 可选）；打日志。本轮无前端审批卡、无 resume |
-| `deny` | **不执行**；结构化错误 `{"error":"...","code":"tool_denied"}`；打审计向日志字段 |
+| 裁决    | 行为                                                                                                                                                 |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `allow` | 执行既有工具实现                                                                                                                                     |
+| `ask`   | **不执行**；tool result 返回结构化占位，例如 `{"status":"approval_required","tool":"..."}`（英文 message 可选）；打日志。本轮无前端审批卡、无 resume |
+| `deny`  | **不执行**；结构化错误 `{"error":"...","code":"tool_denied"}`；打审计向日志字段                                                                      |
 
 ### 3.3 接入点
 
@@ -165,10 +165,10 @@ services/agent-api/src/agent_api/tools/
 
 ### 3.4 环境变量
 
-| 变量 | 默认 | 说明 |
-|------|------|------|
-| `TOOL_POLICY_DENY` | 空 | 逗号分隔工具名，强制 deny |
-| `TOOL_POLICY_ASK` | 空 | 逗号分隔工具名，强制 ask |
+| 变量               | 默认 | 说明                      |
+| ------------------ | ---- | ------------------------- |
+| `TOOL_POLICY_DENY` | 空   | 逗号分隔工具名，强制 deny |
+| `TOOL_POLICY_ASK`  | 空   | 逗号分隔工具名，强制 ask  |
 
 保留现有 `SEARCH_ENABLED` / `FETCH_URL_ENABLED` 作为 enabled 来源，不强制改名。
 
@@ -218,11 +218,11 @@ services/agent-api/src/agent_api/tools/
 
 ## 决策记录
 
-| 决策 | 选择 | 理由 |
-|------|------|------|
-| 标题时机 | 首轮 run 成功结束后、模型总结 | 对齐主流；比截断首句更可读 |
-| 标题覆盖 | 仅 `title IS NULL` | 保护手动 rename |
-| 目录组织 | 按能力域，不按 risk 分文件夹 | 策略可变不搬代码；对齐 Claude Code |
-| Policy 语义 | allow / ask / deny，deny 优先 | 主流习惯，便于接 HITL |
-| 本轮 ask | 占位不执行，无审批 UI | 控制范围；门禁形状先固定 |
-| risk vs action | 分开字段 | 只读出网可为 external + allow |
+| 决策           | 选择                          | 理由                               |
+| -------------- | ----------------------------- | ---------------------------------- |
+| 标题时机       | 首轮 run 成功结束后、模型总结 | 对齐主流；比截断首句更可读         |
+| 标题覆盖       | 仅 `title IS NULL`            | 保护手动 rename                    |
+| 目录组织       | 按能力域，不按 risk 分文件夹  | 策略可变不搬代码；对齐 Claude Code |
+| Policy 语义    | allow / ask / deny，deny 优先 | 主流习惯，便于接 HITL              |
+| 本轮 ask       | 占位不执行，无审批 UI         | 控制范围；门禁形状先固定           |
+| risk vs action | 分开字段                      | 只读出网可为 external + allow      |

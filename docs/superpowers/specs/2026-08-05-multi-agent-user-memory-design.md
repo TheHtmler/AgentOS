@@ -33,14 +33,14 @@ AgentOS 目标包含多 Agent，但当前 Runtime 仅有单一通用助手（`SY
 
 ## 决策摘要
 
-| 项 | 选择 |
-|----|------|
+| 项       | 选择                                                  |
+| -------- | ----------------------------------------------------- |
 | 实现路线 | Agent 配置表 + 请求时拼装 Runtime（非代码写死注册表） |
-| UX | 侧栏选 Agent；列表按 Agent 过滤；Thread 绑定不可变 |
-| 配置权 | 管理员（API/CLI/seed）；用户只读选用 |
-| 记忆写入 | Run completed 后异步抽取 |
-| 记忆召回 | tags + 关键词；Top-K；预留 embedding 列 |
-| 版本策略 | Run 使用 Agent **当前 published** version |
+| UX       | 侧栏选 Agent；列表按 Agent 过滤；Thread 绑定不可变    |
+| 配置权   | 管理员（API/CLI/seed）；用户只读选用                  |
+| 记忆写入 | Run completed 后异步抽取                              |
+| 记忆召回 | tags + 关键词；Top-K；预留 embedding 列               |
+| 版本策略 | Run 使用 Agent **当前 published** version             |
 
 ---
 
@@ -48,53 +48,53 @@ AgentOS 目标包含多 Agent，但当前 Runtime 仅有单一通用助手（`SY
 
 ### 1.1 `agents`
 
-| 列 | 说明 |
-|----|------|
-| `id` | UUID PK |
-| `slug` | 唯一短名，如 `general`、`parenting` |
-| `name` | 展示名 |
-| `description` | 侧栏/空态说明 |
-| `kind` | `general` \| `vertical` |
-| `is_default` | 全局至多一条为 true（通用） |
-| `status` | `active` \| `disabled` |
-| `created_at` / `updated_at` | 时间戳 |
+| 列                          | 说明                                |
+| --------------------------- | ----------------------------------- |
+| `id`                        | UUID PK                             |
+| `slug`                      | 唯一短名，如 `general`、`parenting` |
+| `name`                      | 展示名                              |
+| `description`               | 侧栏/空态说明                       |
+| `kind`                      | `general` \| `vertical`             |
+| `is_default`                | 全局至多一条为 true（通用）         |
+| `status`                    | `active` \| `disabled`              |
+| `created_at` / `updated_at` | 时间戳                              |
 
 ### 1.2 `agent_versions`
 
-| 列 | 说明 |
-|----|------|
-| `id` | UUID PK |
-| `agent_id` | FK → agents |
-| `version` | 单调版本号 |
+| 列                      | 说明                                         |
+| ----------------------- | -------------------------------------------- |
+| `id`                    | UUID PK                                      |
+| `agent_id`              | FK → agents                                  |
+| `version`               | 单调版本号                                   |
 | `system_prompt_overlay` | 叠在平台 base instructions 上的垂类/人设文本 |
-| `tool_policy_overrides` | JSONB，可空；额外 deny/ask/allow |
-| `memory_enabled` | bool |
-| `is_published` | 仅 published 供 Thread/Run 使用 |
-| `created_at` | 时间戳 |
+| `tool_policy_overrides` | JSONB，可空；额外 deny/ask/allow             |
+| `memory_enabled`        | bool                                         |
+| `is_published`          | 仅 published 供 Thread/Run 使用              |
+| `created_at`            | 时间戳                                       |
 
 唯一约束建议：`(agent_id, version)`；应用层保证每个 agent 至多一个 `is_published=true`（或用 `agents.published_version_id` FK，实现任选其一，文档以「当前 published version」语义为准）。
 
 ### 1.3 `threads`（增量）
 
-| 列 | 说明 |
-|----|------|
+| 列         | 说明                                              |
+| ---------- | ------------------------------------------------- |
 | `agent_id` | FK → agents，NOT NULL；**创建时写入，无更新 API** |
 
 迁移：现有 Thread 回填为 default（`general`）Agent。
 
 ### 1.4 `user_memories`
 
-| 列 | 说明 |
-|----|------|
-| `id` | UUID PK |
-| `user_id` | FK → users |
-| `agent_id` | FK → agents |
-| `content` | 规范化事实句 |
-| `tags` | `text[]`，如 `{身高,体重,报告}` |
-| `source_thread_id` / `source_run_id` | 可空，追溯 |
-| `status` | `active` \| `archived` |
-| `embedding` | 可空；MVP 不写 |
-| `created_at` / `updated_at` | 时间戳 |
+| 列                                   | 说明                            |
+| ------------------------------------ | ------------------------------- |
+| `id`                                 | UUID PK                         |
+| `user_id`                            | FK → users                      |
+| `agent_id`                           | FK → agents                     |
+| `content`                            | 规范化事实句                    |
+| `tags`                               | `text[]`，如 `{身高,体重,报告}` |
+| `source_thread_id` / `source_run_id` | 可空，追溯                      |
+| `status`                             | `active` \| `archived`          |
+| `embedding`                          | 可空；MVP 不写                  |
+| `created_at` / `updated_at`          | 时间戳                          |
 
 查询必须同时带 `user_id` + `agent_id`。索引建议：`(user_id, agent_id, status)`；GIN on `tags`（若 Postgres 便于 tag 包含查询）。
 
@@ -164,14 +164,14 @@ Run → completed
 
 ### 2.4 API 面（MVP）
 
-| 方法 | 路径 | 谁用 |
-|------|------|------|
-| GET | `/v1/agents` | 用户侧栏 |
-| POST / PATCH | `/v1/admin/agents`（及 versions） | 管理员；或先 CLI/seed |
-| GET | `/v1/threads?agent_id=` | 过滤列表 |
-| POST | `/v1/threads` 含 `agent_id` | 新建 |
-| （内部） | Run completed → memory extract | 无对外 API |
-| GET / PATCH / DELETE | `/v1/agents/{id}/memories` | 可选后续；MVP 可不暴露 |
+| 方法                 | 路径                              | 谁用                   |
+| -------------------- | --------------------------------- | ---------------------- |
+| GET                  | `/v1/agents`                      | 用户侧栏               |
+| POST / PATCH         | `/v1/admin/agents`（及 versions） | 管理员；或先 CLI/seed  |
+| GET                  | `/v1/threads?agent_id=`           | 过滤列表               |
+| POST                 | `/v1/threads` 含 `agent_id`       | 新建                   |
+| （内部）             | Run completed → memory extract    | 无对外 API             |
+| GET / PATCH / DELETE | `/v1/agents/{id}/memories`        | 可选后续；MVP 可不暴露 |
 
 ### 2.5 衔接点
 
@@ -203,9 +203,7 @@ Run → completed
 
 ```json
 {
-  "facts": [
-    {"content": "宝宝身高 75cm（2026-07）", "tags": ["身高"], "op": "upsert"}
-  ]
+  "facts": [{ "content": "宝宝身高 75cm（2026-07）", "tags": ["身高"], "op": "upsert" }]
 }
 ```
 
@@ -214,23 +212,23 @@ Run → completed
 
 **写入**：
 
-| 情况 | 行为 |
-|------|------|
-| 新事实 | INSERT `active` |
+| 情况                           | 行为                           |
+| ------------------------------ | ------------------------------ |
+| 新事实                         | INSERT `active`                |
 | 同 user+agent+主 tag，实质更新 | 旧条 `archived`，新条 `active` |
-| 几乎重复 | 跳过或只更新 `updated_at` |
+| 几乎重复                       | 跳过或只更新 `updated_at`      |
 
 **模型**：现有 Ollama；短 prompt；后台任务，不占用用户 SSE。
 
 ### 3.3 错误处理
 
-| 场景 | 行为 |
-|------|------|
-| 抽取失败 / JSON 坏 | 日志；可选重试 1 次；不影响 Run completed |
-| 注入异常 | 降级无记忆继续 Run + 日志 |
+| 场景                           | 行为                                             |
+| ------------------------------ | ------------------------------------------------ |
+| 抽取失败 / JSON 坏             | 日志；可选重试 1 次；不影响 Run completed        |
+| 注入异常                       | 降级无记忆继续 Run + 日志                        |
 | Agent `disabled` 仍有旧 Thread | 可继续聊（用最后 published）；侧栏隐藏、不可新建 |
-| 列表为空 | 空态 + 新对话 |
-| 管理员改 overlay | 下次 Run 生效 |
+| 列表为空                       | 空态 + 新对话                                    |
+| 管理员改 overlay               | 下次 Run 生效                                    |
 
 ### 3.4 安全
 

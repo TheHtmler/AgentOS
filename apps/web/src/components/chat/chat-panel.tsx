@@ -104,7 +104,10 @@ function parseUserMessageAttachments(content: string): {
       artifactIds.push(id);
     }
   }
-  const displayText = content.replace(ARTIFACT_ID_LINE_RE, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  const displayText = content
+    .replace(ARTIFACT_ID_LINE_RE, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   return { displayText, artifactIds };
 }
 
@@ -119,7 +122,6 @@ function buildMessageWithAttachments(text: string, artifacts: readonly UploadedA
   }
   return `${trimmed}\n\n${lines.join("\n")}`;
 }
-
 
 function parsePendingInterrupts(value: unknown): PendingInterrupt[] {
   if (!Array.isArray(value)) {
@@ -186,6 +188,7 @@ type ChatPanelProps = {
   onAwaitingApprovalChanged?: (isAwaiting: boolean) => void;
   onThreadChanged: (threadId: string | null, agentId?: string) => void;
   onRunFinalized: () => void;
+  onOpenContext?: () => void;
 };
 
 const STARTER_PROMPTS = [
@@ -523,6 +526,7 @@ export function ChatPanel({
   onAwaitingApprovalChanged,
   onThreadChanged,
   onRunFinalized,
+  onOpenContext,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -728,8 +732,7 @@ export function ChatPanel({
             if (durationLabel !== null) {
               setMessages((previous) => {
                 const latestUserIndex = previous.reduce(
-                  (latestIndex, message, index) =>
-                    message.role === "user" ? index : latestIndex,
+                  (latestIndex, message, index) => (message.role === "user" ? index : latestIndex),
                   -1,
                 );
                 const assistantIndex = previous.findIndex(
@@ -1292,8 +1295,7 @@ export function ChatPanel({
           if (durationLabel !== null) {
             setMessages((previous) => {
               const latestUserIndex = previous.reduce(
-                (latestIndex, message, index) =>
-                  message.role === "user" ? index : latestIndex,
+                (latestIndex, message, index) => (message.role === "user" ? index : latestIndex),
                 -1,
               );
               const assistantIndex = previous.findIndex(
@@ -1533,31 +1535,46 @@ export function ChatPanel({
 
   return (
     <section
-      className={`agentos-chat-panel flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border ${
+      className={`agentos-chat-panel flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden ${
         isStreaming ? "agentos-is-streaming" : ""
       }`}
     >
-      <header className="agentos-chat-header flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3.5 sm:px-5 sm:py-4">
-        <div>
-          <p className="agentos-chat-heading text-sm font-semibold">
-            {threadId === null ? "新建 Agent 会话" : "Agent conversation"}
-          </p>
-          <p className="agentos-chat-subheading mt-1 text-xs">
+      <header className="agentos-chat-header">
+        <div className="agentos-thread-heading">
+          <p className="agentos-thread-kicker">Agent / General Agent</p>
+          <div className="agentos-thread-title-row">
+            <h1 className="agentos-chat-heading">
+              {threadId === null ? "新建 Agent 会话" : "Agent conversation"}
+            </h1>
+            <p aria-live="polite" className="agentos-chat-status">
+              <span aria-hidden="true" />
+              {statusLabel}
+            </p>
+          </div>
+          <p className="agentos-chat-subheading">
             {threadId === null ? "准备新的执行上下文" : "当前 Thread 已恢复"}
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <p aria-live="polite" className="agentos-chat-status text-xs">
-            <span aria-hidden="true" />
-            {statusLabel}
-          </p>
+        <div className="agentos-chat-header-actions">
+          {onOpenContext ? (
+            <button
+              type="button"
+              onClick={onOpenContext}
+              className="agentos-context-toggle"
+              aria-label="打开上下文"
+            >
+              <span aria-hidden="true">◫</span>
+              上下文
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={startNewConversation}
             disabled={isLoadingHistory}
-            className="agentos-new-chat-button text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40"
+            className="agentos-new-chat-button disabled:cursor-not-allowed disabled:opacity-40"
           >
+            <span aria-hidden="true">＋</span>
             新建对话
           </button>
         </div>
@@ -1582,16 +1599,17 @@ export function ChatPanel({
         onWheel={handleViewportWheel}
         onTouchStart={handleViewportTouchStart}
         onTouchMove={handleViewportTouchMove}
-        className="agentos-message-viewport min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5"
+        className="agentos-message-viewport min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
-        <div className="mx-auto max-w-3xl space-y-5">
+        <div className="agentos-message-list mx-auto">
           {messages.length === 0 ? (
-            <div className="agentos-empty-state flex min-h-72 flex-col justify-center py-8">
-              <p className="agentos-chat-heading text-lg font-semibold">从一个任务开始</p>
-              <p className="agentos-chat-subheading mt-2 max-w-lg text-sm leading-6">
+            <div className="agentos-empty-state">
+              <p className="agentos-empty-eyebrow">Start with a task</p>
+              <p className="agentos-chat-heading">从一个任务开始</p>
+              <p className="agentos-chat-subheading">
                 AgentOS 会在同一条运行轨迹中展示对话、思考过程与最终执行结果。
               </p>
-              <div className="mt-6 flex flex-col items-start gap-2">
+              <div className="agentos-starter-prompts">
                 {STARTER_PROMPTS.map((prompt) => (
                   <button
                     key={prompt}
@@ -1625,8 +1643,7 @@ export function ChatPanel({
                 message.role === "assistant" &&
                 precedingUserIndex >= 0 &&
                 messages.findIndex(
-                  (item, itemIndex) =>
-                    itemIndex > precedingUserIndex && item.role === "assistant",
+                  (item, itemIndex) => itemIndex > precedingUserIndex && item.role === "assistant",
                 ) === index;
 
               const liveSteps =
@@ -1684,15 +1701,15 @@ export function ChatPanel({
                   <article
                     className={`agentos-message ${
                       message.role === "user"
-                        ? "agentos-message-user ml-auto max-w-[88%] sm:max-w-[72%]"
-                        : `agentos-message-assistant max-w-full sm:max-w-[92%] ${
+                        ? "agentos-message-user"
+                        : `agentos-message-assistant ${
                             isStreaming && index === currentAssistantMessageIndex
                               ? "agentos-message-streaming"
                               : ""
                           }`
                     }`}
                   >
-                    <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+                    <div className="agentos-message-meta-row">
                       <p className="agentos-message-author">
                         {message.role === "user" ? "你" : "AgentOS"}
                         {message.createdAt ? (
@@ -1783,8 +1800,8 @@ export function ChatPanel({
                   </article>
 
                   {orphanLiveSteps.length > 0 ? (
-                    <article className="agentos-message agentos-message-assistant agentos-message-streaming max-w-full sm:max-w-[92%]">
-                      <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+                    <article className="agentos-message agentos-message-assistant agentos-message-streaming">
+                      <div className="agentos-message-meta-row">
                         <p className="agentos-message-author">AgentOS</p>
                       </div>
                       <div className="agentos-message-process">
@@ -1822,7 +1839,7 @@ export function ChatPanel({
       ) : null}
 
       {approvalRunId !== null && pendingInterrupts.length > 0 ? (
-        <div className="border-t px-3 py-3 sm:px-5">
+        <div className="agentos-approval-wrap">
           <ApprovalPanel
             runId={approvalRunId}
             interrupts={pendingInterrupts}
@@ -1844,12 +1861,9 @@ export function ChatPanel({
         </div>
       ) : null}
 
-      <form
-        onSubmit={handleSubmit}
-        className="agentos-composer border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4"
-      >
+      <form onSubmit={handleSubmit} className="agentos-composer">
         {uploadedArtifacts.length > 0 ? (
-          <div className="mb-2 flex flex-wrap gap-2" aria-label="待发送附件">
+          <div className="agentos-upload-pending-list" aria-label="待发送附件">
             {uploadedArtifacts.map((artifact) => (
               <div
                 key={artifact.artifactId}
@@ -1889,7 +1903,7 @@ export function ChatPanel({
         ) : null}
 
         {uploadNotice !== null ? (
-          <p role="status" aria-live="polite" className="agentos-upload-notice mb-2 text-xs">
+          <p role="status" aria-live="polite" className="agentos-upload-notice">
             {uploadNotice}
           </p>
         ) : null}
@@ -1914,11 +1928,11 @@ export function ChatPanel({
               : "输入任务、问题或需要 Agent 执行的操作"
           }
           rows={1}
-          className="agentos-composer-input block max-h-50 w-full resize-none overflow-y-hidden px-3 py-2 text-sm leading-6 outline-none disabled:cursor-not-allowed"
+          className="agentos-composer-input block w-full resize-none outline-none disabled:cursor-not-allowed"
         />
 
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="agentos-composer-toolbar">
+          <div className="agentos-composer-tools">
             <input
               ref={fileInputRef}
               type="file"
@@ -1938,7 +1952,7 @@ export function ChatPanel({
                 pendingInterrupts.length > 0 ||
                 uploadedArtifacts.length >= MAX_UPLOAD_FILES
               }
-              className="agentos-upload-button inline-flex shrink-0 items-center gap-1.5 px-2.5 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40"
+              className="agentos-upload-button disabled:cursor-not-allowed disabled:opacity-40"
               title="上传 PDF 或图片（新建会话会自动创建）"
             >
               <svg
@@ -1957,7 +1971,7 @@ export function ChatPanel({
               </svg>
               {isUploading ? "上传中…" : "上传"}
             </button>
-            <span className="agentos-chat-subheading truncate text-xs">
+            <span className="agentos-composer-meta">
               {uploadedArtifacts.length}/{MAX_UPLOAD_FILES}
               <span className="hidden sm:inline"> · {draft.length}/4000 · Shift + Enter 换行</span>
             </span>
@@ -1972,11 +1986,13 @@ export function ChatPanel({
               pendingInterrupts.length > 0 ||
               (!isStreaming && !draft.trim() && uploadedArtifacts.length === 0)
             }
-            className={`agentos-send-button min-w-18 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-45 ${
+            className={`agentos-send-button disabled:cursor-not-allowed disabled:opacity-45 ${
               isStreaming ? "agentos-stop-button" : ""
             }`}
+            aria-label={isStreaming ? "停止执行" : "发送消息"}
           >
-            {isStreaming ? "停止执行" : "发送"}
+            <span aria-hidden="true">{isStreaming ? "■" : "↑"}</span>
+            <span>{isStreaming ? "停止执行" : "发送"}</span>
           </button>
         </div>
       </form>

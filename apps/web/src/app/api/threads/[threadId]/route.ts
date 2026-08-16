@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 
-import {
-  agentApiBaseUrl,
-  agentApiSessionHeaders,
-  proxyUpstreamResponse,
-} from "@/lib/agent-api";
+import { agentApiBaseUrl, agentApiSessionHeaders, proxyUpstreamResponse } from "@/lib/agent-api";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

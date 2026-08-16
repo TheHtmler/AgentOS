@@ -37,13 +37,13 @@ Agent 已能调用 `web_search`，但聊天 UI 只显示 user/assistant 文本�
   → 助手最终回答
 ```
 
-| 区域 | 内容 |
-| --- | --- |
-| 标题行 | 工具名（如 `web_search`）+ 状态 |
-| 状态 | `running` / `done` / `error` |
-| 展开默认 | 运行中展开；完成后默认折叠 |
-| 展开内容 | 参数（如 `query`）、结果摘要、`provider`（若有）、失败原因（若有） |
-| 折叠摘要示例 | `web_search · 今日美元兑人民币汇率 · 完成（duckduckgo）` |
+| 区域         | 内容                                                               |
+| ------------ | ------------------------------------------------------------------ |
+| 标题行       | 工具名（如 `web_search`）+ 状态                                    |
+| 状态         | `running` / `done` / `error`                                       |
+| 展开默认     | 运行中展开；完成后默认折叠                                         |
+| 展开内容     | 参数（如 `query`）、结果摘要、`provider`（若有）、失败原因（若有） |
+| 折叠摘要示例 | `web_search · 今日美元兑人民币汇率 · 完成（duckduckgo）`           |
 
 ## 实时路径（AG-UI）
 
@@ -65,12 +65,12 @@ type ToolCallState = {
 };
 ```
 
-| 事件（AG-UI） | UI 行为 |
-| --- | --- |
-| ToolCall Start | 新建卡片，`running`，默认展开 |
+| 事件（AG-UI）         | UI 行为                                  |
+| --------------------- | ---------------------------------------- |
+| ToolCall Start        | 新建卡片，`running`，默认展开            |
 | ToolCall Args（增量） | 追加 `argsText`；解析 `query` 作摘要标题 |
-| ToolCall End | 参数收齐；仍可为 `running` 直至 Result |
-| ToolCall Result | `done` 或 `error`；写入摘要；自动折叠 |
+| ToolCall End          | 参数收齐；仍可为 `running` 直至 Result   |
+| ToolCall Result       | `done` 或 `error`；写入摘要；自动折叠    |
 
 新一轮发送时清空本轮 tool 状态。`toDisplayMessages` 仍只投影 user/assistant 文本；工具卡由独立 state 渲染，不塞进 assistant `content`。
 
@@ -146,13 +146,13 @@ type ToolCallState = {
 
 ## 主要落地位置（预期）
 
-| 区域 | 路径 |
-| --- | --- |
-| 工具卡 UI | `apps/web/src/components/chat/chat-panel.tsx`、可选 `tool-call-card.tsx` |
-| 历史解析 | 同上 `parseThreadHistory` |
-| 历史 API | `services/agent-api/src/agent_api/api/threads.py`、`db/chat_store.py` |
-| AG-UI 补事件（若需要） | `services/agent-api/src/agent_api/api/ag_ui.py` |
-| 文档 | `docs/10-thread-history.md`、`docs/implementation-progress.md` |
+| 区域                   | 路径                                                                     |
+| ---------------------- | ------------------------------------------------------------------------ |
+| 工具卡 UI              | `apps/web/src/components/chat/chat-panel.tsx`、可选 `tool-call-card.tsx` |
+| 历史解析               | 同上 `parseThreadHistory`                                                |
+| 历史 API               | `services/agent-api/src/agent_api/api/threads.py`、`db/chat_store.py`    |
+| AG-UI 补事件（若需要） | `services/agent-api/src/agent_api/api/ag_ui.py`                          |
+| 文档                   | `docs/10-thread-history.md`、`docs/implementation-progress.md`           |
 
 ## 后续（非本轮）
 

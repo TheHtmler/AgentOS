@@ -22,30 +22,31 @@
 
 ## File map
 
-| Path | Responsibility |
-| --- | --- |
-| `db/models.py` | Case*, Thread.case_id, AgentVersion.case_enabled |
-| `migrations/versions/f2a3b4c5d6e7_add_cases.py` | Schema + imd case_enabled + optional profile→case copy |
-| `db/case_store.py` | CRUD, membership, default case, resolve for new thread |
-| `case/recall.py` | Format confirmed facts block |
-| `case/extract.py` | Structured extract + schedule + attribution |
-| `case/attribution.py` | HITL tool `case_attribution_confirm` |
-| `tools/case/tool.py` | `case_context_read` |
-| `tools/registry.py` | Register CASE domain |
-| `db/chat_store.py` | `start_run(..., case_id=)` auto-resolve |
-| `api/cases.py` | REST list/create/default/facts/confirm |
-| `api/ag_ui.py` / `chat.py` / `hitl_resume.py` | Inject case block; schedule case extract |
-| `scripts/seed_agents.py` | `case_enabled=True` for imd |
-| `seed/knowledge/mma_pa_chunks.json` | Extra chunks |
-| `tools/growth/` | NHC backend + standard switch |
-| `apps/web` | Case label + multi-case default switcher; header `X-AgentOS-Case-Id` |
-| tests | case store / isolation / attribution / growth NHC / knowledge |
+| Path                                            | Responsibility                                                       |
+| ----------------------------------------------- | -------------------------------------------------------------------- |
+| `db/models.py`                                  | Case*, Thread.case_id, AgentVersion.case_enabled                     |
+| `migrations/versions/f2a3b4c5d6e7_add_cases.py` | Schema + imd case_enabled + optional profile→case copy               |
+| `db/case_store.py`                              | CRUD, membership, default case, resolve for new thread               |
+| `case/recall.py`                                | Format confirmed facts block                                         |
+| `case/extract.py`                               | Structured extract + schedule + attribution                          |
+| `case/attribution.py`                           | HITL tool `case_attribution_confirm`                                 |
+| `tools/case/tool.py`                            | `case_context_read`                                                  |
+| `tools/registry.py`                             | Register CASE domain                                                 |
+| `db/chat_store.py`                              | `start_run(..., case_id=)` auto-resolve                              |
+| `api/cases.py`                                  | REST list/create/default/facts/confirm                               |
+| `api/ag_ui.py` / `chat.py` / `hitl_resume.py`   | Inject case block; schedule case extract                             |
+| `scripts/seed_agents.py`                        | `case_enabled=True` for imd                                          |
+| `seed/knowledge/mma_pa_chunks.json`             | Extra chunks                                                         |
+| `tools/growth/`                                 | NHC backend + standard switch                                        |
+| `apps/web`                                      | Case label + multi-case default switcher; header `X-AgentOS-Case-Id` |
+| tests                                           | case store / isolation / attribution / growth NHC / knowledge        |
 
 ---
 
 ### Task 1: Models + migration + case_enabled seed
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/db/models.py`
 - Create: `services/agent-api/migrations/versions/f2a3b4c5d6e7_add_cases.py`
 - Modify: `services/agent-api/scripts/seed_agents.py`
@@ -53,6 +54,7 @@
 - Test: `services/agent-api/tests/test_case_models.py`
 
 **Interfaces:**
+
 - Produces ORM: `Case`, `CaseMembership`, `CaseFact`, `UserAgentDefaultCase`
 - Produces: `Thread.case_id: UUID | None`, `AgentVersion.case_enabled: bool`
 - Produces migration head `f2a3b4c5d6e7` revises `f1a2b3c4d5e6`
@@ -113,11 +115,13 @@ git add … && git commit -m "feat(db): add generic cases and case_enabled flag"
 ### Task 2: case_store + resolve for new Thread
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/db/case_store.py`
 - Modify: `services/agent-api/src/agent_api/db/chat_store.py` (`start_run`, `create_thread`)
 - Test: `services/agent-api/tests/test_case_store.py`
 
 **Interfaces:**
+
 - Produces:
   - `async def ensure_default_case(session, *, user_id, agent_id) -> UUID`
   - `async def resolve_case_for_new_thread(session, *, user_id, agent_id, case_id: UUID | None, case_enabled: bool) -> UUID | None`
@@ -126,6 +130,7 @@ git add … && git commit -m "feat(db): add generic cases and case_enabled flag"
 - Consumes: `get_published_version` / AgentVersion.case_enabled inside `start_run`
 
 Rules for `resolve_case_for_new_thread`:
+
 - `case_enabled=false` → return None (ignore client case_id)
 - client `case_id` set → verify membership else raise `CaseNotFoundError`
 - else if default row exists → use it
@@ -142,6 +147,7 @@ Rules for `resolve_case_for_new_thread`:
 ### Task 3: Case fact inject + case_context_read tool
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/case/recall.py`
 - Create: `services/agent-api/src/agent_api/tools/case/tool.py`
 - Modify: `registry.py`, `agent.py` (`CASE_INSTRUCTIONS`), `config.py` if needed
@@ -149,6 +155,7 @@ Rules for `resolve_case_for_new_thread`:
 - Test: `tests/test_case_recall.py`, `tests/test_case_tool.py`
 
 **Interfaces:**
+
 - `format_case_block(facts: list[CaseFact]) -> str | None` header `## Case profile (confirmed)`
 - `async def case_context_read(ctx, query: str | None = None) -> str` — deps need `case_id`
 - Extend `AgentDeps` with `case_id: UUID | None = None`
@@ -162,12 +169,14 @@ Inject after memory block when case_enabled and case_id present. Mount tool only
 ### Task 4: Case extract + attribution HITL
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/case/extract.py`
 - Create: `services/agent-api/src/agent_api/tools/case/attribution.py` (deferred tool)
 - Modify: registry (ask/allow), ag_ui/chat completed hooks
 - Test: `tests/test_case_extract.py`
 
 **Interfaces:**
+
 - Extract JSON: `{"attribution":"self|other|hypothetical|unknown","updates":[{"key":"height_cm","content":"...","tags":["身高"]}]}`
 - `self` → upsert fact `confirmed` (slot key replace)
 - `other`/`hypothetical` → no write
@@ -182,6 +191,7 @@ Reuse existing interrupt/resume path (`Tool(requires_approval=True)` or explicit
 ### Task 5: Cases REST API + Web BFF + UI
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/api/cases.py`
 - Modify: `main.py` router include
 - Create: `apps/web/src/app/api/cases/route.ts` (+ `[id]/...` as needed)
@@ -194,6 +204,7 @@ Reuse existing interrupt/resume path (`Tool(requires_approval=True)` or explicit
 ### Task 6: Expand MMA/PA knowledge seed
 
 **Files:**
+
 - Modify: `services/agent-api/seed/knowledge/mma_pa_chunks.json`
 - Test: `tests/test_knowledge_tool.py` (assert new query hits)
 
@@ -206,6 +217,7 @@ Add ≥6 chunks: B12 responsive vs non-responsive; renal/neuro complication over
 ### Task 7: NHC growth standard in growth_assess
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/tools/growth/nhc.py` (SD interpolate)
 - Add: `services/agent-api/data/growth/nhc_wst_423_2022/` OR embed compact JSON under `tools/growth/data/` (git-allowed path, not ignored `data/`)
 - Modify: `tools/growth/tool.py` — `SUPPORTED_STANDARDS` includes `nhc-wst-423-2022`; alias `nhc`
@@ -221,6 +233,7 @@ Implementation note: groowooth is TS; port SD-table piecewise linear interpolati
 ### Task 8: Docs + progress
 
 **Files:**
+
 - Modify: `docs/implementation-progress.md`, `docs/02-mvp-roadmap.md` (one line)
 - Spec status → accepted
 
@@ -230,16 +243,16 @@ Implementation note: groowooth is TS; port SD-table piecewise linear interpolati
 
 ## Spec coverage check
 
-| Spec item | Task |
-| --- | --- |
-| cases / memberships / facts / default | 1–2 |
-| threads.case_id immutable bind | 2 |
-| case_enabled on imd | 1 |
-| inject confirmed | 3 |
-| case_context_read | 3 |
-| attribution HITL | 4 |
-| REST + web multi-case | 5 |
-| knowledge expand | 6 |
-| NHC growth | 7 |
-| no patient_* names | all |
-| progress docs | 8 |
+| Spec item                             | Task |
+| ------------------------------------- | ---- |
+| cases / memberships / facts / default | 1–2  |
+| threads.case_id immutable bind        | 2    |
+| case_enabled on imd                   | 1    |
+| inject confirmed                      | 3    |
+| case_context_read                     | 3    |
+| attribution HITL                      | 4    |
+| REST + web multi-case                 | 5    |
+| knowledge expand                      | 6    |
+| NHC growth                            | 7    |
+| no patient_* names                    | all  |
+| progress docs                         | 8    |

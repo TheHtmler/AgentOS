@@ -60,8 +60,7 @@ function parseCollectFields(args: Record<string, unknown>): CollectField[] {
       if (!key) {
         continue;
       }
-      const label =
-        typeof row.label === "string" && row.label.trim() ? row.label.trim() : key;
+      const label = typeof row.label === "string" && row.label.trim() ? row.label.trim() : key;
       const unit = typeof row.unit === "string" && row.unit.trim() ? row.unit.trim() : undefined;
       const reason =
         typeof row.reason === "string" && row.reason.trim() ? row.reason.trim() : undefined;
@@ -114,11 +113,7 @@ export function ApprovalPanel({ runId, interrupts, onResolved, onError }: Approv
               decision,
               message: decision === "deny" ? denyReason.trim() || null : null,
             };
-            if (
-              decision === "approve" &&
-              item.tool_name === "case_slot_collect" &&
-              isCollectForm
-            ) {
+            if (decision === "approve" && item.tool_name === "case_slot_collect" && isCollectForm) {
               const filled: Record<string, string> = {};
               for (const field of collectFields) {
                 filled[field.key] = (values[field.key] ?? "").trim();

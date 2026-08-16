@@ -11,9 +11,7 @@ type CurrentUser = {
 };
 
 type AuthenticationState =
-  | { kind: "checking" }
-  | { kind: "authenticated"; user: CurrentUser }
-  | { kind: "unavailable" };
+  { kind: "checking" } | { kind: "authenticated"; user: CurrentUser } | { kind: "unavailable" };
 
 function isCurrentUser(value: unknown): value is CurrentUser {
   return (

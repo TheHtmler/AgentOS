@@ -48,12 +48,12 @@ HITL / Sandbox / Artifact 暂缓；本竖切打通「搜索 → 打开链接 →
 
 ### 1. 模型工具契约
 
-| 项 | 约定 |
-| --- | --- |
-| 工具名 | `fetch_url` |
-| 入参 | `url: str`（必填）；`max_chars: int`（可选，默认取配置，上限不超过配置硬顶） |
-| 成功返回 | `{ provider, url, title, outline, text, truncated, total_chars }` |
-| 失败返回 | 结构化错误给模型（可改口或换链），不默认打崩整个 Run |
+| 项       | 约定                                                                         |
+| -------- | ---------------------------------------------------------------------------- |
+| 工具名   | `fetch_url`                                                                  |
+| 入参     | `url: str`（必填）；`max_chars: int`（可选，默认取配置，上限不超过配置硬顶） |
+| 成功返回 | `{ provider, url, title, outline, text, truncated, total_chars }`            |
+| 失败返回 | 结构化错误给模型（可改口或换链），不默认打崩整个 Run                         |
 
 字段说明：
 
@@ -156,14 +156,14 @@ FETCH_URL_MAX_CHARS=10000
 
 ## 错误处理
 
-| 情况 | 行为 |
-| --- | --- |
-| 非法 / 私网 URL | 结构化错误；不出站、不降级 |
-| 无可用 Provider | 工具返回错误；模型说明无法抓取 |
-| Firecrawl 额度用尽 / 失败 | 降级到 local |
+| 情况                                  | 行为                                           |
+| ------------------------------------- | ---------------------------------------------- |
+| 非法 / 私网 URL                       | 结构化错误；不出站、不降级                     |
+| 无可用 Provider                       | 工具返回错误；模型说明无法抓取                 |
+| Firecrawl 额度用尽 / 失败             | 降级到 local                                   |
 | Local 失败（超时、非 HTML、空正文等） | 工具返回错误；Run 由模型收尾，不遗留 `running` |
-| 全部 Provider 失败 | 汇总错误给模型 |
-| `FETCH_URL_ENABLED=false` | 无该工具；不影响 `web_search` |
+| 全部 Provider 失败                    | 汇总错误给模型                                 |
+| `FETCH_URL_ENABLED=false`             | 无该工具；不影响 `web_search`                  |
 
 ## 测试
 
@@ -196,12 +196,12 @@ FETCH_URL_MAX_CHARS=10000
 
 ## 主要落地位置（预期）
 
-| 区域 | 路径（预期） |
-| --- | --- |
-| 配置 | `services/agent-api/src/agent_api/config.py`、`.env.example` |
-| Provider / Router / guard | `services/agent-api/src/agent_api/tools/fetch/` |
-| Agent 注册与提示 | `services/agent-api/src/agent_api/agent.py`、`AgentDeps` |
-| Runtime 出站客户端 | `services/agent-api/src/agent_api/runtime.py` |
-| 测试 | `services/agent-api/tests/test_fetch_*.py` |
-| 进度文档 | `docs/implementation-progress.md`（实现完成后更新） |
-| 路线图 | `docs/02-mvp-roadmap.md` Phase 2 旁注（可选） |
+| 区域                      | 路径（预期）                                                 |
+| ------------------------- | ------------------------------------------------------------ |
+| 配置                      | `services/agent-api/src/agent_api/config.py`、`.env.example` |
+| Provider / Router / guard | `services/agent-api/src/agent_api/tools/fetch/`              |
+| Agent 注册与提示          | `services/agent-api/src/agent_api/agent.py`、`AgentDeps`     |
+| Runtime 出站客户端        | `services/agent-api/src/agent_api/runtime.py`                |
+| 测试                      | `services/agent-api/tests/test_fetch_*.py`                   |
+| 进度文档                  | `docs/implementation-progress.md`（实现完成后更新）          |
+| 路线图                    | `docs/02-mvp-roadmap.md` Phase 2 旁注（可选）                |

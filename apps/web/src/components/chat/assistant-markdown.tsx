@@ -81,8 +81,7 @@ function CodeBlock({ children }: { children: ReactNode }) {
       const scrollingUp = event.deltaY < 0;
       const scrollingDown = event.deltaY > 0;
       const overflow = port.scrollHeight > port.clientHeight + 1;
-      const canScrollInside =
-        overflow && ((scrollingUp && !atTop) || (scrollingDown && !atBottom));
+      const canScrollInside = overflow && ((scrollingUp && !atTop) || (scrollingDown && !atBottom));
 
       // Nested code scroll only — never toggle session "回到最新".
       event.stopPropagation();

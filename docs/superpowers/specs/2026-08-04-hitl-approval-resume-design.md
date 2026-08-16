@@ -47,12 +47,12 @@ Pydantic AI 2.22 已提供 `DeferredToolRequests` / `DeferredToolResults`（`Too
   → 否则 completed / failed / cancelled
 ```
 
-| 项 | 约定 |
-|----|------|
-| 引擎 | Pydantic AI Deferred Tools |
-| Policy | 仍 deny → ask → allow；仅 `TOOL_POLICY_ASK` 打开审批 |
-| 续跑 | 同一 `run_id`，不开新 Run |
-| 超时 | 默认 30 分钟；超时 ≡ 拒绝并自动 resume 续跑 |
+| 项     | 约定                                                      |
+| ------ | --------------------------------------------------------- |
+| 引擎   | Pydantic AI Deferred Tools                                |
+| Policy | 仍 deny → ask → allow；仅 `TOOL_POLICY_ASK` 打开审批      |
+| 续跑   | 同一 `run_id`，不开新 Run                                 |
+| 超时   | 默认 30 分钟；超时 ≡ 拒绝并自动 resume 续跑               |
 | 旧占位 | `gate_or_none` 的 ask → `approval_required` JSON **退役** |
 
 ---
@@ -69,19 +69,19 @@ Pydantic AI 2.22 已提供 `DeferredToolRequests` / `DeferredToolResults`（`Too
 
 ### 1.2 表 `interrupts`
 
-| 列 | 说明 |
-|----|------|
-| `id` | UUID PK |
-| `run_id` | FK → runs，ON DELETE CASCADE |
-| `tool_call_id` | Pydantic AI tool_call_id |
-| `tool_name` | 如 `fetch_url` |
-| `tool_args` | JSONB |
-| `status` | `pending \| approved \| denied \| timed_out \| cancelled` |
-| `decision_message` | 可选拒绝理由（英文或用户原文均可；回灌模型时可用） |
-| `idempotency_key` | 决议写入时的幂等键；pending 时可空 |
-| `expires_at` | 过期时间 |
-| `resolved_at` | 决议时间 |
-| `created_at` | |
+| 列                 | 说明                                                      |
+| ------------------ | --------------------------------------------------------- |
+| `id`               | UUID PK                                                   |
+| `run_id`           | FK → runs，ON DELETE CASCADE                              |
+| `tool_call_id`     | Pydantic AI tool_call_id                                  |
+| `tool_name`        | 如 `fetch_url`                                            |
+| `tool_args`        | JSONB                                                     |
+| `status`           | `pending \| approved \| denied \| timed_out \| cancelled` |
+| `decision_message` | 可选拒绝理由（英文或用户原文均可；回灌模型时可用）        |
+| `idempotency_key`  | 决议写入时的幂等键；pending 时可空                        |
+| `expires_at`       | 过期时间                                                  |
+| `resolved_at`      | 决议时间                                                  |
+| `created_at`       |                                                           |
 
 约束：`(run_id, tool_call_id)` 唯一。同一次 deferred 批次可有多行 pending。
 
@@ -97,12 +97,12 @@ Pydantic AI 2.22 已提供 `DeferredToolRequests` / `DeferredToolResults`（`Too
 
 ## 二、API
 
-| 方法 | 路径 | 行为 |
-|------|------|------|
-| `POST` | `/v1/runs/{run_id}/resume` | 见下 |
-| `GET` | `/v1/runs/{run_id}` | `status` 含 `waiting_approval`；附带 `pending_interrupts[]`（`id`, `tool_call_id`, `tool_name`, `tool_args`, `expires_at`） |
-| `POST` | `/v1/runs/{run_id}/cancel` | 扩展：`waiting_approval` 可取消 → interrupts=`cancelled`，Run=`cancelled`，不叫醒模型 |
-| Web BFF | `/api/runs/[runId]/resume` | 同源代理 + session Cookie |
+| 方法    | 路径                       | 行为                                                                                                                        |
+| ------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `POST`  | `/v1/runs/{run_id}/resume` | 见下                                                                                                                        |
+| `GET`   | `/v1/runs/{run_id}`        | `status` 含 `waiting_approval`；附带 `pending_interrupts[]`（`id`, `tool_call_id`, `tool_name`, `tool_args`, `expires_at`） |
+| `POST`  | `/v1/runs/{run_id}/cancel` | 扩展：`waiting_approval` 可取消 → interrupts=`cancelled`，Run=`cancelled`，不叫醒模型                                       |
+| Web BFF | `/api/runs/[runId]/resume` | 同源代理 + session Cookie                                                                                                   |
 
 ### 2.1 Resume 请求
 
@@ -133,10 +133,10 @@ Pydantic AI 2.22 已提供 `DeferredToolRequests` / `DeferredToolResults`（`Too
 
 ### 2.3 环境变量
 
-| 变量 | 默认 | 说明 |
-|------|------|------|
-| `TOOL_POLICY_ASK` | 空 | 已有；逗号分隔工具名 |
-| `HITL_APPROVAL_TIMEOUT_SECONDS` | `1800` | pending 过期秒数 |
+| 变量                            | 默认   | 说明                 |
+| ------------------------------- | ------ | -------------------- |
+| `TOOL_POLICY_ASK`               | 空     | 已有；逗号分隔工具名 |
+| `HITL_APPROVAL_TIMEOUT_SECONDS` | `1800` | pending 过期秒数     |
 
 超时扫描：API lifespan 周期任务，和/或请求路径惰性检查。过期 pending → `timed_out`，并自动按 deny 构造 `DeferredToolResults` 后续跑。
 
@@ -215,18 +215,18 @@ Pydantic AI 2.22 已提供 `DeferredToolRequests` / `DeferredToolResults`（`Too
 
 ## 五、错误处理
 
-| 场景 | 行为 |
-|------|------|
-| Resume 但 Run 非 `waiting_approval` | `409` |
-| decisions 缺 id / 含未知 id / 未覆盖全部 pending | `422` |
-| 同 `idempotency_key` 重放 | `200` + 原结果，不二次执行 |
-| 已决议后不同 key | `409` |
-| 跨用户 | `404` |
-| 续跑中模型/工具失败 | Run → `failed`；已写 interrupt 决议不回滚 |
-| 批准后工具执行失败 | 正常 tool error 回模型；interrupt 仍为 `approved` |
-| API 重启时 `waiting_approval` | DB 状态可恢复；超时扫描可自动 deny-resume |
-| API 重启时无任务的 `running` | 本竖切不修 |
-| 待批时用户发新消息 | `409` Thread busy |
+| 场景                                             | 行为                                              |
+| ------------------------------------------------ | ------------------------------------------------- |
+| Resume 但 Run 非 `waiting_approval`              | `409`                                             |
+| decisions 缺 id / 含未知 id / 未覆盖全部 pending | `422`                                             |
+| 同 `idempotency_key` 重放                        | `200` + 原结果，不二次执行                        |
+| 已决议后不同 key                                 | `409`                                             |
+| 跨用户                                           | `404`                                             |
+| 续跑中模型/工具失败                              | Run → `failed`；已写 interrupt 决议不回滚         |
+| 批准后工具执行失败                               | 正常 tool error 回模型；interrupt 仍为 `approved` |
+| API 重启时 `waiting_approval`                    | DB 状态可恢复；超时扫描可自动 deny-resume         |
+| API 重启时无任务的 `running`                     | 本竖切不修                                        |
+| 待批时用户发新消息                               | `409` Thread busy                                 |
 
 ---
 
@@ -270,12 +270,12 @@ Mac mini：pull → alembic migrate → 按需设 `TOOL_POLICY_ASK` / `HITL_APPR
 
 ## 决策记录
 
-| 决策 | 选择 | 理由 |
-|------|------|------|
-| 成功标准 | 真暂停 + 同一 Run resume | 对齐路线图完成标准 |
-| 默认 ask 范围 | 仅 `TOOL_POLICY_ASK` | 不改日常体感 |
-| 拒绝语义 | ToolDenied 后续跑 | 模型可改口，更实用 |
-| 超时 | 默认 30min，当拒绝续跑 | 避免僵尸占坑 |
-| 引擎 | Pydantic AI Deferred Tools | 官方 HITL 路径，少造状态机 |
-| 审批表 | 仅 `interrupts` | YAGNI |
-| 批次决议 | 一次覆盖全部 pending | 实现简单、状态清晰 |
+| 决策          | 选择                       | 理由                       |
+| ------------- | -------------------------- | -------------------------- |
+| 成功标准      | 真暂停 + 同一 Run resume   | 对齐路线图完成标准         |
+| 默认 ask 范围 | 仅 `TOOL_POLICY_ASK`       | 不改日常体感               |
+| 拒绝语义      | ToolDenied 后续跑          | 模型可改口，更实用         |
+| 超时          | 默认 30min，当拒绝续跑     | 避免僵尸占坑               |
+| 引擎          | Pydantic AI Deferred Tools | 官方 HITL 路径，少造状态机 |
+| 审批表        | 仅 `interrupts`            | YAGNI                      |
+| 批次决议      | 一次覆盖全部 pending       | 实现简单、状态清晰         |

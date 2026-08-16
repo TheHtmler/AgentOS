@@ -1,7 +1,7 @@
 # 平台基础工具与评测集
 
 日期：2026-08-12  
-状态：accepted（已实现）  
+状态：accepted（已实现）
 
 前置：Tool Registry / Policy、Runtime Context Pack、knowledge P0 评测（`mma_pa_eval.json` + `test_knowledge_evaluation.py`）
 
@@ -33,14 +33,14 @@ AgentOS 已有搜索、抓取、生长评估、知识检索、Case 等能力域�
 
 ## 决策摘要
 
-| 项 | 选择 |
-|----|------|
-| 范围 | 工具优先 + 最小评测框架闭环 |
-| 工具 | `time_diff` + 受限 AST `calculate` |
-| 域 | 新 `ToolDomain.UTIL`，目录 `tools/util/` |
+| 项   | 选择                                                     |
+| ---- | -------------------------------------------------------- |
+| 范围 | 工具优先 + 最小评测框架闭环                              |
+| 工具 | `time_diff` + 受限 AST `calculate`                       |
+| 域   | 新 `ToolDomain.UTIL`，目录 `tools/util/`                 |
 | 评测 | 薄通用 runner；foundation JSON suite；knowledge 暂不迁移 |
-| 深度 | 纯函数 golden + 挂载/禁用断言；无 LLM e2e |
-| 开关 | 单一 `UTIL_TOOLS_ENABLED`（默认 true） |
+| 深度 | 纯函数 golden + 挂载/禁用断言；无 LLM e2e                |
+| 开关 | 单一 `UTIL_TOOLS_ENABLED`（默认 true）                   |
 
 ---
 
@@ -141,15 +141,15 @@ calculate(expression: str) -> JSON
 
 ### 3.1 接线
 
-| 点 | 改动 |
-|----|------|
-| `config.py` | `util_tools_enabled: bool = True` |
-| `.env.example` + **`.env`** | `UTIL_TOOLS_ENABLED=true` |
-| `tools/registry.py` | `UTIL` 域、两 `ToolSpec`、`is_tool_enabled` |
-| `tools/util/*` | 实现 + pydantic-ai 入口 |
-| `agent.py` | `UTIL_INSTRUCTIONS` + mounted 时追加 |
-| `eval/runner.py` | 薄 runner |
-| docs | `implementation-progress.md`；roadmap 可记一笔 |
+| 点                          | 改动                                           |
+| --------------------------- | ---------------------------------------------- |
+| `config.py`                 | `util_tools_enabled: bool = True`              |
+| `.env.example` + **`.env`** | `UTIL_TOOLS_ENABLED=true`                      |
+| `tools/registry.py`         | `UTIL` 域、两 `ToolSpec`、`is_tool_enabled`    |
+| `tools/util/*`              | 实现 + pydantic-ai 入口                        |
+| `agent.py`                  | `UTIL_INSTRUCTIONS` + mounted 时追加           |
+| `eval/runner.py`            | 薄 runner                                      |
+| docs                        | `implementation-progress.md`；roadmap 可记一笔 |
 
 ### 3.2 文件地图
 

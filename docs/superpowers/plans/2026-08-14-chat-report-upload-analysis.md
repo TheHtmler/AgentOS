@@ -20,22 +20,23 @@
 
 ## File map
 
-| Path | Role |
-|------|------|
-| `services/agent-api/src/agent_api/uploads/storage.py` | Save bytes under UPLOAD_ROOT |
-| `services/agent-api/src/agent_api/uploads/extract.py` | Image OCR / PDF extract → text |
-| `services/agent-api/src/agent_api/api/uploads.py` | `POST /v1/uploads` |
-| `services/agent-api/src/agent_api/config.py` | upload settings |
-| `services/agent-api/src/agent_api/runtime/` or chat/ag_ui | artifact_id preview injection |
-| `apps/web/src/app/api/uploads/route.ts` | BFF |
-| `apps/web/src/components/chat/chat-panel.tsx` | Attachment UI |
-| `data/uploads/` + gitignore | Local originals |
+| Path                                                      | Role                           |
+| --------------------------------------------------------- | ------------------------------ |
+| `services/agent-api/src/agent_api/uploads/storage.py`     | Save bytes under UPLOAD_ROOT   |
+| `services/agent-api/src/agent_api/uploads/extract.py`     | Image OCR / PDF extract → text |
+| `services/agent-api/src/agent_api/api/uploads.py`         | `POST /v1/uploads`             |
+| `services/agent-api/src/agent_api/config.py`              | upload settings                |
+| `services/agent-api/src/agent_api/runtime/` or chat/ag_ui | artifact_id preview injection  |
+| `apps/web/src/app/api/uploads/route.ts`                   | BFF                            |
+| `apps/web/src/components/chat/chat-panel.tsx`             | Attachment UI                  |
+| `data/uploads/` + gitignore                               | Local originals                |
 
 ---
 
 ### Task 1: Upload settings + storage + text extract
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/uploads/__init__.py`
 - Create: `services/agent-api/src/agent_api/uploads/storage.py`
 - Create: `services/agent-api/src/agent_api/uploads/extract.py`
@@ -44,6 +45,7 @@
 - Test: `services/agent-api/tests/test_upload_extract.py`
 
 **Interfaces:**
+
 - Settings: `upload_root: Path`, `upload_max_bytes: int = 20_000_000`, `upload_max_files_per_message: int = 3`
 - `def store_upload(*, root: Path, owner_user_id: UUID, artifact_id: UUID, filename: str, data: bytes) -> Path` → absolute path; creates dirs; safe filename
 - `async def extract_upload_text(*, data: bytes, filename: str, mime_type: str, client: httpx.AsyncClient, settings: Settings) -> tuple[str, dict]` → `(text, meta)` with ocr_pages/text_layer_pages; images via `ocr_image_bytes`; pdf via `extract_pdf_text`; unsupported → ValueError
@@ -57,11 +59,13 @@
 ### Task 2: `POST /v1/uploads` API
 
 **Files:**
+
 - Create: `services/agent-api/src/agent_api/api/uploads.py`
 - Modify: `main.py` include router
 - Test: `services/agent-api/tests/test_uploads_api.py`
 
 **Behavior:**
+
 - Auth: same as other user APIs (`get_current_user` / existing dependency)
 - multipart: `file`, `thread_id` (UUID), optional `title`
 - Verify thread ownership; read `case_id` from thread
@@ -78,11 +82,13 @@
 ### Task 3: Run context injection for `artifact_id`
 
 **Files:**
+
 - Prefer small helper: `services/agent-api/src/agent_api/uploads/context.py`
 - Modify: wherever user message → agent prompt is built (`api/chat.py` and/or `api/ag_ui.py` / runtime) — inject after ownership check
 - Test: `tests/test_upload_context.py`
 
 **Behavior:**
+
 - Parse `artifact_id=<uuid>` from user text (regex)
 - Load owned artifact; if missing, skip quietly or note in context
 - Inject block: title, mime, first 1500 chars, instruction to `read_artifact`
@@ -94,6 +100,7 @@
 ### Task 4: Vertical prompt nudge (imd / case_enabled)
 
 **Files:**
+
 - Agent seed overlay or system prompt builder used for case_enabled agents
 - Find existing imd/parenting overlay in `seed_agents` / agent_store / prompt assembly
 - Add short report-analysis instructions (非诊断、knowledge_search、HITL)
@@ -107,11 +114,13 @@
 ### Task 5: Web BFF + ChatPanel attachments
 
 **Files:**
+
 - Create: `apps/web/src/app/api/uploads/route.ts`
 - Modify: `apps/web/src/components/chat/chat-panel.tsx` (and minimal CSS if needed)
 - Optional: small `composer-attachments.tsx` if panel too large
 
 **UX:**
+
 - Paperclip / file input; accept pdf,png,jpg,jpeg,webp; max 3
 - Upload to BFF with `thread_id`; show progress/error
 - On success: keep artifact chips; send message template with artifact_id; default auto-send analysis after upload (with toast)
@@ -126,6 +135,7 @@
 ### Task 6: Docs + deploy notes
 
 **Files:**
+
 - Spec status → 已实现
 - `docs/implementation-progress.md` bullet
 - `scripts/macmini-deploy.sh` or README: ensure `UPLOAD_ROOT` exists, OCR health
@@ -137,12 +147,12 @@
 
 ## Spec coverage
 
-| Spec | Task |
-|------|------|
-| Upload API + disk + Artifact | 1–2 |
-| Web UI | 5 |
-| Run inject | 3 |
+| Spec                          | Task                              |
+| ----------------------------- | --------------------------------- |
+| Upload API + disk + Artifact  | 1–2                               |
+| Web UI                        | 5                                 |
+| Run inject                    | 3                                 |
 | knowledge + Case HITL (reuse) | 3–4 (prompt); HITL already exists |
-| Isolation from knowledge_* | 2 (kind=upload only) |
+| Isolation from knowledge_*    | 2 (kind=upload only)              |
 
 **Plan complete.** Execute with subagent-driven development starting Task 1.

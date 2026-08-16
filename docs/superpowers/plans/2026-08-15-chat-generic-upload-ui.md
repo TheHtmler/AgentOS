@@ -19,6 +19,7 @@
 ### Task 1: GET upload content API
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/api/uploads.py`
 - Modify: `services/agent-api/src/agent_api/uploads/vision.py` (reuse path resolve) or extract shared helper
 - Test: `services/agent-api/tests/test_uploads_api.py`
@@ -30,6 +31,7 @@
 ### Task 2: Web BFF for content
 
 **Files:**
+
 - Create: `apps/web/src/app/api/uploads/[artifactId]/content/route.ts`
 
 - [ ] Proxy GET with session cookies to agent-api
@@ -38,6 +40,7 @@
 ### Task 3: Agent prompt — intent-first uploads
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/agent.py`
 - Modify: `services/agent-api/tests/test_agent.py`
 
@@ -48,6 +51,7 @@
 ### Task 4: Chat panel — pending thumbnails + send composition
 
 **Files:**
+
 - Modify: `apps/web/src/components/chat/chat-panel.tsx`
 - Optional CSS in existing chat stylesheet
 
@@ -60,11 +64,11 @@
 
 ## Spec coverage
 
-| Spec item | Task |
-|---|---|
-| Select → upload, no auto run | 4 |
-| Composer thumbs | 4 |
-| Send with/without text | 4 |
-| Bubble thumbs | 4 + 1 + 2 |
-| Content GET | 1 + 2 |
-| Intent-first agent | 3 |
+| Spec item                    | Task      |
+| ---------------------------- | --------- |
+| Select → upload, no auto run | 4         |
+| Composer thumbs              | 4         |
+| Send with/without text       | 4         |
+| Bubble thumbs                | 4 + 1 + 2 |
+| Content GET                  | 1 + 2     |
+| Intent-first agent           | 3         |

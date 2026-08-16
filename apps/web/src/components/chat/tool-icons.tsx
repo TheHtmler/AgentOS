@@ -6,13 +6,7 @@ type IconProps = {
   className?: string;
 };
 
-function SvgShell({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
+function SvgShell({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <svg
       className={className}
@@ -32,7 +26,12 @@ function SearchIcon({ className }: IconProps) {
   return (
     <SvgShell className={className}>
       <circle cx="7" cy="7" r="4.25" stroke="currentColor" strokeWidth="1.25" />
-      <path d="M10.2 10.2L13.5 13.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path
+        d="M10.2 10.2L13.5 13.5"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
     </SvgShell>
   );
 }
@@ -68,8 +67,21 @@ function DocumentIcon({ className }: IconProps) {
 function CalcIcon({ className }: IconProps) {
   return (
     <SvgShell className={className}>
-      <rect x="3" y="2.5" width="10" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.25" />
-      <path d="M5.5 5.5h5M5.5 8.5h2M8.5 8.5h2M5.5 11h2M8.5 11h2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <rect
+        x="3"
+        y="2.5"
+        width="10"
+        height="11"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.25"
+      />
+      <path
+        d="M5.5 5.5h5M5.5 8.5h2M8.5 8.5h2M5.5 11h2M8.5 11h2"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
     </SvgShell>
   );
 }
@@ -87,7 +99,12 @@ function ChartIcon({ className }: IconProps) {
   return (
     <SvgShell className={className}>
       <path d="M3 12.5h10" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-      <path d="M5 10V7.5M8 10V5M11 10V8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path
+        d="M5 10V7.5M8 10V5M11 10V8"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
     </SvgShell>
   );
 }

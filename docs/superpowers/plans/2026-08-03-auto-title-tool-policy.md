@@ -20,18 +20,18 @@
 
 ## File map
 
-| Path | Responsibility |
-| --- | --- |
-| `tools/registry.py` | `ToolSpec`, builtins, mount helpers |
-| `tools/policy.py` | `PolicyAction`, `evaluate`, env overrides |
-| `tools/search/tool.py` / `fetch/tool.py` | Gate at start of `run_*` |
-| `agent.py` | Mount tools via registry + policy |
-| `thread_title.py` (new) | Generate + conditional persist title |
-| `api/chat.py` | Schedule title job after complete |
-| `db/chat_store.py` | `try_set_thread_title_if_empty` |
-| `config.py` / `.env.example` | New settings |
-| `tests/test_tool_policy.py`, `test_thread_title.py` | Coverage |
-| docs | progress, roadmap, spec status |
+| Path                                                | Responsibility                            |
+| --------------------------------------------------- | ----------------------------------------- |
+| `tools/registry.py`                                 | `ToolSpec`, builtins, mount helpers       |
+| `tools/policy.py`                                   | `PolicyAction`, `evaluate`, env overrides |
+| `tools/search/tool.py` / `fetch/tool.py`            | Gate at start of `run_*`                  |
+| `agent.py`                                          | Mount tools via registry + policy         |
+| `thread_title.py` (new)                             | Generate + conditional persist title      |
+| `api/chat.py`                                       | Schedule title job after complete         |
+| `db/chat_store.py`                                  | `try_set_thread_title_if_empty`           |
+| `config.py` / `.env.example`                        | New settings                              |
+| `tests/test_tool_policy.py`, `test_thread_title.py` | Coverage                                  |
+| docs                                                | progress, roadmap, spec status            |
 
 ---
 

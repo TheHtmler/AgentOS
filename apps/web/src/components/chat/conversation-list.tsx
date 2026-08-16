@@ -135,6 +135,7 @@ export function ConversationList({
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadedAgentId, setLoadedAgentId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [menuThreadId, setMenuThreadId] = useState<string | null>(null);
@@ -146,10 +147,6 @@ export function ConversationList({
     const controller = new AbortController();
     let isCurrent = true;
 
-    setConversations([]);
-    setError(null);
-    setIsLoading(true);
-
     if (selectedAgentId === null) {
       return () => {
         isCurrent = false;
@@ -157,9 +154,11 @@ export function ConversationList({
       };
     }
 
+    const agentId = selectedAgentId;
+
     void (async () => {
       try {
-        const query = new URLSearchParams({ limit: "20", agent_id: selectedAgentId });
+        const query = new URLSearchParams({ limit: "20", agent_id: agentId });
         const response = await fetch(`/api/threads?${query}`, {
           cache: "no-store",
           signal: controller.signal,
@@ -178,6 +177,8 @@ export function ConversationList({
         if (isCurrent) {
           setConversations(parsed);
           setError(null);
+          setLoadedAgentId(agentId);
+          setIsLoading(false);
         }
       } catch (caughtError: unknown) {
         if (!isCurrent || controller.signal.aborted) {
@@ -185,6 +186,7 @@ export function ConversationList({
         }
 
         setError(caughtError instanceof Error ? caughtError.message : "无法读取最近会话。");
+        setLoadedAgentId(agentId);
       } finally {
         if (isCurrent) {
           setIsLoading(false);
@@ -197,6 +199,9 @@ export function ConversationList({
       controller.abort();
     };
   }, [refreshKey, selectedAgentId]);
+
+  const isLoadingCurrentAgent = isLoading || selectedAgentId !== loadedAgentId;
+  const currentError = selectedAgentId === loadedAgentId ? error : null;
 
   const groups = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -294,16 +299,16 @@ export function ConversationList({
   }
 
   return (
-    <section className="agentos-conversation-list flex h-full min-h-0 min-w-0 flex-col overflow-hidden border border-zinc-200 bg-white">
-      <header className="border-b border-zinc-200 p-3">
-        <label className="block">
-          <span className="text-xs font-medium tracking-wide text-zinc-500">当前 Agent</span>
+    <section className="agentos-conversation-list">
+      <header className="agentos-conversation-list-header">
+        <label className="agentos-agent-picker">
+          <span>当前 Agent</span>
           <select
             aria-label="选择 Agent"
             value={selectedAgentId ?? ""}
             disabled={agents.length === 0}
             onChange={(event) => onSelectAgent(event.target.value)}
-            className="mt-2 block w-full border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-medium text-zinc-900 outline-none focus:border-zinc-500 focus:bg-white disabled:cursor-wait disabled:opacity-60"
+            className="agentos-agent-select disabled:cursor-wait disabled:opacity-60"
           >
             {agents.length === 0 ? <option value="">正在加载 Agent…</option> : null}
             {agents.map((agent) => (
@@ -313,14 +318,15 @@ export function ConversationList({
             ))}
           </select>
         </label>
-        <div className="flex items-center justify-between gap-3">
-          <p className="mt-4 text-sm font-semibold text-zinc-950">会话</p>
+        <div className="agentos-conversation-toolbar">
+          <p className="agentos-list-title">会话</p>
           <button
             type="button"
             onClick={onNewConversation}
             disabled={selectedAgentId === null}
-            className="mt-4 border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-zinc-500 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+            className="agentos-list-new-button disabled:cursor-not-allowed disabled:opacity-50"
           >
+            <span aria-hidden="true">＋</span>
             新建
           </button>
         </div>
@@ -329,25 +335,25 @@ export function ConversationList({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="搜索会话"
-          className="mt-3 block w-full border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-500 focus:bg-white"
+          className="agentos-search-input"
         />
       </header>
 
-      {error ? (
-        <p role="alert" className="px-4 py-4 text-sm text-rose-700">
-          {error}
+      {currentError ? (
+        <p role="alert" className="agentos-list-feedback is-error">
+          {currentError}
         </p>
-      ) : isLoading ? (
-        <p className="px-4 py-5 text-sm text-zinc-500">读取会话中…</p>
+      ) : isLoadingCurrentAgent ? (
+        <p className="agentos-list-feedback">读取会话中…</p>
       ) : groups.length === 0 ? (
-        <div className="px-4 py-5 text-sm text-zinc-500">
+        <div className="agentos-list-feedback">
           <p>{query.trim() ? "没有匹配的已加载会话。" : "暂无会话。"}</p>
           {!query.trim() ? (
             <button
               type="button"
               onClick={onNewConversation}
               disabled={selectedAgentId === null}
-              className="mt-3 text-xs font-medium text-teal-700 hover:text-teal-900 disabled:cursor-not-allowed disabled:opacity-50"
+              className="agentos-list-empty-action disabled:cursor-not-allowed disabled:opacity-50"
             >
               新建会话
             </button>
@@ -359,10 +365,8 @@ export function ConversationList({
           className="agentos-conversation-list-scroll min-h-0 min-w-0 flex-1 overflow-y-auto"
         >
           {groups.map((group) => (
-            <section key={group.label} className="border-b border-zinc-100 last:border-b-0">
-              <p className="px-3 pt-3 pb-1 text-xs font-medium tracking-wide text-zinc-400">
-                {group.label}
-              </p>
+            <section key={group.label} className="agentos-conversation-group">
+              <p className="agentos-conversation-group-label">{group.label}</p>
               {group.conversations.map((conversation) => {
                 const active = conversation.id === activeThreadId;
                 const preview = conversation.latest_message_content ?? "暂无消息";
@@ -374,11 +378,11 @@ export function ConversationList({
                 return (
                   <div
                     key={conversation.id}
-                    className={`relative px-2 py-1 ${active ? "bg-zinc-900 text-white" : "text-zinc-900"}`}
+                    className={`agentos-conversation-item ${active ? "is-active" : ""}`}
                   >
                     {isRenaming ? (
                       <form
-                        className="flex items-center gap-2 px-1 py-1.5"
+                        className="agentos-rename-form"
                         onSubmit={(event) => void submitRename(event, conversation.id)}
                       >
                         <input
@@ -388,12 +392,12 @@ export function ConversationList({
                           autoFocus
                           disabled={isBusy}
                           onChange={(event) => setRenameDraft(event.target.value)}
-                          className="min-w-0 flex-1 border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-900 outline-none"
+                          className="agentos-rename-input"
                         />
                         <button
                           type="submit"
                           disabled={isBusy}
-                          className="shrink-0 text-xs font-medium text-teal-700 disabled:opacity-40"
+                          className="agentos-rename-action is-save disabled:opacity-40"
                         >
                           保存
                         </button>
@@ -401,56 +405,42 @@ export function ConversationList({
                           type="button"
                           disabled={isBusy}
                           onClick={() => setRenamingThreadId(null)}
-                          className="shrink-0 text-xs text-zinc-500"
+                          className="agentos-rename-action disabled:opacity-40"
                         >
                           取消
                         </button>
                       </form>
                     ) : (
-                      <div className="flex min-w-0 items-stretch gap-1">
+                      <div className="agentos-conversation-row">
                         <button
                           type="button"
                           onClick={() => onSelectThread(conversation)}
                           disabled={isBusy}
                           aria-current={active ? "page" : undefined}
-                          className={`min-w-0 flex-1 px-1 py-2 text-left transition disabled:cursor-not-allowed ${
-                            active ? "" : "hover:bg-zinc-50"
-                          }`}
+                          className="agentos-conversation-button disabled:cursor-not-allowed"
                         >
-                          <div className="flex min-w-0 items-start justify-between gap-3">
-                            <p className="min-w-0 truncate text-sm font-medium">
+                          <div className="agentos-conversation-title-row">
+                            <p className="agentos-conversation-title">
                               {conversationLabel(conversation)}
                               {isStreaming ? (
-                                <span
-                                  className={`ml-2 text-[10px] font-semibold tracking-wide ${
-                                    active ? "text-teal-200" : "text-teal-700"
-                                  }`}
-                                >
+                                <span className="agentos-conversation-status is-streaming">
                                   生成中
                                 </span>
                               ) : null}
                               {!isStreaming && isAwaitingApproval ? (
-                                <span
-                                  className={`ml-2 text-[10px] font-semibold tracking-wide ${
-                                    active ? "text-amber-200" : "text-amber-700"
-                                  }`}
-                                >
+                                <span className="agentos-conversation-status is-awaiting">
                                   待审批
                                 </span>
                               ) : null}
                             </p>
                             <time
-                              className={`shrink-0 text-xs ${active ? "text-zinc-300" : "text-zinc-400"}`}
+                              className="agentos-conversation-time"
                               dateTime={conversation.updated_at}
                             >
                               {formatUpdatedAt(conversation.updated_at)}
                             </time>
                           </div>
-                          <p
-                            className={`mt-1 truncate text-xs ${active ? "text-zinc-300" : "text-zinc-500"}`}
-                          >
-                            {preview}
-                          </p>
+                          <p className="agentos-conversation-preview">{preview}</p>
                         </button>
 
                         <button
@@ -462,9 +452,7 @@ export function ConversationList({
                               current === conversation.id ? null : conversation.id,
                             )
                           }
-                          className={`shrink-0 px-2 text-lg leading-none disabled:opacity-40 ${
-                            active ? "text-zinc-200" : "text-zinc-400 hover:text-zinc-700"
-                          }`}
+                          className="agentos-conversation-menu-button disabled:opacity-40"
                         >
                           ⋯
                         </button>
@@ -472,17 +460,17 @@ export function ConversationList({
                     )}
 
                     {menuThreadId === conversation.id ? (
-                      <div className="absolute top-10 right-2 z-20 min-w-28 border border-zinc-200 bg-white py-1 text-zinc-900 shadow-lg">
+                      <div className="agentos-conversation-menu">
                         <button
                           type="button"
-                          className="block w-full px-3 py-2 text-left text-xs hover:bg-zinc-50"
+                          className="agentos-conversation-menu-action"
                           onClick={() => beginRename(conversation)}
                         >
                           重命名
                         </button>
                         <button
                           type="button"
-                          className="block w-full px-3 py-2 text-left text-xs text-rose-700 hover:bg-rose-50"
+                          className="agentos-conversation-menu-action is-danger"
                           onClick={() => void deleteThread(conversation.id)}
                         >
                           删除

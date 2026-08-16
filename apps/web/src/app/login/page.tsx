@@ -35,7 +35,7 @@ export default function LoginPage() {
 
   return (
     <main className="agentos-auth-shell relative grid place-items-center overflow-auto px-4">
-      <div className="absolute right-4 top-4">
+      <div className="absolute top-4 right-4">
         <ThemeToggle />
       </div>
       <form onSubmit={submit} className="agentos-auth-card w-full max-w-md p-6">
@@ -64,7 +64,11 @@ export default function LoginPage() {
           />
         </label>
 
-        {error ? <p role="alert" className="mt-4 text-sm text-rose-700">{error}</p> : null}
+        {error ? (
+          <p role="alert" className="mt-4 text-sm text-rose-700">
+            {error}
+          </p>
+        ) : null}
 
         <button
           disabled={submitting}

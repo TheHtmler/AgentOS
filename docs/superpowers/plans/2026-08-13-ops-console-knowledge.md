@@ -22,32 +22,34 @@
 
 ## File map
 
-| Path | Responsibility |
-| --- | --- |
-| `db/models.py` | `OpsSession`, `KnowledgeDocumentSnapshot` |
-| `migrations/versions/l8m9n0o1p2q3_ops_sessions_and_knowledge_snapshots.py` | Schema |
-| `db/ops_store.py` | create/get/revoke ops session; verify root password |
-| `api/ops_auth.py` | login / logout / me |
-| `api/ops_knowledge.py` | bases, documents list/patch, snapshots list |
-| `db/knowledge_store.py` | snapshot before overwrite |
-| `config.py` | `OPS_*` settings |
-| `.env.example` / `.env` | ops vars |
-| `main.py` | include routers |
-| `tests/test_ops_auth.py`, `test_ops_knowledge.py` | API tests |
-| `apps/ops/**` | Next ops UI + BFF |
-| root `package.json` | `dev:ops` / `build:ops` |
-| docs | progress + roadmap note |
+| Path                                                                       | Responsibility                                      |
+| -------------------------------------------------------------------------- | --------------------------------------------------- |
+| `db/models.py`                                                             | `OpsSession`, `KnowledgeDocumentSnapshot`           |
+| `migrations/versions/l8m9n0o1p2q3_ops_sessions_and_knowledge_snapshots.py` | Schema                                              |
+| `db/ops_store.py`                                                          | create/get/revoke ops session; verify root password |
+| `api/ops_auth.py`                                                          | login / logout / me                                 |
+| `api/ops_knowledge.py`                                                     | bases, documents list/patch, snapshots list         |
+| `db/knowledge_store.py`                                                    | snapshot before overwrite                           |
+| `config.py`                                                                | `OPS_*` settings                                    |
+| `.env.example` / `.env`                                                    | ops vars                                            |
+| `main.py`                                                                  | include routers                                     |
+| `tests/test_ops_auth.py`, `test_ops_knowledge.py`                          | API tests                                           |
+| `apps/ops/**`                                                              | Next ops UI + BFF                                   |
+| root `package.json`                                                        | `dev:ops` / `build:ops`                             |
+| docs                                                                       | progress + roadmap note                             |
 
 ---
 
 ### Task 1: Models + migration
 
 **Files:**
+
 - Modify: `services/agent-api/src/agent_api/db/models.py`
 - Create: `services/agent-api/migrations/versions/l8m9n0o1p2q3_ops_sessions_and_knowledge_snapshots.py`
 - Test: `services/agent-api/tests/test_ops_models.py`
 
 **Interfaces:**
+
 - Produces ORM `OpsSession`, `KnowledgeDocumentSnapshot`
 - Migration revises `k7l8m9n0o1p2`
 
@@ -82,12 +84,14 @@ git commit -m "feat(db): add ops_sessions and knowledge document snapshots"
 ### Task 2: Ops auth store + API
 
 **Files:**
+
 - Modify: `config.py`, `.env.example`, `.env`
 - Create: `db/ops_store.py`, `api/ops_auth.py`
 - Modify: `main.py`
 - Test: `tests/test_ops_auth.py`
 
 **Interfaces:**
+
 ```python
 def verify_ops_root_password(username: str, password: str, settings: Settings) -> bool
 async def create_ops_session(session, *, subject: str, expires_at, now) -> IssuedOpsSession  # .token plaintext once
@@ -96,6 +100,7 @@ async def revoke_ops_session(session, token: str, *, now) -> None
 ```
 
 Config:
+
 ```python
 ops_root_username: str = "admin"
 ops_root_password_hash: str = ""
@@ -111,6 +116,7 @@ Use `bcrypt` check (add dependency if missing; else `passlib[bcrypt]`). Prefer s
 - [x] **Step 5: Commit** `feat(api): add ops root login and session`
 
 Generate a dev hash for `.env` (document in commit message or README snippet):
+
 ```bash
 python -c "import bcrypt; print(bcrypt.hashpw(b'changeme', bcrypt.gensalt()).decode())"
 ```
@@ -120,12 +126,14 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'changeme', bcrypt.gensalt()).dec
 ### Task 3: Knowledge ops API + snapshot on upsert
 
 **Files:**
+
 - Create: `api/ops_knowledge.py`
 - Modify: `knowledge_store.py` (snapshot before delete chunks)
 - Modify: `main.py`
 - Test: `tests/test_ops_knowledge.py`
 
 **Interfaces:**
+
 - GET documents returns list with fields from spec
 - PATCH updates review_status + reviewed_at
 - GET snapshots returns [{id, version_label, created_at, created_by}]
@@ -142,12 +150,14 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'changeme', bcrypt.gensalt()).dec
 ### Task 4: Scaffold `apps/ops` + BFF + login/knowledge UI
 
 **Files:**
+
 - Create: `apps/ops/` (Next 16 aligned with web; Tailwind optional minimal)
 - Modify: root `package.json` scripts `dev:ops`, `build:ops`
 - BFF: `app/api/ops/login|logout|me|knowledge/**/route.ts`
 - Pages: login, knowledge table
 
 **Interfaces:**
+
 - Cookie `ops_session` HttpOnly via BFF Set-Cookie from API token response (mirror web auth BFF pattern)
 
 - [x] **Step 1: Scaffold app** (`pnpm` workspace already `apps/*`)
@@ -174,12 +184,12 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'changeme', bcrypt.gensalt()).dec
 
 ## Spec coverage
 
-| Spec | Task |
-| --- | --- |
-| ops_sessions + env root | 1–2 |
-| login/logout/me | 2 |
-| knowledge list/patch/snapshots API | 3 |
-| snapshot on upsert | 3 |
-| apps/ops UI | 4 |
-| .env both files | 2 |
-| docs | 5 |
+| Spec                               | Task |
+| ---------------------------------- | ---- |
+| ops_sessions + env root            | 1–2  |
+| login/logout/me                    | 2    |
+| knowledge list/patch/snapshots API | 3    |
+| snapshot on upsert                 | 3    |
+| apps/ops UI                        | 4    |
+| .env both files                    | 2    |
+| docs                               | 5    |

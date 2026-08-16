@@ -50,13 +50,13 @@ uv run --directory services/agent-api python scripts/create_invitation.py admin@
 
 ## API 契约
 
-| Agent API 端点 | 身份要求 | 行为 |
-| --- | --- | --- |
-| `POST /v1/auth/verify` | 一次性 token | 消费 invite 并创建 session |
-| `GET /v1/auth/me` | session | 返回当前用户和是否可管理邀请 |
-| `POST /v1/auth/logout` | session | 撤销当前 session |
-| `POST /v1/auth/invitations` | 管理员 session | 创建或替换 pending invite 链接 |
-| `/v1/chat/*`、`/v1/threads/*`、`/v1/runs/*`、`/v1/ag-ui/*` | session | 仅访问当前用户资源 |
+| Agent API 端点                                             | 身份要求       | 行为                           |
+| ---------------------------------------------------------- | -------------- | ------------------------------ |
+| `POST /v1/auth/verify`                                     | 一次性 token   | 消费 invite 并创建 session     |
+| `GET /v1/auth/me`                                          | session        | 返回当前用户和是否可管理邀请   |
+| `POST /v1/auth/logout`                                     | session        | 撤销当前 session               |
+| `POST /v1/auth/invitations`                                | 管理员 session | 创建或替换 pending invite 链接 |
+| `/v1/chat/*`、`/v1/threads/*`、`/v1/runs/*`、`/v1/ag-ui/*` | session        | 仅访问当前用户资源             |
 
 ## 暂不实现
 

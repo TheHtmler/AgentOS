@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 
-import {
-  agentApiBaseUrl,
-  agentApiSessionHeaders,
-  proxyUpstreamResponse,
-} from "@/lib/agent-api";
+import { agentApiBaseUrl, agentApiSessionHeaders, proxyUpstreamResponse } from "@/lib/agent-api";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,16 +34,13 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   try {
-    const upstream = await fetch(
-      `${agentApiBaseUrl()}/v1/uploads/${artifactId}/content`,
-      {
-        method: "GET",
-        headers: {
-          ...(await agentApiSessionHeaders()),
-        },
-        cache: "no-store",
+    const upstream = await fetch(`${agentApiBaseUrl()}/v1/uploads/${artifactId}/content`, {
+      method: "GET",
+      headers: {
+        ...(await agentApiSessionHeaders()),
       },
-    );
+      cache: "no-store",
+    });
 
     return proxyUpstreamResponse(upstream);
   } catch {

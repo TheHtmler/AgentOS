@@ -8,7 +8,11 @@ function subscribeNoop() {
 }
 
 function useIsClient() {
-  return useSyncExternalStore(subscribeNoop, () => true, () => false);
+  return useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
 }
 
 type InvitationResponse = {
@@ -190,11 +194,7 @@ export function InvitationManager() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setIsOpen(true)}
-        className="agentos-invite-trigger"
-      >
+      <button type="button" onClick={() => setIsOpen(true)} className="agentos-invite-trigger">
         邀请成员
       </button>
       {dialog}

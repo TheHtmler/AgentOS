@@ -21,11 +21,13 @@
 ### Task 1: Timeline step state in chat-panel
 
 **Files:**
+
 - Modify: `apps/web/src/components/chat/chat-panel.tsx`
 - Modify: `apps/web/src/components/chat/tool-call-card.tsx` (export types if needed)
 - Create (optional): `apps/web/src/components/chat/thinking-step-card.tsx`
 
 **Interfaces:**
+
 - Produces: `TimelineStep` union (`thinking` | `tool`) ordered array; helpers to upsert/toggle
 
 - [x] Replace `reasoning` / `toolCalls` with `timelineSteps` + `anchorUserMessageId`
@@ -42,6 +44,7 @@
 ### Task 2: Assistant Markdown
 
 **Files:**
+
 - Modify: `apps/web/package.json` (deps)
 - Create: `apps/web/src/components/chat/assistant-markdown.tsx`
 - Modify: `apps/web/src/components/chat/chat-panel.tsx`
@@ -57,6 +60,7 @@
 ### Task 3: Timestamps + Run duration
 
 **Files:**
+
 - Modify: `apps/web/src/components/chat/chat-panel.tsx`
 - Create (optional): `apps/web/src/lib/format-time.ts`
 - Check: `apps/web/src/components/run/run-inspector.tsx` / run API route for fetch pattern
@@ -75,6 +79,7 @@
 ### Task 4: Docs + commit
 
 **Files:**
+
 - Modify: `docs/implementation-progress.md`
 - Modify: `docs/README.md` (link plan if needed)
 

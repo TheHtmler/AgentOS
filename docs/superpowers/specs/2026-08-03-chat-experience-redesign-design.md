@@ -41,11 +41,11 @@
 
 ## 交付策略（方案 1：功能先、皮肤后）
 
-| 竖切 | 内容 | 依赖 |
-| --- | --- | --- |
-| **P0** | 步骤时间线 + 助手 MD + 消息时间戳 + Run 总耗时 | 前端为主；耗时读现有 Run API |
+| 竖切   | 内容                                              | 依赖                          |
+| ------ | ------------------------------------------------- | ----------------------------- |
+| **P0** | 步骤时间线 + 助手 MD + 消息时间戳 + Run 总耗时    | 前端为主；耗时读现有 Run API  |
 | **P1** | Thread `PATCH` 重命名 + `DELETE` 软删除 + 列表 UI | Alembic：`threads.deleted_at` |
-| **P2** | 深色科技风 token / 布局收束 + Logo / favicon | P0/P1 结构稳定后换皮 |
+| **P2** | 深色科技风 token / 布局收束 + Logo / favicon      | P0/P1 结构稳定后换皮          |
 
 P0/P1 实现时应优先使用 CSS 变量承载颜色，便于 P2 一次切换。
 
@@ -91,11 +91,11 @@ type TimelineStep =
 
 事件规则：
 
-| AG-UI 事件 | 行为 |
-| --- | --- |
-| Reasoning Start | **新建** thinking step（不得覆盖上一段） |
-| Reasoning Content | 更新匹配 `id` / 当前 running 的那一段 |
-| Reasoning End | 该段 `done`，默认折叠 |
+| AG-UI 事件                 | 行为                                     |
+| -------------------------- | ---------------------------------------- |
+| Reasoning Start            | **新建** thinking step（不得覆盖上一段） |
+| Reasoning Content          | 更新匹配 `id` / 当前 running 的那一段    |
+| Reasoning End              | 该段 `done`，默认折叠                    |
 | Tool Start/Args/End/Result | 按现有逻辑写入 tool step，顺序即到达顺序 |
 
 新一轮发送时清空本轮 `timelineSteps`。历史恢复仍只加载 `messages` + `tool_calls`；**不**回放 Thinking。
@@ -109,11 +109,11 @@ type TimelineStep =
 
 ## P0：Markdown
 
-| 表面 | 渲染 |
-| --- | --- |
-| 助手 `content` | `react-markdown` + `remark-gfm` + HTML 消毒 |
-| 用户 `content` | 纯文本（现有 `whitespace-pre-wrap`） |
-| Thinking / Tool | 不走 Markdown |
+| 表面            | 渲染                                        |
+| --------------- | ------------------------------------------- |
+| 助手 `content`  | `react-markdown` + `remark-gfm` + HTML 消毒 |
+| 用户 `content`  | 纯文本（现有 `whitespace-pre-wrap`）        |
+| Thinking / Tool | 不走 Markdown                               |
 
 约束：
 
@@ -152,12 +152,12 @@ type TimelineStep =
 
 ### API（均校验 Thread 归属当前用户）
 
-| 方法 | 路径 | 行为 |
-| --- | --- | --- |
-| `PATCH` | `/v1/threads/{thread_id}` | `{ "title": string \| null }`；string 经 trim 后长度 1–80；`null` 或空表示清除自定义标题，列表回退到最新消息预览 |
-| `DELETE` | `/v1/threads/{thread_id}` | 设置 `deleted_at = now()`；幂等：已删除再删仍 `204`/`200` |
-| `GET` | `/v1/threads` | 仅 `deleted_at IS NULL` |
-| `GET` | `/v1/threads/{id}/messages` 及续聊 / AG-UI | 已软删 Thread → `404` |
+| 方法     | 路径                                       | 行为                                                                                                             |
+| -------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `PATCH`  | `/v1/threads/{thread_id}`                  | `{ "title": string \| null }`；string 经 trim 后长度 1–80；`null` 或空表示清除自定义标题，列表回退到最新消息预览 |
+| `DELETE` | `/v1/threads/{thread_id}`                  | 设置 `deleted_at = now()`；幂等：已删除再删仍 `204`/`200`                                                        |
+| `GET`    | `/v1/threads`                              | 仅 `deleted_at IS NULL`                                                                                          |
+| `GET`    | `/v1/threads/{id}/messages` 及续聊 / AG-UI | 已软删 Thread → `404`                                                                                            |
 
 Next.js：`PATCH` / `DELETE` `/api/threads/{threadId}` 原样代理。
 
@@ -226,14 +226,14 @@ Next.js：`PATCH` / `DELETE` `/api/threads/{threadId}` 原样代理。
 
 ## 主要落地位置（预期）
 
-| 区域 | 路径 |
-| --- | --- |
-| 时间线 / MD / 时间 | `apps/web/src/components/chat/chat-panel.tsx` 及抽离组件 |
-| 会话列表 | `apps/web/src/components/chat/conversation-list.tsx`、`chat-workspace.tsx` |
-| 视觉 token | `apps/web/src/app/globals.css`、布局壳组件 |
-| Logo | `apps/web/public/`（SVG/favicon） |
-| Thread API | `services/agent-api/src/agent_api/api/threads.py`、`db/chat_store.py`、Alembic |
-| 文档 | `docs/10-thread-history.md`、`docs/implementation-progress.md`、本 spec |
+| 区域               | 路径                                                                           |
+| ------------------ | ------------------------------------------------------------------------------ |
+| 时间线 / MD / 时间 | `apps/web/src/components/chat/chat-panel.tsx` 及抽离组件                       |
+| 会话列表           | `apps/web/src/components/chat/conversation-list.tsx`、`chat-workspace.tsx`     |
+| 视觉 token         | `apps/web/src/app/globals.css`、布局壳组件                                     |
+| Logo               | `apps/web/public/`（SVG/favicon）                                              |
+| Thread API         | `services/agent-api/src/agent_api/api/threads.py`、`db/chat_store.py`、Alembic |
+| 文档               | `docs/10-thread-history.md`、`docs/implementation-progress.md`、本 spec        |
 
 ## 后续（非本 spec 必做）
 
