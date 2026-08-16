@@ -21,12 +21,23 @@ from agent_api.tools.search.tool import AgentDeps
 logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+_TOKEN_CAP = 24
 _VECTOR_WEIGHT = 10.0
 _MIN_VECTOR_KEEP = 0.28
 
 
-def _tokenize_query(query: str) -> list[str]:
-    return [token.lower() for token in _TOKEN_RE.findall(query) if len(token) >= 2][:12]
+def tokenize_query(query: str) -> list[str]:
+    tokens = [token.lower() for token in _TOKEN_RE.findall(query) if len(token) >= 2]
+    # Long CJK runs rarely match verbatim via ILIKE; bigrams let chunks sharing
+    # terms like 甲基丙二酸 surface anyway.
+    bigrams = [
+        token[index : index + 2]
+        for token in tokens
+        if len(token) > 4 and _CJK_RE.search(token)
+        for index in range(len(token) - 1)
+    ]
+    return list(dict.fromkeys([*tokens, *bigrams]))[:_TOKEN_CAP]
 
 
 def _parse_disease_tags(raw: str | None) -> list[str]:
@@ -84,7 +95,7 @@ async def search_knowledge_chunks(
 ) -> list[dict[str, Any]]:
     """Hybrid keyword + optional embedding search over published knowledge chunks."""
 
-    tokens = _tokenize_query(query)
+    tokens = tokenize_query(query)
     if not tokens and not disease_tags and query_embedding is None:
         return []
 
@@ -231,7 +242,10 @@ async def run_knowledge_search(
         ),
     }
     if deps.persist_tool_events and deps.run_id is not None:
-        summary = f"{len(hits)} hits" + (f": {hits[0]['title']}" if hits else "")
+        embedding_flag = "embedding:on" if query_embedding is not None else "embedding:off"
+        summary = f"{len(hits)} hits ({embedding_flag})"
+        if hits:
+            summary += f": {hits[0]['title']}"
         await _persist_tool_result(deps.run_id, ok=True, summary=summary[:500])
 
     return json.dumps(response, ensure_ascii=False)

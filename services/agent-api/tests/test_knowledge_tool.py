@@ -8,8 +8,41 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent_api.agent import create_agent, create_ollama_http_client
 from agent_api.db.knowledge_store import upsert_mma_pa_knowledge
 from agent_api.db.models import KnowledgeChunk
-from agent_api.tools.knowledge.tool import run_knowledge_search, search_knowledge_chunks
+from agent_api.tools.knowledge.tool import (
+    run_knowledge_search,
+    search_knowledge_chunks,
+    tokenize_query,
+)
 from agent_api.tools.search.tool import AgentDeps
+
+
+def testtokenize_query_adds_cjk_bigrams() -> None:
+    tokens = tokenize_query("孤立型甲基丙二酸血症（isolated_mma）诊断与管理要点")
+    assert tokens[:3] == ["孤立型甲基丙二酸血症", "isolated_mma", "诊断与管理要点"]
+    assert "甲基" in tokens
+    assert "血症" in tokens
+    assert "诊断" in tokens
+    assert len(tokens) <= 24
+
+
+def testtokenize_query_keeps_short_cjk_tokens_whole() -> None:
+    assert tokenize_query("失代偿 发热") == ["失代偿", "发热"]
+
+
+@pytest.mark.anyio
+async def test_long_cjk_phrase_matches_via_bigrams(database_session: AsyncSession) -> None:
+    await upsert_mma_pa_knowledge(database_session)
+    await database_session.commit()
+
+    # The full phrase never appears verbatim in the seed; bigrams must carry it.
+    hits = await search_knowledge_chunks(
+        database_session,
+        query="甲基丙二酸血症患儿的急性期管理方案",
+        disease_tags=[],
+        max_results=3,
+        knowledge_base_slug="mma-pa",
+    )
+    assert hits
 
 
 @pytest.mark.anyio
