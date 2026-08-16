@@ -9,7 +9,9 @@ from agent_api.api.cases import router as cases_router
 from agent_api.api.ops_agents import router as ops_agents_router
 from agent_api.api.ops_auth import router as ops_auth_router
 from agent_api.api.ops_knowledge import router as ops_knowledge_router
+from agent_api.api.ops_sessions import router as ops_sessions_router
 from agent_api.api.ops_stats import router as ops_stats_router
+from agent_api.api.ops_tools import router as ops_tools_router
 from agent_api.api.runs import router as runs_router
 from agent_api.api.threads import router as threads_router
 from agent_api.api.uploads import router as uploads_router
@@ -41,6 +43,8 @@ app.include_router(ops_auth_router)
 app.include_router(ops_stats_router)
 app.include_router(ops_knowledge_router)
 app.include_router(ops_agents_router)
+app.include_router(ops_sessions_router)
+app.include_router(ops_tools_router)
 
 
 @app.get("/health", tags=["system"])

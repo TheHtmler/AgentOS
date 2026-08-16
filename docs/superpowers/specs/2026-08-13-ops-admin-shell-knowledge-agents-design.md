@@ -25,12 +25,12 @@ Ops 已具备独立登录与知识审核列表，但缺少管理台壳子、文�
 
 ## 决策
 
-| 项 | 选择 |
-|----|------|
-| 实现路径 | 全部走 `/v1/ops/*` + 扩展 `apps/ops`（方案 A） |
-| 认证 | 现有 `ops_session` / env root |
-| Agent 列表 | 独立 `GET /v1/ops/agents`，不复用用户 `/v1/agents` |
-| Snapshot | 仅 upsert 时自动；元数据 PATCH 不打快照；本竖切无 restore |
+| 项         | 选择                                                      |
+| ---------- | --------------------------------------------------------- |
+| 实现路径   | 全部走 `/v1/ops/*` + 扩展 `apps/ops`（方案 A）            |
+| 认证       | 现有 `ops_session` / env root                             |
+| Agent 列表 | 独立 `GET /v1/ops/agents`，不复用用户 `/v1/agents`        |
+| Snapshot   | 仅 upsert 时自动；元数据 PATCH 不打快照；本竖切无 restore |
 
 ---
 
@@ -46,13 +46,13 @@ Ops 已具备独立登录与知识审核列表，但缺少管理台壳子、文�
 
 ### 1.2 路由
 
-| 路由 | 状态 |
-|------|------|
-| `/` | 概览（真实统计） |
-| `/knowledge` | 知识列表 |
-| `/knowledge/[documentId]` | 知识详情 |
-| `/agents` | Agent 管理 |
-| `/mcp` `/skills` `/sessions` | 占位说明页 |
+| 路由                         | 状态             |
+| ---------------------------- | ---------------- |
+| `/`                          | 概览（真实统计） |
+| `/knowledge`                 | 知识列表         |
+| `/knowledge/[documentId]`    | 知识详情         |
+| `/agents`                    | Agent 管理       |
+| `/mcp` `/skills` `/sessions` | 占位说明页       |
 
 ### 1.3 概览
 
@@ -108,12 +108,12 @@ Ops 已具备独立登录与知识审核列表，但缺少管理台壳子、文�
 
 ### 2.3 API
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/v1/ops/knowledge/documents/{id}` | 元数据 + chunks |
-| PATCH | `/v1/ops/knowledge/documents/{id}` | 扩展可写字段；兼容仅 `review_status` |
-| GET | `/v1/ops/knowledge/documents/{id}/snapshots` | 已有 |
-| GET | `/v1/ops/knowledge/documents/{id}/snapshots/{snapshotId}` | `payload` + 元数据 |
+| 方法  | 路径                                                      | 说明                                 |
+| ----- | --------------------------------------------------------- | ------------------------------------ |
+| GET   | `/v1/ops/knowledge/documents/{id}`                        | 元数据 + chunks                      |
+| PATCH | `/v1/ops/knowledge/documents/{id}`                        | 扩展可写字段；兼容仅 `review_status` |
+| GET   | `/v1/ops/knowledge/documents/{id}/snapshots`              | 已有                                 |
+| GET   | `/v1/ops/knowledge/documents/{id}/snapshots/{snapshotId}` | `payload` + 元数据                   |
 
 ### 2.4 写入规则
 
@@ -134,10 +134,10 @@ Ops 已具备独立登录与知识审核列表，但缺少管理台壳子、文�
 
 ### 3.2 API
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/v1/ops/agents` | 全部 + published 摘要（无 published 则 flags 为 false/null） |
-| PATCH | `/v1/ops/agents/{id}` | 可选：`name`、`description`、`status`、`is_default` |
+| 方法  | 路径                  | 说明                                                         |
+| ----- | --------------------- | ------------------------------------------------------------ |
+| GET   | `/v1/ops/agents`      | 全部 + published 摘要（无 published 则 flags 为 false/null） |
+| PATCH | `/v1/ops/agents/{id}` | 可选：`name`、`description`、`status`、`is_default`          |
 
 ### 3.3 规则
 
@@ -184,7 +184,9 @@ apps/ops/src/
 
 ## 七、后续竖切
 
-- 快照 restore；chunk 编辑；素材导入
+- 快照 restore（2026-08-16 已落地：恢复前自动快照当前正文）
+- Agent 发版与 version 编辑（2026-08-16 已落地：新建不可变版本并发布）
+- MCP / Skills / Sessions 真页面（2026-08-16 已落地：Sessions 只读审计；Skills/MCP 为工具清单）
+- Chunk 在线编辑
 - 多 ops 账号
-- Agent 发版与 version 编辑
-- MCP / Skills / Sessions 真页面
+- 外部 MCP 服务器配置

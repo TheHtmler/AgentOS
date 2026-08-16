@@ -9,21 +9,7 @@ type RouteContext = {
   params: Promise<{ agentId: string }>;
 };
 
-export async function GET(request: Request, context: RouteContext) {
-  const { agentId } = await context.params;
-  try {
-    const upstream = await fetch(`${agentApiBaseUrl()}/v1/ops/agents/${agentId}`, {
-      headers: await opsSessionHeaders(),
-      cache: "no-store",
-      signal: request.signal,
-    });
-    return proxyUpstreamResponse(upstream);
-  } catch {
-    return NextResponse.json({ error: "agent_api_unavailable" }, { status: 503 });
-  }
-}
-
-export async function PATCH(request: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
   const { agentId } = await context.params;
   let payload: unknown;
   try {
@@ -33,8 +19,8 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   try {
-    const upstream = await fetch(`${agentApiBaseUrl()}/v1/ops/agents/${agentId}`, {
-      method: "PATCH",
+    const upstream = await fetch(`${agentApiBaseUrl()}/v1/ops/agents/${agentId}/versions`, {
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(await opsSessionHeaders()),

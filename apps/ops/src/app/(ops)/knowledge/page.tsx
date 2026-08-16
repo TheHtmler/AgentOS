@@ -33,16 +33,16 @@ export default function KnowledgePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
+  const [query, setQuery] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const loadDocuments = useCallback(async () => {
-    setLoading(true);
-    setError(null);
     try {
       const body = await opsJson<{ documents: KnowledgeDocument[] }>(
         "/api/ops/knowledge/documents?base=mma-pa",
       );
       setDocuments(body.documents);
+      setError(null);
     } catch (err) {
       if (err instanceof OpsFetchError && err.status === 401) {
         router.replace("/login");
@@ -55,13 +55,19 @@ export default function KnowledgePage() {
   }, [router]);
 
   useEffect(() => {
-    void loadDocuments();
+    void (async () => {
+      await loadDocuments();
+    })();
   }, [loadDocuments]);
 
-  const visible = useMemo(
-    () => (filter === "all" ? documents : documents.filter((doc) => doc.review_status === filter)),
-    [documents, filter],
-  );
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return documents.filter((doc) => {
+      if (filter !== "all" && doc.review_status !== filter) return false;
+      if (!needle) return true;
+      return doc.title.toLowerCase().includes(needle) || doc.slug.toLowerCase().includes(needle);
+    });
+  }, [documents, filter, query]);
 
   async function patchStatus(documentId: string, review_status: string) {
     setSavingId(documentId);
@@ -74,7 +80,9 @@ export default function KnowledgePage() {
           body: JSON.stringify({ review_status }),
         },
       );
-      setDocuments((prev) => prev.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)));
+      setDocuments((prev) =>
+        prev.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "更新失败");
     } finally {
@@ -93,7 +101,8 @@ export default function KnowledgePage() {
         <h2>现在能做什么 / 数据从哪来</h2>
         <ul>
           <li>
-            <strong>已有：</strong>可通过 JSON、文本、网页链接或文件导入知识，并查看内容切片、修改审核状态与元数据、查看历史快照。
+            <strong>已有：</strong>可通过
+            JSON、文本、网页链接或文件导入知识，并查看内容切片、修改审核状态与元数据、查看历史快照。
           </li>
           <li>
             <strong>覆盖规则：</strong>相同文档标识会更新原文档，并自动保留覆盖前的快照。
@@ -112,6 +121,12 @@ export default function KnowledgePage() {
         <Link href="/knowledge/import" className="quick-link">
           导入
         </Link>
+        <input
+          className="search-input"
+          value={query}
+          placeholder="筛选标题或标识"
+          onChange={(event) => setQuery(event.target.value)}
+        />
       </div>
 
       <div className="filter-row">

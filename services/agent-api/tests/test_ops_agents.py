@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -11,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.api import ops_auth as ops_auth_api
 from agent_api.config import get_settings
-from agent_api.db.models import Agent
+from agent_api.db.models import Agent, AgentVersion
 from agent_api.db.ops_store import create_ops_session
 from agent_api.db.session import close_database, session_factory
 from agent_api.main import app
@@ -93,3 +94,61 @@ async def test_ops_agents_list_and_patch(
             defaults = [row for row in listed_after.json()["agents"] if row["is_default"]]
             assert len(defaults) == 1
             assert defaults[0]["id"] == str(other.id)
+
+
+@pytest.mark.anyio
+async def test_ops_agent_publish_new_version(
+    database_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = Agent(
+        slug=f"ops-ver-{uuid4().hex[:8]}",
+        name="Ops version fixture",
+        kind="general",
+        status="active",
+        is_default=False,
+    )
+    database_session.add(agent)
+    await database_session.flush()
+    database_session.add(
+        AgentVersion(
+            agent_id=agent.id,
+            version=1,
+            system_prompt_overlay="seed-overlay",
+            memory_enabled=False,
+            case_enabled=False,
+            is_published=True,
+        ),
+    )
+    await database_session.commit()
+    prior_version = 1
+
+    token = await _ops_cookie(monkeypatch)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        client.cookies.set("ops_session", token)
+
+        missing = await client.get("/v1/ops/agents/00000000-0000-0000-0000-000000000000")
+        assert missing.status_code == 404
+
+        detail = await client.get(f"/v1/ops/agents/{agent.id}")
+        assert detail.status_code == 200
+        assert detail.json()["id"] == str(agent.id)
+
+        published = await client.post(
+            f"/v1/ops/agents/{agent.id}/versions",
+            json={
+                "system_prompt_overlay": "ops-test-overlay",
+                "memory_enabled": True,
+                "case_enabled": False,
+                "tool_policy_overrides": {"web_search": "ask"},
+            },
+        )
+        assert published.status_code == 200
+        body = published.json()
+        assert body["published_version"]["system_prompt_overlay"] == "ops-test-overlay"
+        assert body["published_version"]["memory_enabled"] is True
+        assert body["published_version"]["version"] == prior_version + 1
+        assert body["published_version"]["tool_policy_overrides"] == {"web_search": "ask"}
+        published_flags = [row["is_published"] for row in body["versions"]]
+        assert published_flags.count(True) == 1

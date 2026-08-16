@@ -5,12 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 const NAV = [
-  { href: "/", label: "概览", soon: false },
-  { href: "/knowledge", label: "知识库", soon: false },
-  { href: "/agents", label: "智能体", soon: false },
-  { href: "/mcp", label: "MCP", soon: true },
-  { href: "/skills", label: "技能", soon: true },
-  { href: "/sessions", label: "会话", soon: true },
+  { href: "/", label: "概览" },
+  { href: "/knowledge", label: "知识库" },
+  { href: "/agents", label: "智能体" },
+  { href: "/sessions", label: "会话" },
+  { href: "/skills", label: "技能" },
+  { href: "/mcp", label: "MCP" },
 ] as const;
 
 function BrandMark({ subtitle }: { subtitle?: string }) {
@@ -19,19 +19,17 @@ function BrandMark({ subtitle }: { subtitle?: string }) {
       <span className="brand-mark__glyph" aria-hidden />
       <div>
         <div className="brand">AgentOS Ops</div>
-        {subtitle ? <div className="muted" style={{ fontSize: "0.78rem", marginTop: 2 }}>{subtitle}</div> : null}
+        {subtitle ? (
+          <div className="muted" style={{ fontSize: "0.78rem", marginTop: 2 }}>
+            {subtitle}
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
 
-export function OpsShell({
-  subject,
-  children,
-}: {
-  subject: string;
-  children: ReactNode;
-}) {
+export function OpsShell({ subject, children }: { subject: string; children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -72,10 +70,9 @@ export function OpsShell({
           <Link
             key={item.href}
             href={item.href}
-            className={`ops-tab ${isActive(item.href) ? "is-active" : ""} ${item.soon ? "is-soon" : ""}`}
+            className={`ops-tab ${isActive(item.href) ? "is-active" : ""}`}
           >
             {item.label}
-            {item.soon ? <em>后续</em> : null}
           </Link>
         ))}
       </nav>
@@ -101,15 +98,14 @@ export function OpsShell({
             <Link
               key={item.href}
               href={item.href}
-              className={`ops-nav-link ${isActive(item.href) ? "is-active" : ""} ${item.soon ? "is-soon" : ""}`}
+              className={`ops-nav-link ${isActive(item.href) ? "is-active" : ""}`}
               onClick={() => setOpen(false)}
             >
               {item.label}
-              {item.soon ? <em>后续</em> : null}
             </Link>
           ))}
         </nav>
-        <div className="ops-nav-foot">知识内容经 seed 入库；本台负责审核与智能体配置。</div>
+        <div className="ops-nav-foot">审核知识、发布智能体版本、审计用户会话。</div>
       </aside>
 
       <main className="ops-main">{children}</main>

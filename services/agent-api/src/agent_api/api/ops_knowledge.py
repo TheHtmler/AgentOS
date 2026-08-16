@@ -27,7 +27,7 @@ from agent_api.db.session import session_factory
 from agent_api.knowledge.normalize import normalize_json_payload, normalize_plain_text
 from agent_api.knowledge.ocr_client import OcrError
 from agent_api.knowledge.pdf_extract import extract_pdf_text
-from agent_api.knowledge.types import DocumentSpec
+from agent_api.knowledge.types import ChunkSpec, DocumentSpec
 from agent_api.knowledge.url_extract import fetch_url_text
 
 router = APIRouter(prefix="/v1/ops/knowledge", tags=["ops-knowledge"])
@@ -474,3 +474,111 @@ async def get_document_snapshot(
         created_by=row.created_by,
         payload=dict(row.payload),
     )
+
+
+def _optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _object_map(value: object, field: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{field} must be an object")
+    return cast(dict[str, Any], value)
+
+
+def _chunk_spec(value: object) -> ChunkSpec:
+    item = _object_map(value, "chunk")
+    tags_raw = item.get("tags")
+    tags = [str(tag) for tag in cast(list[object], tags_raw)] if isinstance(tags_raw, list) else []
+    return ChunkSpec(
+        chunk_index=int(item["chunk_index"]),
+        title=str(item["title"]),
+        content=str(item["content"]),
+        section_label=_optional_str(item.get("section_label")),
+        tags=tags,
+    )
+
+
+def _spec_from_snapshot(document: KnowledgeDocument, payload: dict[str, Any]) -> DocumentSpec:
+    # Restore must keep the live document slug: upsert IDs are derived from slug.
+    doc_meta = _object_map(payload.get("document"), "document")
+    raw_chunks = payload.get("chunks")
+    if not isinstance(raw_chunks, list) or not raw_chunks:
+        raise ValueError("snapshot payload missing chunks")
+
+    chunks = [_chunk_spec(item) for item in cast(list[object], raw_chunks)]
+    version_label = _optional_str(doc_meta.get("version_label")) or document.version_label
+    return DocumentSpec(
+        slug=document.slug,
+        title=str(doc_meta.get("title") or document.title),
+        chunks=chunks,
+        source_kind=str(doc_meta.get("source_kind") or document.source_kind),
+        source_url=_optional_str(doc_meta.get("source_url")),
+        source_label=_optional_str(doc_meta.get("source_label")),
+        source_date=_optional_str(doc_meta.get("source_date")),
+        version_label=version_label,
+        review_status=str(doc_meta.get("review_status") or document.review_status),
+    )
+
+
+@router.post(
+    "/documents/{document_id}/snapshots/{snapshot_id}/restore",
+    response_model=KnowledgeDocumentDetailOut,
+)
+async def restore_document_snapshot(
+    document_id: UUID,
+    snapshot_id: UUID,
+    subject: Annotated[str, Depends(get_ops_subject)],
+) -> KnowledgeDocumentDetailOut:
+    async with session_factory() as session, session.begin():
+        document = await session.get(KnowledgeDocument, document_id)
+        if document is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+        snapshot = await session.get(KnowledgeDocumentSnapshot, snapshot_id)
+        if snapshot is None or snapshot.document_id != document_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found")
+        base = await session.get(KnowledgeBase, document.knowledge_base_id)
+        if base is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Knowledge base not found",
+            )
+        try:
+            spec = _spec_from_snapshot(document, dict(snapshot.payload))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"invalid snapshot payload: {exc}",
+            ) from exc
+
+        await upsert_knowledge_document(
+            session,
+            base_slug=base.slug,
+            spec=spec,
+            created_by=subject,
+        )
+        restored = await session.get(KnowledgeDocument, document_id)
+        if restored is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+        chunks = list(
+            await session.scalars(
+                select(KnowledgeChunk)
+                .where(KnowledgeChunk.document_id == document_id)
+                .order_by(KnowledgeChunk.chunk_index),
+            ),
+        )
+        out = KnowledgeDocumentDetailOut(
+            **_document_out(restored, len(chunks)).model_dump(),
+            chunks=[
+                KnowledgeChunkOut(
+                    id=chunk.id,
+                    chunk_index=chunk.chunk_index,
+                    title=chunk.title,
+                    content=chunk.content,
+                    section_label=chunk.section_label,
+                    tags=list(chunk.tags or []),
+                )
+                for chunk in chunks
+            ],
+        )
+    return out

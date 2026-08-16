@@ -1,14 +1,14 @@
-"""Ops agent admin: list all agents and patch basic fields."""
+"""Ops agent admin: list/patch agents and publish immutable versions."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, func, select, update
 
 from agent_api.api.ops_auth import get_ops_subject
 from agent_api.db.models import Agent, AgentVersion
@@ -17,6 +17,7 @@ from agent_api.db.session import session_factory
 router = APIRouter(prefix="/v1/ops/agents", tags=["ops-agents"])
 
 AgentStatus = Literal["active", "disabled"]
+PolicyOverride = Literal["allow", "ask", "deny"]
 
 
 class OpsAgentOut(BaseModel):
@@ -32,6 +33,22 @@ class OpsAgentOut(BaseModel):
     updated_at: datetime
 
 
+class OpsAgentVersionOut(BaseModel):
+    id: UUID
+    version: int
+    system_prompt_overlay: str
+    tool_policy_overrides: dict[str, Any] | None
+    memory_enabled: bool
+    case_enabled: bool
+    is_published: bool
+    created_at: datetime
+
+
+class OpsAgentDetailOut(OpsAgentOut):
+    published_version: OpsAgentVersionOut | None
+    versions: list[OpsAgentVersionOut]
+
+
 class OpsAgentListResponse(BaseModel):
     agents: list[OpsAgentOut]
 
@@ -41,6 +58,13 @@ class PatchOpsAgentRequest(BaseModel):
     description: str | None = None
     status: AgentStatus | None = None
     is_default: bool | None = None
+
+
+class PublishOpsAgentVersionRequest(BaseModel):
+    system_prompt_overlay: str = Field(default="", max_length=20000)
+    memory_enabled: bool = False
+    case_enabled: bool = False
+    tool_policy_overrides: dict[str, PolicyOverride] | None = None
 
 
 def _to_out(agent: Agent, version: AgentVersion | None) -> OpsAgentOut:
@@ -55,6 +79,30 @@ def _to_out(agent: Agent, version: AgentVersion | None) -> OpsAgentOut:
         memory_enabled=None if version is None else version.memory_enabled,
         case_enabled=None if version is None else version.case_enabled,
         updated_at=agent.updated_at,
+    )
+
+
+def _version_out(version: AgentVersion) -> OpsAgentVersionOut:
+    overrides = version.tool_policy_overrides
+    return OpsAgentVersionOut(
+        id=version.id,
+        version=version.version,
+        system_prompt_overlay=version.system_prompt_overlay,
+        tool_policy_overrides=None if overrides is None else dict(overrides),
+        memory_enabled=version.memory_enabled,
+        case_enabled=version.case_enabled,
+        is_published=version.is_published,
+        created_at=version.created_at,
+    )
+
+
+def _detail(agent: Agent, versions: list[AgentVersion]) -> OpsAgentDetailOut:
+    published = next((row for row in versions if row.is_published), None)
+    base = _to_out(agent, published)
+    return OpsAgentDetailOut(
+        **base.model_dump(),
+        published_version=None if published is None else _version_out(published),
+        versions=[_version_out(row) for row in versions],
     )
 
 
@@ -126,3 +174,73 @@ async def patch_ops_agent(
         )
         out = _to_out(agent, version)
     return out
+
+
+@router.get("/{agent_id}", response_model=OpsAgentDetailOut)
+async def get_ops_agent(
+    agent_id: UUID,
+    _subject: Annotated[str, Depends(get_ops_subject)],
+) -> OpsAgentDetailOut:
+    async with session_factory() as session:
+        agent = await session.get(Agent, agent_id)
+        if agent is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+        versions = list(
+            await session.scalars(
+                select(AgentVersion)
+                .where(AgentVersion.agent_id == agent.id)
+                .order_by(AgentVersion.version.desc()),
+            ),
+        )
+    return _detail(agent, versions)
+
+
+@router.post("/{agent_id}/versions", response_model=OpsAgentDetailOut)
+async def publish_ops_agent_version(
+    agent_id: UUID,
+    payload: PublishOpsAgentVersionRequest,
+    _subject: Annotated[str, Depends(get_ops_subject)],
+) -> OpsAgentDetailOut:
+    overrides: dict[str, object] | None = None
+    if payload.tool_policy_overrides is not None:
+        overrides = {name: action for name, action in payload.tool_policy_overrides.items()}
+
+    async with session_factory() as session, session.begin():
+        agent = await session.get(Agent, agent_id)
+        if agent is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+
+        current_max = await session.scalar(
+            select(func.max(AgentVersion.version)).where(AgentVersion.agent_id == agent.id),
+        )
+        next_version = int(current_max or 0) + 1
+        await session.execute(
+            update(AgentVersion)
+            .where(
+                AgentVersion.agent_id == agent.id,
+                AgentVersion.is_published.is_(True),
+            )
+            .values(is_published=False),
+        )
+        session.add(
+            AgentVersion(
+                agent_id=agent.id,
+                version=next_version,
+                system_prompt_overlay=payload.system_prompt_overlay,
+                tool_policy_overrides=overrides,
+                memory_enabled=payload.memory_enabled,
+                case_enabled=payload.case_enabled,
+                is_published=True,
+            ),
+        )
+        await session.flush()
+        versions = list(
+            await session.scalars(
+                select(AgentVersion)
+                .where(AgentVersion.agent_id == agent.id)
+                .order_by(AgentVersion.version.desc()),
+            ),
+        )
+        await session.refresh(agent)
+        detail = _detail(agent, versions)
+    return detail

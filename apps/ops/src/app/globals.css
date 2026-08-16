@@ -94,8 +94,7 @@ textarea {
   width: 28px;
   height: 28px;
   border-radius: 7px;
-  background:
-    linear-gradient(145deg, #12856f 0%, var(--accent) 55%, #084d42 100%);
+  background: linear-gradient(145deg, #12856f 0%, var(--accent) 55%, #084d42 100%);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 25%);
   position: relative;
   flex-shrink: 0;
@@ -169,7 +168,9 @@ textarea {
   min-height: var(--tap);
   border-radius: var(--radius-sm);
   color: var(--ink);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 input:focus,
@@ -191,7 +192,10 @@ button {
   border-radius: var(--radius-sm);
   font-weight: 600;
   letter-spacing: 0.01em;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.12s ease;
 }
 
 button:hover:not(:disabled) {
@@ -370,7 +374,9 @@ tr:last-child td {
   gap: 10px;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .doc-card:hover {
@@ -415,8 +421,11 @@ tr:last-child td {
 
 .callout {
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 70%, #fff) 0%, var(--panel-elevated) 100%);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-soft) 70%, #fff) 0%,
+    var(--panel-elevated) 100%
+  );
   border-radius: var(--radius);
   padding: 14px 16px;
   display: grid;
@@ -532,7 +541,9 @@ tr:last-child td {
   align-items: center;
   gap: 6px;
   color: var(--muted);
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .ops-tab:hover {
@@ -596,8 +607,7 @@ tr:last-child td {
   left: 0;
   bottom: 0;
   width: min(288px, 88vw);
-  background:
-    linear-gradient(180deg, #12352e 0%, #0f2924 48%, #0c211d 100%);
+  background: linear-gradient(180deg, #12352e 0%, #0f2924 48%, #0c211d 100%);
   color: #e7f2ee;
   border-right: 1px solid rgb(255 255 255 / 8%);
   padding: 18px 14px;
@@ -651,7 +661,9 @@ tr:last-child td {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: #c5d9d2;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .ops-nav-link:hover {
@@ -717,6 +729,85 @@ tr:last-child td {
   letter-spacing: -0.02em;
 }
 
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.search-input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  color: var(--ink);
+}
+
+.inline-check input {
+  width: auto;
+  min-height: 20px;
+  margin: 0;
+}
+
+.meta-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.meta-grid > div {
+  display: grid;
+  gap: 4px;
+}
+
+.meta-grid strong {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.pill--danger {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.badge--queued,
+.badge--unknown {
+  color: var(--muted);
+  background: var(--bg);
+  border-color: var(--line);
+}
+
+.badge--running {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.badge--waiting_approval {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 22%, transparent);
+}
+
+.badge--completed {
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-color: color-mix(in srgb, var(--ok) 22%, transparent);
+}
+
+.badge--failed,
+.badge--cancelled {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
 .stat-grid {
   display: grid;
   gap: 12px;
@@ -767,7 +858,9 @@ tr:last-child td {
   font-weight: 650;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  transition: border-color 0.15s ease, transform 0.12s ease;
+  transition:
+    border-color 0.15s ease,
+    transform 0.12s ease;
 }
 
 .quick-link::after {
@@ -892,5 +985,15 @@ button.secondary.is-selected {
 
   .quick-links {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .meta-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

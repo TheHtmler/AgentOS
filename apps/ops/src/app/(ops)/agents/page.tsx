@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { opsJson } from "@/lib/ops-fetch";
@@ -26,17 +27,19 @@ export default function AgentsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setError(null);
     try {
       const body = await opsJson<{ agents: OpsAgent[] }>("/api/ops/agents");
       setAgents(body.agents);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载失败");
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    void (async () => {
+      await load();
+    })();
   }, [load]);
 
   function startEdit(agent: OpsAgent) {
@@ -84,7 +87,7 @@ export default function AgentsPage() {
     <div className="stack">
       <div>
         <h1 className="page-title">智能体</h1>
-        <p className="muted page-lead">启停、描述与默认智能体（不改版本配置）</p>
+        <p className="muted page-lead">启停、描述、默认智能体，以及发布提示词版本</p>
       </div>
 
       {error ? <p className="error">{error}</p> : null}
@@ -92,10 +95,10 @@ export default function AgentsPage() {
       <div className="doc-list always">
         {agents.map((agent) => (
           <article key={agent.id} className="doc-card">
-            <div className="doc-card__title">
+            <Link href={`/agents/${agent.id}`} className="doc-card__title linkish">
               {agent.name}
               {agent.is_default ? <span className="pill">默认</span> : null}
-            </div>
+            </Link>
             <div className="muted" style={{ fontSize: "0.85rem" }}>
               标识：{agent.slug} · {labelOf(AGENT_KIND_LABELS, agent.kind)} ·{" "}
               {labelOf(AGENT_STATUS_LABELS, agent.status)}
@@ -125,13 +128,16 @@ export default function AgentsPage() {
               </form>
             ) : (
               <div className="doc-card__actions">
+                <Link href={`/agents/${agent.id}`} className="linkish">
+                  版本与提示词
+                </Link>
                 <button
                   type="button"
                   className="secondary block"
                   disabled={busyId === agent.id}
                   onClick={() => startEdit(agent)}
                 >
-                  编辑
+                  编辑名称
                 </button>
                 <button
                   type="button"

@@ -36,7 +36,9 @@
 
 **运营后台 + 知识审核竖切（2026-08-13，已落地）：** 独立 `apps/ops` + env root/`ops_sessions`；知识文档列表、PATCH `review_status`、upsert 自动快照与只读快照列表。
 
-**Ops 管理台第一期（2026-08-13，已落地）：** 侧栏壳子与概览；知识详情/元数据/chunks/快照预览；Agent 启停与默认；MCP/Skills/Sessions 占位。多账号、chunk 编辑、restore、真 MCP 配置仍属后续增量。
+**Ops 管理台第一期（2026-08-13，已落地）：** 侧栏壳子与概览；知识详情/元数据/chunks/快照预览；Agent 启停与默认。
+
+**Ops 管理台第二期（2026-08-16，已落地）：** 会话只读审计、智能体不可变发版、知识快照恢复、Skills/MCP 工具清单。多账号、chunk 编辑、外部 MCP 服务器配置仍属后续增量。
 
 - 建立 `AgentProfile`、`AgentVersion` 和领域知识库边界。（首个竖切已用 spec 命名 `agents` / `agent_versions` 落地配置层 Agent，非完整 `AgentProfile` 域模型。）
 - 将 `agent_id` 纳入 Thread、Run 和运行快照。

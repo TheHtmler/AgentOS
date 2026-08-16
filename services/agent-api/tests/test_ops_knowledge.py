@@ -118,6 +118,18 @@ async def test_ops_knowledge_list_patch_and_snapshots(
         stats = await client.get("/v1/ops/stats")
         assert stats.status_code == 200
         assert stats.json()["knowledge"]["documents_total"] >= 1
+        assert "users" in stats.json()
+        assert "sessions" in stats.json()
+        assert "recent_threads" in stats.json()
+
+        restored = await client.post(
+            f"/v1/ops/knowledge/documents/{document_id}/snapshots/{snap_id}/restore",
+        )
+        assert restored.status_code == 200
+        assert restored.json()["chunks"]
+        assert restored.json()["id"] == str(document_id)
+        snaps_after = await client.get(f"/v1/ops/knowledge/documents/{document_id}/snapshots")
+        assert len(snaps_after.json()["snapshots"]) >= len(snaps.json()["snapshots"])
 
 
 @pytest.mark.anyio

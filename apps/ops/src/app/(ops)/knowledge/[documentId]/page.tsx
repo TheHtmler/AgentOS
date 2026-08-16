@@ -53,6 +53,7 @@ export default function KnowledgeDetailPage() {
   const [snapshotDetail, setSnapshotDetail] = useState<SnapshotDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const [title, setTitle] = useState("");
@@ -64,7 +65,6 @@ export default function KnowledgeDetailPage() {
   const [reviewStatus, setReviewStatus] = useState<string>("curated");
 
   const load = useCallback(async () => {
-    setError(null);
     try {
       const detail = await opsJson<DocumentDetail>(`/api/ops/knowledge/documents/${documentId}`);
       setDoc(detail);
@@ -79,13 +79,16 @@ export default function KnowledgeDetailPage() {
         `/api/ops/knowledge/documents/${documentId}/snapshots`,
       );
       setSnapshots(snaps.snapshots);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载失败");
     }
   }, [documentId]);
 
   useEffect(() => {
-    void load();
+    void (async () => {
+      await load();
+    })();
   }, [load]);
 
   async function onSave(event: FormEvent) {
@@ -110,6 +113,23 @@ export default function KnowledgeDetailPage() {
       setError(err instanceof Error ? err.message : "保存失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function restoreSnapshot(snapshotId: string) {
+    if (!window.confirm("恢复会覆盖当前正文，并先把当前内容存成新快照。确定恢复？")) return;
+    setRestoringId(snapshotId);
+    setError(null);
+    try {
+      await opsJson(`/api/ops/knowledge/documents/${documentId}/snapshots/${snapshotId}/restore`, {
+        method: "POST",
+      });
+      setSnapshotDetail(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "恢复失败");
+    } finally {
+      setRestoringId(null);
     }
   }
 
@@ -226,16 +246,29 @@ export default function KnowledgeDetailPage() {
           </section>
 
           <section className="panel stack">
-            <h2 className="section-title">历史快照（只读）</h2>
+            <h2 className="section-title">历史快照</h2>
             {snapshots.length === 0 ? <p className="muted">暂无快照</p> : null}
             {snapshots.map((snap) => (
               <div key={snap.id} className="snap-card">
                 <strong>版本 {snap.version_label ?? "—"}</strong>
                 <span className="muted">{new Date(snap.created_at).toLocaleString()}</span>
                 <span>创建者：{snap.created_by === "system" ? "系统" : snap.created_by}</span>
-                <button type="button" className="secondary" onClick={() => void openSnapshot(snap.id)}>
-                  查看快照内容
-                </button>
+                <div className="filter-row">
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => void openSnapshot(snap.id)}
+                  >
+                    查看快照内容
+                  </button>
+                  <button
+                    type="button"
+                    disabled={restoringId === snap.id}
+                    onClick={() => void restoreSnapshot(snap.id)}
+                  >
+                    {restoringId === snap.id ? "恢复中…" : "恢复此版本"}
+                  </button>
+                </div>
               </div>
             ))}
             {snapshotDetail ? (

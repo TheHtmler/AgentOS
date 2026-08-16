@@ -17,9 +17,10 @@ export async function opsJson<T>(input: string, init?: RequestInit): Promise<T> 
     },
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as
-      | { detail?: string; error?: string }
-      | null;
+    const body = (await response.json().catch(() => null)) as {
+      detail?: string;
+      error?: string;
+    } | null;
     throw new OpsFetchError(
       response.status,
       body?.detail ?? body?.error ?? `请求失败（${response.status}）`,

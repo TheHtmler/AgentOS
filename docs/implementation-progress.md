@@ -1,6 +1,6 @@
 # 实施进度
 
-最后更新：2026-08-16（AG-UI / HITL 对齐 docs/16 溢出兜底）
+最后更新：2026-08-16（Ops 管理台第二期：会话审计 / 智能体发版 / 快照恢复）
 
 ## 当前状态
 
@@ -101,7 +101,8 @@
 - 运营后台竖切：`apps/ops`（`:3001`）+ `/v1/ops/*`；env 种子 root（`OPS_ROOT_*`）与独立 `ops_sessions` Cookie；知识文档列表 / PATCH `review_status` / 只读快照；seed upsert 前写入 `knowledge_document_snapshots`；迁移 `l8m9n0o1p2q3`。
 - Ops 公网部署模板：`ops-agentos.lemonbabycare.cn` + FRP `:3001` + launchd `com.local.agentos-ops`（见 `docs/14-macmini-frp-ops-deploy.md`、`infra/launchd|frpc|nginx`）。
 - Mac mini 一键脚本：`scripts/macmini-deploy.sh`（pull / sync / migrate / build / kickstart）、`scripts/install-launchd.sh`（api/web/ops plist）。
-- Ops 管理台第一期：侧栏壳子 + 概览统计；知识详情（chunks / 元数据 PATCH / 快照 payload）；Agent 列表与启停/默认；MCP·Skills·Sessions 占位页。
+- Ops 管理台第一期：侧栏壳子 + 概览统计；知识详情（chunks / 元数据 PATCH / 快照 payload）；Agent 列表与启停/默认。
+- Ops 管理台第二期：概览补充用户/会话/待审批与最近会话；知识列表筛选与快照一键恢复（恢复前自动快照当前正文）；智能体详情可发布不可变 `agent_versions`（overlay / 记忆 / 档案 / 工具策略覆盖）；Sessions 只读审计（列表+详情，消息截断）；Skills/MCP 展示工具登记清单（不提供外部 MCP 服务器配置）。
 - 工具调用行 UI：折叠行改为线框 SVG + 英文 `toolName` + 关键参数，副行状态（执行中/已完成/失败/待审批）。
 - 助手回合统一气泡：thinking、工具行与最终文字同处一个 `agentos-message-assistant`；去掉气泡外「处理中/已处理」过程组；HITL 审批条仍在泡外。
 - Ops 知识库多途径导入：JSON / 纯文本 / 链接 / 文件（`.txt` / `.md` / `.json`）/ PDF；统一 ingest → 同 slug 快照覆盖 upsert；PDF 文本层不足时调用本机 PaddleOCR HTTP（`OCR_BASE_URL`）；Ops UI 导入页 + BFF `POST /api/ops/knowledge/import`。
@@ -128,11 +129,11 @@
 
 - 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
 - Artifact 原文件下载、完整 `messages.role=tool` 模型历史对齐，以及 Artifact 审计记录（聊天报告上传/OCR 已落地，见上）。
-- Chunk 在线编辑、快照一键恢复（当前已有 ops 多途径导入含 PDF+本地 PaddleOCR、多来源策展切片、混合检索、ops 审核与只读快照）。
-- 运营后台扩展：Agent / MCP / Skills / Session 审计；多 ops 账号表。
+- Chunk 在线编辑（快照一键恢复已落地）。
+- 运营后台扩展：外部 MCP 服务器配置、多 ops 账号表。
 - 更复杂的 Case ACL（邀请生命周期、所有权转移、组织/临床角色）、领域扩展表（如护理计划/化验时间线）；Sandbox；侧栏按工具类型的富展示。
 - 参数级 Tool Policy（如按 URL/命令细规则）、审计表落库。
 
 ## 下一步
 
-平台基础能力：模型/Provider 档位；可选将 knowledge P0 迁到通用 eval runner。领域侧在 Case 之上挂医疗扩展与多看护人授权；运营侧可扩展 Agent/MCP/Skills 管理。
+平台基础能力：模型/Provider 档位；可选将 knowledge P0 迁到通用 eval runner。领域侧在 Case 之上挂医疗扩展与多看护人授权；运营侧可继续做 chunk 编辑、外部 MCP 配置与多账号。
