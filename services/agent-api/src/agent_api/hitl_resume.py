@@ -6,6 +6,8 @@ import logging
 from uuid import UUID
 
 from pydantic_ai import ModelMessagesTypeAdapter
+from pydantic_ai.messages import ModelMessage
+from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import (
     DeferredToolApprovalResult,
     DeferredToolRequests,
@@ -14,7 +16,7 @@ from pydantic_ai.tools import (
     ToolDenied,
 )
 
-from agent_api.agent import build_context_snapshot, inject_context_snapshot
+from agent_api.agent import AgentOutput, build_context_snapshot, inject_context_snapshot
 from agent_api.api.chat import (
     format_run_failure_message,
     parse_model_messages_json,
@@ -25,7 +27,11 @@ from agent_api.api.chat import (
 from agent_api.case.extract import schedule_case_extract
 from agent_api.case.recall import load_case_injection
 from agent_api.config import get_settings
-from agent_api.context_budget import apply_context_budget
+from agent_api.context_budget import (
+    apply_context_budget,
+    run_with_overflow_retry,
+    warn_if_input_tokens_near_budget,
+)
 from agent_api.db.agent_store import get_published_version
 from agent_api.db.chat_store import get_run, get_run_message_history, list_thread_messages
 from agent_api.db.models import Interrupt, Thread
@@ -169,19 +175,26 @@ async def continue_run_after_approval(
         async with runtime.model_semaphore:
             # Omit pydantic-ai run_id: the checkpoint already contains the interrupted
             # attempt's id; reusing it raises UserError. Our DB run_id stays the same.
-            result = await agent.run(
-                message_history=message_history,
-                deferred_tool_results=deferred,
-                conversation_id=str(run.thread_id),
-                deps=AgentDeps(
-                    search_router=runtime.search_router,
-                    fetch_router=runtime.fetch_router,
-                    run_id=run_id,
-                    case_id=case_id,
-                    user_id=user_id,
-                    thread_id=run.thread_id,
-                    http_client=runtime.ollama_http_client,
-                ),
+            async def _run(history: list[ModelMessage] | None) -> AgentRunResult[AgentOutput]:
+                return await agent.run(
+                    message_history=history,
+                    deferred_tool_results=deferred,
+                    conversation_id=str(run.thread_id),
+                    deps=AgentDeps(
+                        search_router=runtime.search_router,
+                        fetch_router=runtime.fetch_router,
+                        run_id=run_id,
+                        case_id=case_id,
+                        user_id=user_id,
+                        thread_id=run.thread_id,
+                        http_client=runtime.ollama_http_client,
+                    ),
+                )
+
+            result = await run_with_overflow_retry(
+                _run,
+                message_history,
+                run_id=run_id,
             )
     except Exception as error:
         logger.exception("HITL resume model run failed for run_id=%s", run_id)
@@ -213,6 +226,12 @@ async def continue_run_after_approval(
 
     assistant_content = with_truncation_notice_if_needed(result.output, new_messages)
     usage = result.usage
+    warn_if_input_tokens_near_budget(
+        run_id=run_id,
+        input_tokens=usage.input_tokens or None,
+        context_window=settings.model_context_window,
+        output_reserve=settings.model_max_output_tokens,
+    )
     await persist_completed_run(
         run_id=run_id,
         assistant_content=assistant_content,

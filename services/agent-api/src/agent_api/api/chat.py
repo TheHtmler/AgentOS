@@ -23,7 +23,13 @@ from agent_api.api.auth import get_current_user
 from agent_api.case.extract import schedule_case_extract
 from agent_api.case.recall import load_case_injection
 from agent_api.config import get_settings
-from agent_api.context_budget import apply_context_budget, cap_vision_to_budget, drop_oldest_runs
+from agent_api.context_budget import (
+    apply_context_budget,
+    cap_vision_to_budget,
+    is_context_overflow_error,
+    run_with_overflow_retry,
+    warn_if_input_tokens_near_budget,
+)
 from agent_api.db.agent_store import (
     AgentNotFoundError,
     PublishedAgentVersionNotFoundError,
@@ -256,15 +262,6 @@ def format_run_failure_message(error: BaseException, *, limit: int = 500) -> str
     return text[:limit]
 
 
-def is_context_overflow_error(error: BaseException) -> bool:
-    """Best-effort detection of a provider-side context-window rejection."""
-
-    text = str(error).lower()
-    return "context" in text and any(
-        marker in text for marker in ("length", "exceed", "overflow", "too long", "window")
-    )
-
-
 def user_facing_run_error_message(error: BaseException) -> str:
     """Map provider failures to actionable user-facing text instead of a generic 500."""
 
@@ -355,34 +352,20 @@ async def event_stream(
 
             # Prefer run() over run_stream() so web_search and other tools finish
             # before any assistant text is treated as the final answer.
-            try:
-                result = await agent.run(
+            async def _run(history: list[ModelMessage] | None) -> Any:
+                return await agent.run(
                     message,
-                    message_history=message_history or None,
+                    message_history=history,
                     conversation_id=str(thread_id),
                     run_id=str(run_id),
                     deps=deps,
                 )
-            except Exception as first_error:
-                # Provider-confirmed context overflow: fall back to the newest run and
-                # retry once (the pre-run budget guard should make this rare).
-                if not message_history or not is_context_overflow_error(first_error):
-                    raise
-                reduced, dropped = drop_oldest_runs(message_history, keep_runs=1)
-                if dropped == 0:
-                    raise
-                logger.warning(
-                    "context overflow for run %s; retrying with %d oldest run(s) dropped",
-                    run_id,
-                    dropped,
-                )
-                result = await agent.run(
-                    message,
-                    message_history=reduced or None,
-                    conversation_id=str(thread_id),
-                    run_id=str(run_id),
-                    deps=deps,
-                )
+
+            result = await run_with_overflow_retry(
+                _run,
+                message_history,
+                run_id=run_id,
+            )
 
             if await request.is_disconnected():
                 await persist_cancelled_run(run_id)
@@ -430,18 +413,12 @@ async def event_stream(
             output_tokens = usage.output_tokens or None
             model_request_count = usage.requests
             settings = get_settings()
-            if (
-                input_tokens is not None
-                and input_tokens >= settings.model_context_window - settings.model_max_output_tokens
-            ):
-                logger.warning(
-                    "run %s input_tokens=%d reached the model input budget "
-                    "(window=%d, output_reserve=%d); provider-side truncation risk",
-                    run_id,
-                    input_tokens,
-                    settings.model_context_window,
-                    settings.model_max_output_tokens,
-                )
+            warn_if_input_tokens_near_budget(
+                run_id=run_id,
+                input_tokens=input_tokens,
+                context_window=settings.model_context_window,
+                output_reserve=settings.model_max_output_tokens,
+            )
     except asyncio.CancelledError:
         # A cancelled response must not leave the durable Run marked as running.
         try:

@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
+from uuid import UUID
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -359,3 +360,91 @@ def make_step_history_processor(
         return trimmed
 
     return process
+
+
+def is_context_overflow_error(error: BaseException) -> bool:
+    """Best-effort detection of a provider-side context-window rejection."""
+
+    text = str(error).lower()
+    return "context" in text and any(
+        marker in text for marker in ("length", "exceed", "overflow", "too long", "window")
+    )
+
+
+def warn_if_input_tokens_near_budget(
+    *,
+    run_id: object,
+    input_tokens: int | None,
+    context_window: int,
+    output_reserve: int,
+) -> None:
+    """Log when a finished run's prompt side is already pressing against num_ctx."""
+
+    if input_tokens is None:
+        return
+    if input_tokens < context_window - output_reserve:
+        return
+    logger.warning(
+        "run %s input_tokens=%d reached the model input budget "
+        "(window=%d, output_reserve=%d); provider-side truncation risk",
+        run_id,
+        input_tokens,
+        context_window,
+        output_reserve,
+    )
+
+
+async def run_with_overflow_retry[T](
+    run: Callable[[list[ModelMessage] | None], Awaitable[T]],
+    history: list[ModelMessage],
+    *,
+    run_id: UUID,
+) -> T:
+    """Retry a non-streaming model call once with only the newest run kept."""
+
+    try:
+        return await run(history or None)
+    except Exception as first_error:
+        if not history or not is_context_overflow_error(first_error):
+            raise
+        reduced, dropped = drop_oldest_runs(history, keep_runs=1)
+        if dropped == 0:
+            raise
+        logger.warning(
+            "context overflow for run %s; retrying with %d oldest run(s) dropped",
+            run_id,
+            dropped,
+        )
+        return await run(reduced or None)
+
+
+async def aiter_with_overflow_retry[T](
+    start: Callable[[list[ModelMessage] | None], AsyncIterator[T]],
+    history: list[ModelMessage],
+    *,
+    run_id: UUID,
+) -> AsyncIterator[T]:
+    """Retry a native event stream once if overflow happens before any event."""
+
+    current = history
+    retried = False
+    while True:
+        emitted = False
+        try:
+            async for item in start(current or None):
+                emitted = True
+                yield item
+            return
+        except Exception as error:
+            if retried or emitted or not current or not is_context_overflow_error(error):
+                raise
+            reduced, dropped = drop_oldest_runs(current, keep_runs=1)
+            if dropped == 0:
+                raise
+            logger.warning(
+                "context overflow for run %s; retrying with %d oldest run(s) dropped",
+                run_id,
+                dropped,
+            )
+            current = reduced
+            retried = True

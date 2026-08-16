@@ -37,7 +37,7 @@
 - **step 级压力检查**(`make_step_history_processor`，经 pydantic-ai `ProcessHistory` 接入）：每次模型请求前裁剪发送视图——工具循环中途（如 read_artifact 翻页）堆积的超长结果同样会被首尾裁剪，只保留末尾活跃工具链原样。只影响发送视图，持久化历史完整。
 - **视觉截顶**(`cap_vision_to_budget`)：请求头估算超预算时优先丢图片（OCR 全文 + read_artifact 是数据通道，视觉只是交叉核对），保证多附件轮次不再 400。
 - **多附件降级**:`preview_budgets`（单附件 6000/总 12000 字符；≥2 附件 3000/总 6000）与 `resolve_vision_limits`(≥2 附件时图片 ≤2、每 PDF 只渲染首页）。
-- **兜底**:SSE 链路捕获 provider 溢出后仅保留最新 run 重试一次；两条链路都把溢出映射为可执行的用户文案（「一次分析一份报告」);run 完成后 `input_tokens` 逼近预算打 warning。
+- **兜底**:SSE 与 AG-UI / HITL 续跑在 provider 溢出后仅保留最新 run 重试一次（尚未产出文本时）;两条链路都把溢出映射为可执行的用户文案（「一次分析一份报告」);run 完成后 `input_tokens` 逼近预算打 warning。
 
 ## 工具系统
 

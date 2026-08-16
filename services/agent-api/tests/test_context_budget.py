@@ -1,5 +1,11 @@
+from collections.abc import AsyncIterator
+from uuid import uuid4
+
+import pytest
+from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import (
     BinaryContent,
+    ModelMessage,
     ModelRequest,
     ModelResponse,
     TextPart,
@@ -9,16 +15,20 @@ from pydantic_ai.messages import (
 )
 
 from agent_api.context_budget import (
+    aiter_with_overflow_retry,
     apply_context_budget,
     cap_vision_to_budget,
     drop_oldest_runs,
     estimate_tokens,
     history_tokens,
+    is_context_overflow_error,
     make_step_history_processor,
     message_tokens,
     prune_old_tool_results,
     prune_tool_results_before_tail,
+    run_with_overflow_retry,
     trim_messages_to_step_budget,
+    warn_if_input_tokens_near_budget,
 )
 
 
@@ -270,3 +280,95 @@ def test_cap_vision_partial_keep_when_one_fits() -> None:
         output_reserve=4_096,
     )
     assert 1 <= allowed < 3
+
+
+def _overflow_error() -> ModelHTTPError:
+    return ModelHTTPError(
+        status_code=400,
+        model_name="agentos-qwen3vl:16k",
+        body={
+            "message": "request (17883 tokens) exceeds the available context size (16384 tokens)"
+        },
+    )
+
+
+def test_is_context_overflow_error_detects_provider_400() -> None:
+    assert is_context_overflow_error(_overflow_error()) is True
+    assert is_context_overflow_error(RuntimeError("connection reset")) is False
+
+
+def test_warn_if_input_tokens_near_budget_only_when_tight(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    warn_if_input_tokens_near_budget(
+        run_id="r1",
+        input_tokens=11_000,
+        context_window=16_384,
+        output_reserve=4_096,
+    )
+    assert "input_tokens" not in caplog.text
+
+    warn_if_input_tokens_near_budget(
+        run_id="r1",
+        input_tokens=12_300,
+        context_window=16_384,
+        output_reserve=4_096,
+    )
+    assert "reached the model input budget" in caplog.text
+
+
+@pytest.mark.anyio
+async def test_run_with_overflow_retry_drops_oldest_once() -> None:
+    history = [
+        user_message("第一问"),
+        assistant_text("第一答"),
+        user_message("第二问"),
+        assistant_text("第二答"),
+    ]
+    seen: list[int] = []
+
+    async def run(current: list[ModelMessage] | None) -> str:
+        seen.append(0 if current is None else len(current))
+        if len(seen) == 1:
+            raise _overflow_error()
+        return "ok"
+
+    result = await run_with_overflow_retry(run, history, run_id=uuid4())
+
+    assert result == "ok"
+    assert seen == [4, 2]
+
+
+@pytest.mark.anyio
+async def test_run_with_overflow_retry_does_not_retry_generic_errors() -> None:
+    async def run(_current: list[ModelMessage] | None) -> str:
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await run_with_overflow_retry(
+            run,
+            [user_message("一"), assistant_text("二"), user_message("三")],
+            run_id=uuid4(),
+        )
+
+
+@pytest.mark.anyio
+async def test_aiter_with_overflow_retry_before_first_event() -> None:
+    history = [
+        user_message("第一问"),
+        assistant_text("第一答"),
+        user_message("第二问"),
+        assistant_text("第二答"),
+    ]
+    attempts: list[int] = []
+
+    async def start(current: list[ModelMessage] | None) -> AsyncIterator[str]:
+        attempts.append(0 if current is None else len(current))
+        if len(attempts) == 1:
+            raise _overflow_error()
+        yield "delta"
+
+    chunks = [item async for item in aiter_with_overflow_retry(start, history, run_id=uuid4())]
+
+    assert chunks == ["delta"]
+    assert attempts == [4, 2]

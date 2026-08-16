@@ -8,7 +8,13 @@ from ag_ui.core import BaseEvent, RunAgentInput, UserMessage
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import ValidationError
 from pydantic_ai import ModelMessagesTypeAdapter
-from pydantic_ai.messages import PartDeltaEvent, PartStartEvent, TextPart, TextPartDelta
+from pydantic_ai.messages import (
+    ModelMessage,
+    PartDeltaEvent,
+    PartStartEvent,
+    TextPart,
+    TextPartDelta,
+)
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.ui import NativeEvent
@@ -30,7 +36,12 @@ from agent_api.api.chat import (
 from agent_api.case.extract import schedule_case_extract
 from agent_api.case.recall import load_case_injection
 from agent_api.config import get_settings
-from agent_api.context_budget import apply_context_budget, cap_vision_to_budget
+from agent_api.context_budget import (
+    aiter_with_overflow_retry,
+    apply_context_budget,
+    cap_vision_to_budget,
+    warn_if_input_tokens_near_budget,
+)
 from agent_api.db.agent_store import (
     AgentNotFoundError,
     PublishedAgentVersionNotFoundError,
@@ -308,23 +319,33 @@ async def stream_ag_ui_run(
     client_disconnected = asyncio.Event()
 
     async def native_events() -> AsyncIterator[NativeEvent]:
+        async def start_stream(
+            message_history: list[ModelMessage] | None,
+        ) -> AsyncIterator[NativeEvent]:
+            async for event in adapter.run_stream_native(
+                message_history=message_history,
+                conversation_id=str(started.thread_id),
+                run_id=str(started.run_id),
+                deps=AgentDeps(
+                    search_router=runtime.search_router,
+                    fetch_router=runtime.fetch_router,
+                    run_id=started.run_id,
+                    case_id=case_id,
+                    user_id=user.id,
+                    thread_id=started.thread_id,
+                    http_client=runtime.ollama_http_client,
+                ),
+            ):
+                yield event
+
         try:
             # The model task is independent from the HTTP response. A mobile browser may
             # suspend its page and close SSE while the server should still finish the Run.
             async with runtime.model_semaphore:
-                async for event in adapter.run_stream_native(
-                    message_history=history,
-                    conversation_id=str(started.thread_id),
-                    run_id=str(started.run_id),
-                    deps=AgentDeps(
-                        search_router=runtime.search_router,
-                        fetch_router=runtime.fetch_router,
-                        run_id=started.run_id,
-                        case_id=case_id,
-                        user_id=user.id,
-                        thread_id=started.thread_id,
-                        http_client=runtime.ollama_http_client,
-                    ),
+                async for event in aiter_with_overflow_retry(
+                    start_stream,
+                    history,
+                    run_id=started.run_id,
                 ):
                     if text := text_from_native_event(event):
                         await persist_text_delta(started.run_id, text)
@@ -367,6 +388,12 @@ async def stream_ag_ui_run(
             assistant_content = with_truncation_notice_if_needed(
                 result.output,
                 new_messages,
+            )
+            warn_if_input_tokens_near_budget(
+                run_id=started.run_id,
+                input_tokens=usage.input_tokens or None,
+                context_window=settings.model_context_window,
+                output_reserve=settings.model_max_output_tokens,
             )
             await persist_completed_run(
                 run_id=started.run_id,
