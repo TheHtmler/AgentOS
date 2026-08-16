@@ -43,7 +43,7 @@ async def test_text_layer_pdf_does_not_use_ocr(
             settings=_settings(ocr_text_min_chars=40),
         )
 
-    assert result == (text, 1, 0)
+    assert result == (f"[第 1 页]\n{text}", 1, 0)
 
 
 @pytest.mark.anyio
@@ -63,7 +63,7 @@ async def test_sparse_page_uses_ocr_text(
             settings=_settings(ocr_enabled=True, ocr_text_min_chars=40),
         )
 
-    assert result == ("OCR 识别出的正文", 0, 1)
+    assert result == ("[第 1 页]\nOCR 识别出的正文", 0, 1)
 
 
 @pytest.mark.anyio
@@ -97,7 +97,7 @@ async def test_sparse_text_layer_is_kept_when_ocr_is_disabled() -> None:
             settings=_settings(ocr_enabled=False, ocr_text_min_chars=40),
         )
 
-    assert result == ("short", 1, 0)
+    assert result == ("[第 1 页]\nshort", 1, 0)
 
 
 @pytest.mark.anyio
@@ -124,7 +124,7 @@ async def test_ocr_failure_on_one_page_does_not_fail_document(
             settings=_settings(ocr_enabled=True, ocr_text_min_chars=40),
         )
 
-    assert result == ("第二页识别出的正文", 0, 1)
+    assert result == ("[第 2 页]\n第二页识别出的正文", 0, 1)
 
 
 @pytest.mark.anyio

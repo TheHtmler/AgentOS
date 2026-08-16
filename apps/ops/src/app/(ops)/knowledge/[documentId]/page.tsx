@@ -44,6 +44,12 @@ type SnapshotDetail = Snapshot & { payload: Record<string, unknown> };
 const REVIEW_OPTIONS = ["curated", "clinically_reviewed", "withdrawn"] as const;
 const SOURCE_KINDS = ["official_reference", "clinical_guideline", "curated_summary"] as const;
 
+function excerpt(text: string, max = 180): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (compact.length <= max) return compact;
+  return `${compact.slice(0, max)}…`;
+}
+
 export default function KnowledgeDetailPage() {
   const params = useParams<{ documentId: string }>();
   const router = useRouter();
@@ -253,26 +259,30 @@ export default function KnowledgeDetailPage() {
           </form>
 
           <section className="panel stack">
-            <h2 className="section-title">内容切片（只读）</h2>
+            <h2 className="section-title">内容切片</h2>
+            <p className="hint">每条先看摘要；检索用的是完整正文，不是标题。</p>
             {doc.chunks.map((chunk) => {
               const open = expanded[chunk.id] ?? false;
               return (
                 <article key={chunk.id} className="doc-card">
-                  <div className="doc-card__title">
-                    第 {chunk.chunk_index} 条 · {chunk.title}
-                  </div>
+                  <div className="doc-card__title">{chunk.title}</div>
                   <div className="doc-card__meta">
-                    <span>章节：{chunk.section_label ?? "—"}</span>
-                    <span>标签：{chunk.tags.join("、") || "无"}</span>
+                    <span>#{chunk.chunk_index + 1}</span>
+                    {chunk.section_label ? <span>{chunk.section_label}</span> : null}
+                    {chunk.tags.length > 0 ? <span>{chunk.tags.join("、")}</span> : null}
                   </div>
+                  {open ? (
+                    <pre className="chunk-body">{chunk.content}</pre>
+                  ) : (
+                    <p className="chunk-excerpt">{excerpt(chunk.content)}</p>
+                  )}
                   <button
                     type="button"
-                    className="secondary block"
+                    className="ghost"
                     onClick={() => setExpanded((prev) => ({ ...prev, [chunk.id]: !open }))}
                   >
-                    {open ? "收起内容" : "展开内容"}
+                    {open ? "收起全文" : "看全文"}
                   </button>
-                  {open ? <pre className="chunk-body">{chunk.content}</pre> : null}
                 </article>
               );
             })}

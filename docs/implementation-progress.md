@@ -1,6 +1,6 @@
 # 实施进度
 
-最后更新：2026-08-16（知识文档可删除；审核状态改为待审核/已审核/已下架；Ops UI 收密）
+最后更新：2026-08-16（知识导入按标题/页码切块并展示摘要）
 
 ## 当前状态
 
@@ -108,6 +108,7 @@
 - Ops 知识库多途径导入：JSON / 纯文本 / 链接 / 文件（`.txt` / `.md` / `.json`）/ PDF；统一 ingest → 同 slug 快照覆盖 upsert；PDF 文本层不足时调用本机 PaddleOCR HTTP（`OCR_BASE_URL`）；Ops UI 导入页 + BFF `POST /api/ops/knowledge/import`。
 - Ops 控制台视觉与交互抛光：冷灰画布 + 石墨主按钮 + 13px 行列表；页头主操作与分段筛选；保存/启停/恢复用 toast；加载用 skeleton；概览指标可点进对应列表，待审批带 `run_status` 深链。
 - 知识文档 `DELETE /v1/ops/knowledge/documents/{id}`（chunks/snapshots CASCADE）。审核状态 API 仍为 `curated` / `clinically_reviewed` / `withdrawn`，界面改为「待审核 / 已审核 / 已下架」：前两者可被 `knowledge_search` 命中，下架仅排除检索，删除才去掉文档。
+- 知识导入切块改为标题分层 + 硬换行合并 + 900 字打包 + 150 字重叠；PDF 带页码；详情默认展示切片摘要而不再先折叠。
 - 聊天报告上传与分析：Web 附件 UI + BFF `POST /api/uploads`；Agent API `POST /v1/uploads` 将原文件存至 `UPLOAD_ROOT`、OCR 文本写入 Artifact（`kind=upload`）；Run 注入报告预览；垂类 Agent 结合 `knowledge_search` 解读，case_enabled 路径经现有 HITL 写入 Case facts；用户报告与 `knowledge_*` 严格隔离。
 
 ## 验证

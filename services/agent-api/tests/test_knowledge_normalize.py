@@ -76,7 +76,12 @@ def test_normalize_plain_text_chunks_body_and_source_fields() -> None:
     spec = normalize_plain_text(
         slug="ops-import-a",
         title="导入甲",
-        body="第一段内容这里够长。\n\n第二段内容这里也够长。",
+        body=(
+            "## 第一段\n\n"
+            "第一段内容这里写得足够长，用来确认导入会按标题切开。\n\n"
+            "## 第二段\n\n"
+            "第二段内容这里也写得足够长，避免被打进同一切片。"
+        ),
         source_url="https://example.com/article",
         source_label="Example article",
         source_kind="official_reference",
@@ -109,7 +114,10 @@ def test_normalize_plain_text_requires_slug() -> None:
 async def test_fetch_url_text_extracts_title_and_body(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    html = "<html><head><title>Example Article</title></head><body><p>Main article text.</p></body></html>"
+    html = (
+        "<html><head><title>Example Article</title></head>"
+        "<body><p>Main article text.</p></body></html>"
+    )
 
     class FakeResponse:
         status_code = 200

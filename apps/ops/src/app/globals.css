@@ -770,6 +770,13 @@ a.stat-card:hover {
   text-underline-offset: 2px;
 }
 
+.chunk-excerpt {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .chunk-body {
   margin: 0;
   white-space: pre-wrap;
