@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,12 +26,17 @@ from agent_api.db.models import (
 )
 from agent_api.db.session import session_factory
 from agent_api.knowledge.normalize import normalize_json_payload, normalize_plain_text
-from agent_api.knowledge.ocr_client import OcrError
+from agent_api.knowledge.ocr_client import OcrError, ocr_image_bytes
 from agent_api.knowledge.pdf_extract import extract_pdf_text
 from agent_api.knowledge.types import ChunkSpec, DocumentSpec
 from agent_api.knowledge.url_extract import fetch_url_text
 
 router = APIRouter(prefix="/v1/ops/knowledge", tags=["ops-knowledge"])
+
+_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+_TEXT_SUFFIXES = {".txt", ".md", ".markdown"}
+_JSON_SUFFIXES = {".json"}
 
 ReviewStatus = Literal["curated", "clinically_reviewed", "withdrawn"]
 SourceKind = Literal["official_reference", "clinical_guideline", "curated_summary"]
@@ -264,31 +270,56 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
     base_slug = _form_text(form, "base", "mma-pa") or "mma-pa"
     slug = _form_text(form, "slug") or _slug_from_filename(upload.filename)
     title = _form_text(form, "title") or Path(upload.filename or slug).stem
-    is_pdf = (
-        mode == "pdf"
-        or upload.content_type == "application/pdf"
-        or (upload.filename or "").lower().endswith(".pdf")
-    )
-    if not is_pdf:
+    filename = (upload.filename or "").lower()
+    suffix = Path(filename).suffix
+    mime = (upload.content_type or "").lower()
+    is_pdf = mode == "pdf" or mime == "application/pdf" or suffix == ".pdf"
+    is_image = mime in _IMAGE_TYPES or suffix in _IMAGE_SUFFIXES
+    is_json = mime == "application/json" or suffix in _JSON_SUFFIXES
+    is_text = mime.startswith("text/") or suffix in _TEXT_SUFFIXES
+
+    if is_image:
+        if not settings.ocr_enabled:
+            raise ValueError("图片导入需要开启 OCR。请检查 OCR_ENABLED 与 OCR_BASE_URL。")
+        async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
+            body = await ocr_image_bytes(data, client=client, settings=settings)
+            spec = normalize_plain_text(slug=slug, title=title, body=body)
+            return await _persist_import(
+                [spec],
+                base_slug=base_slug,
+                created_by=subject,
+                http_client=client,
+                ocr_pages=1,
+            )
+
+    if is_pdf:
+        async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
+            body, text_layer_pages, ocr_pages = await extract_pdf_text(
+                data,
+                client=client,
+                settings=settings,
+            )
+            spec = normalize_plain_text(slug=slug, title=title, body=body)
+            return await _persist_import(
+                [spec],
+                base_slug=base_slug,
+                created_by=subject,
+                http_client=client,
+                text_layer_pages=text_layer_pages,
+                ocr_pages=ocr_pages,
+            )
+
+    if is_json:
+        payload = cast(dict[str, Any], json.loads(data.decode("utf-8")))
+        specs = normalize_json_payload(payload)
+        return await _persist_import(specs, base_slug=base_slug, created_by=subject)
+
+    if is_text or suffix == "":
         body = data.decode("utf-8")
         spec = normalize_plain_text(slug=slug, title=title, body=body)
         return await _persist_import([spec], base_slug=base_slug, created_by=subject)
 
-    async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
-        body, text_layer_pages, ocr_pages = await extract_pdf_text(
-            data,
-            client=client,
-            settings=settings,
-        )
-        spec = normalize_plain_text(slug=slug, title=title, body=body)
-        return await _persist_import(
-            [spec],
-            base_slug=base_slug,
-            created_by=subject,
-            http_client=client,
-            text_layer_pages=text_layer_pages,
-            ocr_pages=ocr_pages,
-        )
+    raise ValueError("仅支持 txt、md、json、pdf、jpg、png、webp")
 
 
 @router.post("/import", response_model=ImportResponse)

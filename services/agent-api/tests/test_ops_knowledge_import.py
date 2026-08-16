@@ -139,3 +139,46 @@ async def test_ops_import_json_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
             "text_layer_pages": 0,
         },
     ]
+
+
+@pytest.mark.anyio
+async def test_ops_import_image_uses_ocr(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_ocr(image: bytes, **_kwargs: object) -> str:
+        assert image == b"\xff\xd8\xffimage"
+        return "图片识别出的第一段。\n\n图片识别出的第二段。"
+
+    monkeypatch.setattr("agent_api.api.ops_knowledge.ocr_image_bytes", fake_ocr)
+    slug = f"ops-image-{uuid4().hex}"
+    token = await _ops_cookie(monkeypatch)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        client.cookies.set("ops_session", token)
+        response = await client.post(
+            "/v1/ops/knowledge/import",
+            data={"mode": "file", "slug": slug, "title": "扫描指南"},
+            files={"file": ("guide.jpg", b"\xff\xd8\xffimage", "image/jpeg")},
+        )
+
+    assert response.status_code == 200
+    document = response.json()["documents"][0]
+    assert document["slug"] == slug
+    assert document["title"] == "扫描指南"
+    assert document["chunk_count"] >= 1
+    assert document["ocr_pages"] == 1
+    assert document["text_layer_pages"] == 0
+
+
+@pytest.mark.anyio
+async def test_ops_import_rejects_unsupported_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    token = await _ops_cookie(monkeypatch)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        client.cookies.set("ops_session", token)
+        response = await client.post(
+            "/v1/ops/knowledge/import",
+            data={"mode": "file", "slug": "bad-file", "title": "不支持"},
+            files={"file": ("notes.docx", b"not-an-image", "application/vnd.openxmlformats")},
+        )
+
+    assert response.status_code == 400
+    assert "仅支持" in str(response.json()["detail"])

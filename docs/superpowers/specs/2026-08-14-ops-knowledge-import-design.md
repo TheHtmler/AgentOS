@@ -79,8 +79,9 @@ Mac mini 上已有面向小程序的 **PaddleOCR HTTP 服务**（本地推理，
 | `json` | 粘贴或 `.json` 文件 | 兼容现有 seed：单文档 `{document, chunks}` 或多文档 `{knowledge_base?, documents[]}`；可只导入其中文档到 `mma-pa` |
 | `text` | 标题 + 正文，或 `.txt`/`.md` | 切块；`source_kind` 默认 `curated_summary` |
 | `url` | URL + slug + 标题（标题可空则用页面标题） | `httpx` 拉取 → `trafilatura` 抽正文 → 切块；`source_url`=URL；失败返回明确错误（不静默空写入） |
-| `file` | multipart；按扩展名分流到 json/text/pdf | 同上 |
+| `file` | multipart；按扩展名分流到 json/text/pdf/image | 同上 |
 | `pdf` | `.pdf` 文件 | 见第三节 |
+| `image` | `.jpg` / `.jpeg` / `.png` / `.webp` | 走本机 PaddleOCR，再按文本切块 |
 
 ### 2.1 API
 

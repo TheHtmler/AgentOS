@@ -154,7 +154,7 @@ export default function KnowledgeImportPage() {
         </Link>
         <PageHeader
           title="导入知识"
-          lead="选择来源写入 MMA/PA 公共知识库。相同标识会覆盖并保留快照。"
+          lead="支持文本、链接、PDF 和图片（jpg/png/webp，走 OCR）。相同标识会覆盖并保留快照。"
         />
       </div>
 
@@ -268,9 +268,12 @@ export default function KnowledgeImportPage() {
               <input
                 type="file"
                 required
-                accept=".txt,.md,.json,.pdf,text/plain,text/markdown,application/json,application/pdf"
+                accept=".txt,.md,.json,.pdf,.jpg,.jpeg,.png,.webp,text/plain,text/markdown,application/json,application/pdf,image/jpeg,image/png,image/webp"
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
               />
+              <span className="field-hint">
+                txt / md / json / pdf / jpg / png / webp。图片会先 OCR 再切块。
+              </span>
             </label>
             <div className="form-grid cols-2">
               <label>

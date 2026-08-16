@@ -1,6 +1,6 @@
 # 实施进度
 
-最后更新：2026-08-16（会话列表支持按用户过滤）
+最后更新：2026-08-16（知识库导入支持图片 OCR）
 
 ## 当前状态
 
@@ -105,7 +105,7 @@
 - Ops 管理台第二期：概览补充用户/会话/待审批与最近会话；知识列表筛选与快照一键恢复（恢复前自动快照当前正文）；智能体详情可发布不可变 `agent_versions`（overlay / 记忆 / 档案 / 工具策略覆盖）；Sessions 只读审计（列表+详情，消息截断）；Skills/MCP 展示工具登记清单（不提供外部 MCP 服务器配置）。
 - 工具调用行 UI：折叠行改为线框 SVG + 英文 `toolName` + 关键参数，副行状态（执行中/已完成/失败/待审批）。
 - 助手回合统一气泡：thinking、工具行与最终文字同处一个 `agentos-message-assistant`；去掉气泡外「处理中/已处理」过程组；HITL 审批条仍在泡外。
-- Ops 知识库多途径导入：JSON / 纯文本 / 链接 / 文件（`.txt` / `.md` / `.json`）/ PDF；统一 ingest → 同 slug 快照覆盖 upsert；PDF 文本层不足时调用本机 PaddleOCR HTTP（`OCR_BASE_URL`）；Ops UI 导入页 + BFF `POST /api/ops/knowledge/import`。
+- Ops 知识库多途径导入：JSON / 纯文本 / 链接 / 文件（`.txt` / `.md` / `.json`）/ PDF / 图片（`.jpg` `.png` `.webp`，OCR 后切块）；统一 ingest → 同 slug 快照覆盖 upsert；PDF 文本层不足或图片导入时调用本机 PaddleOCR HTTP（`OCR_BASE_URL`）；Ops UI 导入页 + BFF `POST /api/ops/knowledge/import`。
 - Ops 控制台视觉与交互抛光：冷灰画布 + 石墨主按钮 + 13px 行列表；页头主操作与分段筛选；保存/启停/恢复用 toast；加载用 skeleton；概览指标可点进对应列表，待审批带 `run_status` 深链。
 - 知识文档 `DELETE /v1/ops/knowledge/documents/{id}`（chunks/snapshots CASCADE）。审核状态 API 仍为 `curated` / `clinically_reviewed` / `withdrawn`，界面改为「待审核 / 已审核 / 已下架」：前两者可被 `knowledge_search` 命中，下架仅排除检索，删除才去掉文档。
 - 知识导入切块改为标题分层 + 硬换行合并 + 900 字打包 + 150 字重叠；PDF 带页码；详情默认展示切片摘要而不再先折叠。
