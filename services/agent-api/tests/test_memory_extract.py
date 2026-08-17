@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import json
 from typing import cast
 from uuid import uuid4
 
@@ -12,6 +13,7 @@ from agent_api.db.memory_store import list_active_memories
 from agent_api.db.models import Agent, User
 from agent_api.memory.extract import (
     ExtractedMemoryPayload,
+    extract_memory_via_ollama,
     parse_extracted_payload,
     schedule_memory_extract,
     upsert_extracted_facts,
@@ -51,6 +53,34 @@ def test_post_complete_scheduler_signatures_match_call_sites() -> None:
     assert "memory_enabled" not in title_params
     assert "memory_enabled" in extract_params
     assert extract_params["memory_enabled"].default is inspect.Parameter.empty
+
+
+@pytest.mark.anyio
+async def test_extract_memory_via_ollama_forces_json_and_strips_think() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '<think>提取档案槽位</think>{"profile":{"sex":"male"},"notes":[]}'
+                            ),
+                        },
+                    },
+                ],
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        payload = await extract_memory_via_ollama("男宝", "已记录", client)
+
+    assert captured["response_format"] == {"type": "json_object"}
+    assert payload.profile == {"sex": "male"}
 
 
 @pytest.mark.anyio

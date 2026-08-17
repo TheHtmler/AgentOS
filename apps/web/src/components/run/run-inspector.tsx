@@ -89,7 +89,25 @@ function RunDetailPanel({ runId }: { runId: string }) {
   useEffect(() => {
     let isCurrent = true;
     let pollTimeoutId: number | null = null;
+    let visibilityHandler: (() => void) | null = null;
     const controller = new AbortController();
+
+    const scheduleNextPoll = () => {
+      if (document.hidden) {
+        // Hidden tabs get no value from live metrics; resume once visible again.
+        visibilityHandler = () => {
+          visibilityHandler = null;
+          if (isCurrent) {
+            void readRun();
+          }
+        };
+        document.addEventListener("visibilitychange", visibilityHandler, { once: true });
+        return;
+      }
+      pollTimeoutId = window.setTimeout(() => {
+        void readRun();
+      }, 750);
+    };
 
     const readRun = async () => {
       try {
@@ -117,9 +135,7 @@ function RunDetailPanel({ runId }: { runId: string }) {
 
         // Only poll while the backend can still change this Run's final metrics.
         if (!isTerminalStatus(payload.status)) {
-          pollTimeoutId = window.setTimeout(() => {
-            void readRun();
-          }, 750);
+          scheduleNextPoll();
         }
       } catch (caughtError: unknown) {
         if (!isCurrent || controller.signal.aborted) {
@@ -138,6 +154,9 @@ function RunDetailPanel({ runId }: { runId: string }) {
 
       if (pollTimeoutId !== null) {
         window.clearTimeout(pollTimeoutId);
+      }
+      if (visibilityHandler !== null) {
+        document.removeEventListener("visibilitychange", visibilityHandler);
       }
     };
   }, [runId]);

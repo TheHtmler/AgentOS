@@ -24,6 +24,7 @@ from agent_api.db.session import session_factory
 logger = logging.getLogger(__name__)
 _inflight: set[UUID] = set()
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
+_THINK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 _WHITESPACE_RE = re.compile(r"\s+")
 
 # Capture height/weight numbers from colloquial Chinese user text.
@@ -37,6 +38,15 @@ _WEIGHT_RE = re.compile(
 )
 _HEIGHT_UNIT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:cm|厘米)", re.IGNORECASE)
 _WEIGHT_UNIT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:kg|公斤)", re.IGNORECASE)
+_SEX_RE = re.compile(r"男宝|女宝|小男孩|小女孩|男孩|女孩|儿子|女儿")
+_DOB_CONTEXT_RE = re.compile(r"出生|生日")
+_DOB_CN_RE = re.compile(r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?")
+_DOB_ISO_RE = re.compile(r"(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})")
+_AGE_YEAR_MONTH_RE = re.compile(r"(\d{1,2})\s*岁\s*(?:零)?(\d{1,2})\s*个月?")
+_AGE_MONTHS_RE = re.compile(r"(\d{1,3})\s*个月")
+# Bare "N个月" is only an age when the turn talks about the child.
+_AGE_CONTEXT_RE = re.compile(r"宝宝|月龄|年龄|孩子|小孩|男宝|女宝")
+_SELF_CONTEXT_RE = re.compile(r"宝宝|我家|我儿|我女|我的孩子|小孩|儿子|女儿")
 
 Attribution = Literal["self", "other", "hypothetical", "unknown"]
 
@@ -83,8 +93,49 @@ def infer_case_fact_key(content: str, tags: list[str]) -> str | None:
     return None
 
 
+def _dob_hint(text: str) -> CaseFactUpdate | None:
+    """Normalize an explicitly stated birth date to ISO; None when ambiguous."""
+
+    if not _DOB_CONTEXT_RE.search(text):
+        return None
+    match = _DOB_CN_RE.search(text) or _DOB_ISO_RE.search(text)
+    if match is None:
+        return None
+    year, month, day = (int(part) for part in match.groups())
+    if not (1 <= month <= 12 and 1 <= day <= 31):
+        return None
+    iso = f"{year:04d}-{month:02d}-{day:02d}"
+    return CaseFactUpdate(
+        key="date_of_birth",
+        content=f"出生日期 {iso}",
+        tags=["出生日期"],
+    )
+
+
+def _age_months_hint(text: str) -> CaseFactUpdate | None:
+    """Age-in-months from "X岁Y个月" or a child-context "N个月"."""
+
+    match = _AGE_YEAR_MONTH_RE.search(text)
+    if match is not None:
+        total = int(match.group(1)) * 12 + int(match.group(2))
+    elif _AGE_CONTEXT_RE.search(text):
+        bare = _AGE_MONTHS_RE.search(text)
+        if bare is None:
+            return None
+        total = int(bare.group(1))
+    else:
+        return None
+    if not 0 < total <= 240:
+        return None
+    return CaseFactUpdate(
+        key="age_months",
+        content=f"月龄 {total} 个月",
+        tags=["月龄"],
+    )
+
+
 def slot_hints_from_user_message(user_message: str) -> list[CaseFactUpdate]:
-    """Deterministic height/weight hints from the user turn (LLM miss safety net)."""
+    """Deterministic profile-slot hints from the user turn (LLM miss safety net)."""
 
     text = user_message.strip()
     if not text:
@@ -117,6 +168,18 @@ def slot_hints_from_user_message(user_message: str) -> list[CaseFactUpdate]:
                 tags=["体重"],
             ),
         )
+
+    sex_match = _SEX_RE.search(text)
+    if sex_match is not None:
+        sex = "女" if "女" in sex_match.group(0) else "男"
+        hints.append(CaseFactUpdate(key="sex", content=f"性别 {sex}", tags=["性别"]))
+
+    dob = _dob_hint(text)
+    if dob is not None:
+        hints.append(dob)
+    age = _age_months_hint(text)
+    if age is not None:
+        hints.append(age)
     return hints
 
 
@@ -127,26 +190,18 @@ def merge_user_slot_hints(
     """Fill missing keyed updates the model omitted but the user clearly stated."""
 
     hints = slot_hints_from_user_message(user_message)
-    if not hints:
-        return payload
-
-    present_keys = {item.key for item in payload.updates if item.key}
     merged = list(payload.updates)
-    for hint in hints:
-        if hint.key and hint.key not in present_keys:
-            merged.append(hint)
-            present_keys.add(hint.key)
+    if hints:
+        present_keys = {item.key for item in merged if item.key}
+        for hint in hints:
+            if hint.key and hint.key not in present_keys:
+                merged.append(hint)
+                present_keys.add(hint.key)
 
-    # Prefer self when the user stated anthropometrics about 宝宝 / 我家孩子.
+    # Prefer self when the user stated facts about 宝宝 / 我家孩子 — applies to
+    # model-extracted updates too, not only regex hints.
     attribution = payload.attribution
-    if (
-        attribution == "unknown"
-        and merged
-        and re.search(
-            r"宝宝|我家|我儿|我女|我的孩子|小孩",
-            user_message,
-        )
-    ):
+    if attribution == "unknown" and merged and _SELF_CONTEXT_RE.search(user_message):
         attribution = "self"
 
     if len(merged) != len(payload.updates) or attribution != payload.attribution:
@@ -157,7 +212,8 @@ def merge_user_slot_hints(
             payload.attribution,
             attribution,
         )
-    return ExtractedCasePayload(attribution=attribution, updates=merged)
+        return ExtractedCasePayload(attribution=attribution, updates=merged)
+    return payload
 
 
 def parse_case_extract_payload(raw: object) -> ExtractedCasePayload:
@@ -257,6 +313,9 @@ async def extract_case_via_ollama(
             ],
             "max_tokens": 768,
             "temperature": 0,
+            # Force valid JSON from the small local model; without this a prose
+            # preamble makes json.loads fail and the turn's facts are silently lost.
+            "response_format": {"type": "json_object"},
         },
         timeout=settings.case_extract_timeout_seconds,
     )
@@ -265,7 +324,8 @@ async def extract_case_via_ollama(
         raw = response.json()["choices"][0]["message"]["content"]
         if not isinstance(raw, str):
             return ExtractedCasePayload()
-        parsed = json.loads(_CODE_FENCE_RE.sub("", raw.strip()))
+        cleaned = _THINK_RE.sub("", raw).strip()
+        parsed = json.loads(_CODE_FENCE_RE.sub("", cleaned))
         return parse_case_extract_payload(parsed)
     except (KeyError, IndexError, TypeError, json.JSONDecodeError):
         logger.warning("case extraction returned invalid JSON")

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 import httpx
@@ -9,7 +10,7 @@ from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.toolsets import AbstractToolset
 
-from agent_api.config import get_settings
+from agent_api.config import Settings, get_settings
 from agent_api.context_budget import make_step_history_processor
 from agent_api.runtime_context import format_runtime_context_pack
 from agent_api.tools.fetch.router import FetchRouter
@@ -17,6 +18,8 @@ from agent_api.tools.policy import PolicyAction
 from agent_api.tools.registry import mounted_tool_names, mounted_tools
 from agent_api.tools.search.router import SearchRouter
 from agent_api.tools.search.tool import AgentDeps
+
+logger = logging.getLogger(__name__)
 
 # Runtime + typing: agent may finish with text or deferred tool approvals.
 AgentOutput = str | DeferredToolRequests
@@ -65,13 +68,26 @@ one short caveat after the deliverable (or omit if already covered).
 - Do not dump raw tool JSON, IDs, or hashes into the user-facing answer. For multi-step
   work, list plain-language stages first; stage labels use business language only.
 
+# Style
+- Sound like a careful professional, not a template. No sycophantic openers
+  ("您说得非常对", "Great question"), no signposting ("我的评估依据是", "let's break this down").
+- No emoji markers (✅ ❗ 🔴), no 【最终结论】/「工具依据」-style canned sections, no
+  horizontal rules, no bold-headed colon list items; bold at most the one or two values
+  that truly decide the answer.
+- Reason in full sentences ("C3 升高提示丙酸代谢负担，左卡尼汀促进其排出，所以对症"),
+  never "→" arrow chains.
+- Cite inline in natural language with the URL after the claim ("GeneReviews 综述指出…").
+  Never name tools, dump source_url / artifact_id values, or append a 工具依据 inventory.
+- Structured tables only where a capability section explicitly requires one; everywhere
+  else prefer short paragraphs plus at most one compact list.
+
 # Output
 - Direct factual Q&A (e.g. current height/weight, when recorded): 1–4 short lines with
   only the asked fields; no preamble, no duplicate Current-as-History, no unsolicited
   extras, no 【重要提示】 blocks.
 - Other Q&A: answer in the first sentence; short list only if it helps; cite 1–2 sources.
-- Analysis: 3–5 sentence executive takeaway, then structured bullets/tables; cite key
-  data points.
+- Analysis: takeaway in the first sentences, then short paragraphs; add a compact list
+  or table only when it genuinely aids comparison, and cite the key data points.
 - Action plan: concrete actions first, then conditions and evidence.
 - Thorough in the work, economical on the page.
 
@@ -136,7 +152,11 @@ KNOWLEDGE_INSTRUCTIONS = """\
 ## Capability: knowledge_search
 For MMA/PA / C3 NBS education, acute decompensation family guidance, diet/monitoring
 education, call knowledge_search first (optional disease_tags: isolated_mma, pa,
-cobalamin_disorder, gene:…). Cite source_url values. Fall back to web_search only when
+cobalamin_disorder, gene:…). The base also holds report-analysis references
+(血尿串联质谱 / 血常规 / 血气 / 饮食蛋白) — search them when interpreting lab reports.
+Build query from short medical keywords (disease name, analyte, report type, e.g.
+"血尿串联质谱 酰基肉碱 C3"), never a full question sentence; put subtypes and gene
+tags in disease_tags instead. Cite source_url values. Fall back to web_search only when
 the curated base is insufficient or the user needs a newer external page.
 When citing a curated hit, include its source_label and version_label when available.
 Treat curated summaries as educational evidence, not individualized prescriptions; if
@@ -163,11 +183,13 @@ REPORT_ANALYSIS_INSTRUCTIONS = """\
 1. **First line = deliverable**：报告类型 + 2–5 条关键发现（异常项或关键数值）。
 2. **指标面板表**：`指标 | 结果 | 参考范围 | 提示`。数值逐字取自附件（图像 / OCR /
    抽字预览）；读不清或缺失的标「待核对」，禁止臆造或估算补齐。
-3. **逐项解读**：每条结论标注依据——「知识库依据」(knowledge_search 命中，给 source_url)
-   或「模型推断」；依据不足就写「现有信息不足以判断」，不要硬填。
+3. **逐项解读**：每条结论说明依据——知识库命中时用自然语言带出（如「GeneReviews
+   综述指出…」并附链接），纯推断就直说「这是我的推断」；依据不足写「现有信息
+   不足以判断」，不要硬填。
 4. 出现急性/危急线索时用一句话建议尽快就医；文末最多一句非诊疗声明
   （如「教育性说明，非诊疗意见」）。
-5. **禁止**以「重要提示 / 我是 AI / 无法替代医生」长段开场；禁止重复结论或邀请式长文。
+5. **禁止**以「重要提示 / 我是 AI / 无法替代医生」长段开场；禁止重复结论或邀请式长文；
+   全文禁止 emoji 标记（✅/❗）和「→」推理链，因果用完整句子说明。
 
 ### Analysis steps
 1. 结合本轮图像与 OCR/抽字预览交叉核对数值；全文较长时调用 read_artifact 分段读取，
@@ -202,6 +224,9 @@ and bound automatically — the user does not manage Cases in the UI.
 - Missing critical Case slots for the task → call case_slot_collect with fields_json
   (array of {key,label,unit?,reason?}); wait for the HITL form. Never invent values and
   never replace the form with a multi-paragraph ask.
+- Values the user already stated this turn (anthropometrics, sex, DOB, age, diagnosis)
+  are known: use them directly and never re-ask the same values via case_slot_collect;
+  clear-ownership facts are archived automatically after the turn.
 - Keep factual answers ultra-short (values + times). Call case_context_read when
   the injected block is insufficient.
 - If facts may belong to someone else or a hypothetical, call case_attribution_confirm
@@ -319,6 +344,32 @@ def create_ollama_http_client() -> httpx.AsyncClient:
         timeout=httpx.Timeout(timeout=180.0, connect=5.0),
         trust_env=False,
     )
+
+
+async def warm_up_ollama_model(
+    http_client: httpx.AsyncClient,
+    settings: Settings,
+) -> None:
+    """Send a throwaway completion so Ollama loads the model before the first real request.
+
+    Ollama only loads model weights into memory on first inference, not on `ollama serve`
+    startup, so without this the first user message pays that load latency. Best-effort:
+    failures are logged, never raised, so a slow/unreachable Ollama can't block startup.
+    """
+
+    try:
+        response = await http_client.post(
+            settings.ollama_base_url.rstrip("/") + "/chat/completions",
+            json={
+                "model": settings.ollama_model,
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 1,
+                "stream": False,
+            },
+        )
+        response.raise_for_status()
+    except Exception:
+        logger.exception("ollama model warm-up request failed; continuing without it")
 
 
 def create_agent(

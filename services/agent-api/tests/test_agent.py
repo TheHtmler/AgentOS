@@ -1,3 +1,6 @@
+import json
+
+import httpx
 import pytest
 from pydantic_ai.messages import ModelRequest, UserPromptPart
 
@@ -7,6 +10,7 @@ from agent_api.agent import (
     create_agent,
     create_ollama_http_client,
     inject_context_snapshot,
+    warm_up_ollama_model,
 )
 from agent_api.config import Settings
 
@@ -59,6 +63,16 @@ def test_platform_instructions_require_tools_before_refusal() -> None:
     assert "paste that data" in SYSTEM_INSTRUCTIONS
     assert "Do not refuse with a long disclaimer" in SYSTEM_INSTRUCTIONS
     assert "reference standards/charts/guidelines" in SEARCH_INSTRUCTIONS
+
+
+def test_platform_instructions_ban_ai_tells() -> None:
+    from agent_api.agent import REPORT_ANALYSIS_INSTRUCTIONS, SYSTEM_INSTRUCTIONS
+
+    assert "# Style" in SYSTEM_INSTRUCTIONS
+    assert "sycophantic" in SYSTEM_INSTRUCTIONS
+    assert "→" in SYSTEM_INSTRUCTIONS  # arrow chains are called out as banned
+    assert "工具依据" in SYSTEM_INSTRUCTIONS  # canned evidence-inventory sections banned
+    assert "✅" in REPORT_ANALYSIS_INSTRUCTIONS  # emoji markers banned in reports too
 
 
 def test_upload_attachment_instructions_key_phrases() -> None:
@@ -187,3 +201,43 @@ async def test_agent_can_be_created() -> None:
         agent = create_agent(http_client)
 
     assert agent is not None
+
+
+@pytest.mark.anyio
+async def test_warm_up_ollama_model_posts_minimal_completion() -> None:
+    settings = Settings.model_validate(
+        {
+            "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
+        },
+    )
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "hi"}}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        await warm_up_ollama_model(http_client, settings)
+
+    assert len(requests) == 1
+    request = requests[0]
+    assert str(request.url) == settings.ollama_base_url.rstrip("/") + "/chat/completions"
+    payload = json.loads(request.content)
+    assert payload["model"] == settings.ollama_model
+    assert payload["max_tokens"] == 1
+
+
+@pytest.mark.anyio
+async def test_warm_up_ollama_model_swallows_errors() -> None:
+    settings = Settings.model_validate(
+        {
+            "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
+        },
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("ollama is not reachable")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        # Must not raise: a slow/unreachable Ollama shouldn't block or crash startup.
+        await warm_up_ollama_model(http_client, settings)

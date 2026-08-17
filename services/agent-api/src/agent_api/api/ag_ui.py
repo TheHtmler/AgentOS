@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
 
-from ag_ui.core import BaseEvent, RunAgentInput, UserMessage
+from ag_ui.core import BaseEvent, CustomEvent, RunAgentInput, UserMessage
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import ValidationError
 from pydantic_ai import ModelMessagesTypeAdapter
@@ -62,6 +62,10 @@ from agent_api.uploads.prompt import enrich_ag_ui_user_message
 from agent_api.uploads.vision import load_upload_vision_parts
 
 logger = logging.getLogger(__name__)
+
+# Keepalive cadence for the AG-UI SSE stream; comfortably below the 60s idle
+# timeout typical of nginx (proxy_read_timeout) and frp tunnels.
+_SSE_KEEPALIVE_SECONDS = 15.0
 
 router = APIRouter(prefix="/v1/ag-ui", tags=["ag-ui"])
 
@@ -459,7 +463,20 @@ async def stream_ag_ui_run(
     async def stream_events() -> AsyncIterator[BaseEvent]:
         try:
             while True:
-                event = await event_queue.get()
+                try:
+                    event = await asyncio.wait_for(
+                        event_queue.get(),
+                        timeout=_SSE_KEEPALIVE_SECONDS,
+                    )
+                except TimeoutError:
+                    # Long model/tool silences emit zero bytes; without a keepalive,
+                    # proxies (frp / nginx proxy_read_timeout) kill the idle stream and
+                    # the client falls back to polling GET /runs/{id}.
+                    if await request.is_disconnected():
+                        client_disconnected.set()
+                        return
+                    yield CustomEvent(name="agentos_keepalive", value=None)
+                    continue
                 if event is None:
                     return
 

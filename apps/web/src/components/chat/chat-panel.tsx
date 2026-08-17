@@ -203,6 +203,10 @@ const AUTO_SCROLL_THRESHOLD = 96;
 const SHOW_SCROLL_TO_LATEST_THRESHOLD = 180;
 const MAX_COMPOSER_HEIGHT = 200;
 const MAX_UPLOAD_FILES = 3;
+/** Stream-loss recovery poll: 1s → 2s → 5s, then capped at 10s. */
+const RECOVERY_POLL_DELAYS_MS = [1_000, 2_000, 5_000] as const;
+const RECOVERY_POLL_MAX_DELAY_MS = 10_000;
+const RECOVERY_POLL_MAX_ATTEMPTS = 60;
 const UPLOAD_ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp";
 const SUPPORTED_UPLOAD_EXTENSIONS = new Set(["pdf", "png", "jpg", "jpeg", "webp"]);
 
@@ -706,7 +710,7 @@ export function ChatPanel({
       lastRunIdRef.current = runId;
 
       try {
-        for (let attempt = 0; attempt < 180; attempt += 1) {
+        for (let attempt = 0; attempt < RECOVERY_POLL_MAX_ATTEMPTS; attempt += 1) {
           if (cancellationRequestedRef.current) {
             break;
           }
@@ -751,7 +755,8 @@ export function ChatPanel({
             return;
           }
 
-          await new Promise<void>((resolve) => window.setTimeout(resolve, 1_000));
+          const delay = RECOVERY_POLL_DELAYS_MS[attempt] ?? RECOVERY_POLL_MAX_DELAY_MS;
+          await new Promise<void>((resolve) => window.setTimeout(resolve, delay));
         }
 
         // Timed out waiting; leave a soft message only if still active.

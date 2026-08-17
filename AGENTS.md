@@ -13,7 +13,7 @@
   - `src/agent_api/db/` — SQLAlchemy 模型与 repository;`migrations/` — Alembic。
 - `infra/` — Ollama Modelfile、launchd plist、frp/nginx 配置。
 - `docs/` — 架构事实来源，索引在 `docs/README.md`;`docs/16` 是 Agent 运行时建成态架构。
-- `scripts/macmini-deploy.sh` — Mac mini 部署（pull → sync → migrate → build → kickstart)。
+- `scripts/macmini-deploy.sh` — Mac mini 部署（pull → sync → migrate → seed agents/核心知识库 → build → kickstart)。核心知识文档仅在缺失时播种，避免覆盖 Ops 侧编辑；`seed/knowledge/mma_pa_chunks.json` 变更后需手动重跑 `scripts/seed_knowledge.py`。
 
 ## 常用命令
 

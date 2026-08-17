@@ -27,6 +27,7 @@ from agent_api.memory.profile import coerce_profile_dict, normalize_profile_valu
 logger = logging.getLogger(__name__)
 _inflight: set[UUID] = set()
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
+_THINK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 _WHITESPACE_RE = re.compile(r"\s+")
 
 ExtractMemoryFn = Callable[
@@ -130,6 +131,9 @@ async def extract_memory_via_ollama(
             ],
             "max_tokens": 768,
             "temperature": 0,
+            # Force valid JSON from the small local model; without this a prose
+            # preamble makes json.loads fail and the turn's facts are silently lost.
+            "response_format": {"type": "json_object"},
         },
         timeout=settings.memory_extract_timeout_seconds,
     )
@@ -138,7 +142,8 @@ async def extract_memory_via_ollama(
         raw = response.json()["choices"][0]["message"]["content"]
         if not isinstance(raw, str):
             return ExtractedMemoryPayload()
-        parsed = json.loads(_CODE_FENCE_RE.sub("", raw.strip()))
+        cleaned = _THINK_RE.sub("", raw).strip()
+        parsed = json.loads(_CODE_FENCE_RE.sub("", cleaned))
         return parse_extracted_payload(parsed)
     except (KeyError, IndexError, TypeError, json.JSONDecodeError):
         logger.warning("memory extraction returned invalid JSON")

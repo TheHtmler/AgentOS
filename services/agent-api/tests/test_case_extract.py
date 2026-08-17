@@ -1,5 +1,7 @@
+import json
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,7 @@ from agent_api.case.extract import (
     ExtractedCasePayload,
     apply_attribution_policy,
     apply_case_extract,
+    extract_case_via_ollama,
     infer_case_fact_key,
     merge_user_slot_hints,
     parse_case_extract_payload,
@@ -74,6 +77,70 @@ def test_parse_and_policy_branches() -> None:
 
     empty = ExtractedCasePayload(attribution="self", updates=[])
     assert apply_attribution_policy(empty) == "skip"
+
+
+def test_slot_hints_cover_sex_dob_and_age() -> None:
+    hints = {
+        item.key: item.content
+        for item in slot_hints_from_user_message("男宝，2024年3月5日出生，现在29个月啦")
+    }
+    assert hints["sex"] == "性别 男"
+    assert hints["date_of_birth"] == "出生日期 2024-03-05"
+    assert hints["age_months"] == "月龄 29 个月"
+
+    girl = {item.key: item.content for item in slot_hints_from_user_message("我家小女孩2岁5个月")}
+    assert girl["sex"] == "性别 女"
+    assert girl["age_months"] == "月龄 29 个月"
+
+    iso = {item.key: item.content for item in slot_hints_from_user_message("宝宝生日 2024-3-5")}
+    assert iso["date_of_birth"] == "出生日期 2024-03-05"
+
+
+def test_slot_hints_ignore_non_age_months_and_contextless_dates() -> None:
+    assert slot_hints_from_user_message("3个月后复查") == []
+    hints = slot_hints_from_user_message("2024年3月5日复查")
+    assert all(item.key != "date_of_birth" for item in hints)
+
+
+def test_self_context_upgrades_model_updates_without_regex_hints() -> None:
+    payload = ExtractedCasePayload(
+        attribution="unknown",
+        updates=[CaseFactUpdate(key=None, content="对花生过敏", tags=["过敏"])],
+    )
+    merged = merge_user_slot_hints("宝宝对花生过敏怎么办", payload)
+    assert merged.attribution == "self"
+    assert merged.updates == payload.updates
+
+
+@pytest.mark.anyio
+async def test_extract_case_via_ollama_forces_json_and_strips_think() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                "<think>用户在说自家宝宝</think>"
+                                '{"attribution":"self","updates":'
+                                '[{"key":"sex","content":"性别 男","tags":["性别"]}]}'
+                            ),
+                        },
+                    },
+                ],
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        payload = await extract_case_via_ollama("男宝", "好的", client)
+
+    assert captured["response_format"] == {"type": "json_object"}
+    assert payload.attribution == "self"
+    assert payload.updates[0].key == "sex"
 
 
 @pytest.mark.anyio

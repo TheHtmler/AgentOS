@@ -10,7 +10,12 @@ from fastapi import FastAPI, Request
 from pydantic_ai import Agent
 from pydantic_ai.toolsets import AbstractToolset
 
-from agent_api.agent import AgentOutput, create_agent, create_ollama_http_client
+from agent_api.agent import (
+    AgentOutput,
+    create_agent,
+    create_ollama_http_client,
+    warm_up_ollama_model,
+)
 from agent_api.config import get_settings
 from agent_api.db.session import close_database
 from agent_api.tools.fetch.router import FetchRouter, build_fetch_router
@@ -118,6 +123,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     settings = get_settings()
     http_client = create_ollama_http_client()
+    # Fire-and-forget: starts loading the model into Ollama immediately so it's warm
+    # by the time the first real user request arrives, without delaying app startup.
+    warmup_task = asyncio.create_task(
+        warm_up_ollama_model(http_client, settings),
+        name="ollama-model-warmup",
+    )
     search_http_client = httpx.AsyncClient(
         timeout=httpx.Timeout(timeout=settings.search_timeout_seconds, connect=5.0),
         # Keep search traffic off inherited shell proxies, same policy as Ollama.
@@ -196,7 +207,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             finally:
                 stop_hitl_timeout.set()
                 hitl_timeout_task.cancel()
-                await asyncio.gather(hitl_timeout_task, return_exceptions=True)
+                if not warmup_task.done():
+                    warmup_task.cancel()
+                await asyncio.gather(
+                    hitl_timeout_task, warmup_task, return_exceptions=True
+                )
                 await runtime.stop_background_runs()
     finally:
         try:
