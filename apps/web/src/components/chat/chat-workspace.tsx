@@ -149,6 +149,7 @@ export function ChatWorkspace({
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadListVersion, setThreadListVersion] = useState(0);
   const [isRuntimeRailOpen, setIsRuntimeRailOpen] = useState(true);
+  const [isDesktopViewport, setIsDesktopViewport] = useState(true);
   const [slots, setSlots] = useState<ChatSlot[]>([{ key: "boot", threadId: null }]);
   const [visibleSlotKey, setVisibleSlotKey] = useState("boot");
   const [streamingBySlotKey, setStreamingBySlotKey] = useState<Record<string, boolean>>({});
@@ -297,6 +298,16 @@ export function ChatWorkspace({
       setIsMobileMenuOpen(false);
       setIsMobileContextOpen(true);
     }
+  }, []);
+
+  // Keep RuntimeContext (Run inspector, health checks) unmounted whenever the
+  // rail is not actually visible — CSS-hidden panels would keep polling otherwise.
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const syncViewport = () => setIsDesktopViewport(media.matches);
+    syncViewport();
+    media.addEventListener("change", syncViewport);
+    return () => media.removeEventListener("change", syncViewport);
   }, []);
 
   const focusSlot = useCallback((slotKey: string, threadId: string | null) => {
@@ -610,10 +621,12 @@ export function ChatWorkspace({
             isMobileContextOpen ? "agentos-runtime-rail-mobile-open" : ""
           } ${isRuntimeRailOpen ? "" : "agentos-runtime-rail-collapsed"}`}
         >
-          <RuntimeContext
-            activeRunId={activeRunId}
-            onClose={isMobileContextOpen ? () => setIsMobileContextOpen(false) : undefined}
-          />
+          {(isDesktopViewport ? isRuntimeRailOpen : isMobileContextOpen) ? (
+            <RuntimeContext
+              activeRunId={activeRunId}
+              onClose={isMobileContextOpen ? () => setIsMobileContextOpen(false) : undefined}
+            />
+          ) : null}
         </aside>
       </div>
 

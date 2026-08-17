@@ -106,7 +106,7 @@ function RunDetailPanel({ runId }: { runId: string }) {
       }
       pollTimeoutId = window.setTimeout(() => {
         void readRun();
-      }, 750);
+      }, 2_000);
     };
 
     const readRun = async () => {
