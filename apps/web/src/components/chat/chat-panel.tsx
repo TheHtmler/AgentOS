@@ -188,7 +188,6 @@ type ChatPanelProps = {
   onAwaitingApprovalChanged?: (isAwaiting: boolean) => void;
   onThreadChanged: (threadId: string | null, agentId?: string) => void;
   onRunFinalized: () => void;
-  onOpenContext?: () => void;
 };
 
 const STARTER_PROMPTS = [
@@ -530,7 +529,6 @@ export function ChatPanel({
   onAwaitingApprovalChanged,
   onThreadChanged,
   onRunFinalized,
-  onOpenContext,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -1562,17 +1560,6 @@ export function ChatPanel({
         </div>
 
         <div className="agentos-chat-header-actions">
-          {onOpenContext ? (
-            <button
-              type="button"
-              onClick={onOpenContext}
-              className="agentos-context-toggle"
-              aria-label="打开上下文"
-            >
-              <span aria-hidden="true">◫</span>
-              上下文
-            </button>
-          ) : null}
           <button
             type="button"
             onClick={startNewConversation}

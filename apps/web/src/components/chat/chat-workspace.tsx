@@ -6,8 +6,6 @@ import { InvitationManager } from "@/components/auth/invitation-manager";
 import { AgentOsLogo } from "@/components/brand/agentos-logo";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ConversationList } from "@/components/chat/conversation-list";
-import { RunInspector } from "@/components/run/run-inspector";
-import { HealthStatus } from "@/components/system/health-status";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { parseAgentSummaries, type AgentSummary } from "@/lib/agents";
 import type { Conversation } from "@/components/chat/conversation-list";
@@ -39,70 +37,14 @@ function isUuid(value: string): boolean {
   );
 }
 
-const runtimeItems = [
-  { label: "执行入口", value: "FastAPI Agent API" },
-  { label: "模型路由", value: "Ollama · agentos-qwen3vl:16k" },
-  { label: "会话存储", value: "PostgreSQL Thread" },
-];
-
-function RuntimeContext({
-  activeRunId,
-  onClose,
-}: {
-  activeRunId: string | null;
-  onClose?: () => void;
-}) {
-  return (
-    <div className="agentos-runtime-content">
-      <header className="agentos-context-panel-heading">
-        <div>
-          <p className="agentos-context-kicker">Workspace context</p>
-          <h2>本轮上下文</h2>
-          <p>检查当前会话的运行状态与连接。</p>
-        </div>
-        <div className="agentos-context-heading-actions">
-          <span className="agentos-context-live">Live</span>
-          {onClose ? (
-            <button
-              type="button"
-              onClick={onClose}
-              className="agentos-context-close"
-              aria-label="关闭上下文"
-            >
-              关闭
-            </button>
-          ) : null}
-        </div>
-      </header>
-
-      <div className="agentos-context-sections">
-        <HealthStatus />
-        <RunInspector runId={activeRunId} />
-
-        <section className="agentos-context-card">
-          <div className="agentos-context-card-heading">
-            <p>运行环境</p>
-            <span aria-hidden="true">···</span>
-          </div>
-          <dl>
-            {runtimeItems.map((item) => (
-              <div key={item.label} className="agentos-runtime-item">
-                <dt>{item.label}</dt>
-                <dd>{item.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      </div>
-    </div>
-  );
-}
-
 const MAX_IDLE_SLOTS = 8;
 
 function createSlotKey(): string {
   return crypto.randomUUID();
 }
+
+/** ChatPanel still reports run starts; the workspace no longer tracks them. */
+function ignoreRunStarted() {}
 
 function setThreadInUrl(threadId: string) {
   const url = new URL(window.location.href);
@@ -140,36 +82,29 @@ export function ChatWorkspace({
   onLogout,
 }: ChatWorkspaceProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isMobileContextOpen, setIsMobileContextOpen] = useState(false);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [agentLoadError, setAgentLoadError] = useState<string | null>(null);
   const [agentLoadAttempt, setAgentLoadAttempt] = useState(0);
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadListVersion, setThreadListVersion] = useState(0);
-  const [isRuntimeRailOpen, setIsRuntimeRailOpen] = useState(true);
-  const [isDesktopViewport, setIsDesktopViewport] = useState(true);
   const [slots, setSlots] = useState<ChatSlot[]>([{ key: "boot", threadId: null }]);
   const [visibleSlotKey, setVisibleSlotKey] = useState("boot");
   const [streamingBySlotKey, setStreamingBySlotKey] = useState<Record<string, boolean>>({});
   const [awaitingApprovalBySlotKey, setAwaitingApprovalBySlotKey] = useState<
     Record<string, boolean>
   >({});
-  const [runIdBySlotKey, setRunIdBySlotKey] = useState<Record<string, string | null>>({});
   const [hasHydratedFromUrl, setHasHydratedFromUrl] = useState(false);
 
   const streamingBySlotKeyRef = useRef(streamingBySlotKey);
-  const runIdBySlotKeyRef = useRef(runIdBySlotKey);
   const slotsRef = useRef(slots);
   const visibleSlotKeyRef = useRef(visibleSlotKey);
 
   useEffect(() => {
     streamingBySlotKeyRef.current = streamingBySlotKey;
-    runIdBySlotKeyRef.current = runIdBySlotKey;
     slotsRef.current = slots;
     visibleSlotKeyRef.current = visibleSlotKey;
-  }, [runIdBySlotKey, slots, streamingBySlotKey, visibleSlotKey]);
+  }, [slots, streamingBySlotKey, visibleSlotKey]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -266,7 +201,7 @@ export function ChatWorkspace({
   }, [hasHydratedFromUrl]);
 
   useEffect(() => {
-    if (!isMobileMenuOpen && !isMobileContextOpen) {
+    if (!isMobileMenuOpen) {
       return;
     }
 
@@ -279,7 +214,6 @@ export function ChatWorkspace({
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsMobileMenuOpen(false);
-        setIsMobileContextOpen(false);
       }
     };
 
@@ -290,32 +224,12 @@ export function ChatWorkspace({
       document.documentElement.style.overflow = previousHtmlOverflow;
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [isMobileContextOpen, isMobileMenuOpen]);
-
-  const openRuntimeContext = useCallback(() => {
-    setIsRuntimeRailOpen(true);
-    if (window.matchMedia("(max-width: 1023px)").matches) {
-      setIsMobileMenuOpen(false);
-      setIsMobileContextOpen(true);
-    }
-  }, []);
-
-  // Keep RuntimeContext (Run inspector, health checks) unmounted whenever the
-  // rail is not actually visible — CSS-hidden panels would keep polling otherwise.
-  useEffect(() => {
-    const media = window.matchMedia("(min-width: 1024px)");
-    const syncViewport = () => setIsDesktopViewport(media.matches);
-    syncViewport();
-    media.addEventListener("change", syncViewport);
-    return () => media.removeEventListener("change", syncViewport);
-  }, []);
+  }, [isMobileMenuOpen]);
 
   const focusSlot = useCallback((slotKey: string, threadId: string | null) => {
     setVisibleSlotKey(slotKey);
     setActiveThreadId(threadId);
-    setActiveRunId(runIdBySlotKeyRef.current[slotKey] ?? null);
     setIsMobileMenuOpen(false);
-    setIsMobileContextOpen(false);
 
     if (threadId === null) {
       clearThreadFromUrl();
@@ -392,7 +306,6 @@ export function ChatWorkspace({
         setActiveThreadId(threadId);
 
         if (threadId === null) {
-          setActiveRunId(null);
           clearThreadFromUrl();
         } else {
           setThreadInUrl(threadId);
@@ -403,14 +316,6 @@ export function ChatWorkspace({
     },
     [],
   );
-
-  const handleSlotRunStarted = useCallback((slotKey: string, runId: string) => {
-    setRunIdBySlotKey((current) => ({ ...current, [slotKey]: runId }));
-
-    if (slotKey === visibleSlotKeyRef.current) {
-      setActiveRunId(runId);
-    }
-  }, []);
 
   const handleSlotStreamingChanged = useCallback((slotKey: string, isStreaming: boolean) => {
     setStreamingBySlotKey((current) => {
@@ -463,14 +368,6 @@ export function ChatWorkspace({
         return next;
       });
 
-      setRunIdBySlotKey((current) => {
-        const next = { ...current };
-        for (const key of deletedKeys) {
-          delete next[key];
-        }
-        return next;
-      });
-
       if (!deletedVisible) {
         setSlots(remaining.length > 0 ? remaining : [{ key: createSlotKey(), threadId: null }]);
         return;
@@ -500,10 +397,7 @@ export function ChatWorkspace({
         <div className="agentos-topbar-inner">
           <button
             type="button"
-            onClick={() => {
-              setIsMobileContextOpen(false);
-              setIsMobileMenuOpen(true);
-            }}
+            onClick={() => setIsMobileMenuOpen(true)}
             className="agentos-mobile-menu-toggle lg:hidden"
             aria-label="打开主菜单"
             aria-expanded={isMobileMenuOpen}
@@ -516,17 +410,6 @@ export function ChatWorkspace({
           <AgentOsLogo subtitle="personal workspace" />
 
           <div className="ml-auto hidden items-center gap-3 lg:flex">
-            <button
-              type="button"
-              onClick={() => setIsRuntimeRailOpen((current) => !current)}
-              aria-pressed={isRuntimeRailOpen}
-              className="agentos-header-action"
-            >
-              <span className="agentos-header-action-icon" aria-hidden="true">
-                ◫
-              </span>
-              {isRuntimeRailOpen ? "收起检视" : "运行检视"}
-            </button>
             <ThemeToggle />
             <span className="agentos-runtime-tag">Local runtime · Ready</span>
             <p className="max-w-48 truncate text-sm text-zinc-600" title={userEmail}>
@@ -544,26 +427,13 @@ export function ChatWorkspace({
           </div>
 
           <div className="ml-auto flex items-center gap-2 lg:hidden">
-            <button
-              type="button"
-              onClick={openRuntimeContext}
-              className="agentos-mobile-context-toggle"
-              aria-label="打开上下文"
-              aria-expanded={isMobileContextOpen}
-            >
-              ◫
-            </button>
             <ThemeToggle compact />
             <span className="agentos-runtime-tag">Ready</span>
           </div>
         </div>
       </header>
 
-      <div
-        className={`agentos-workspace ${
-          isRuntimeRailOpen ? "" : "agentos-workspace-runtime-collapsed"
-        }`}
-      >
+      <div className="agentos-workspace">
         <aside className="agentos-conversation-rail hidden min-h-0 lg:flex lg:flex-col">
           <ConversationList
             activeThreadId={activeThreadId}
@@ -597,7 +467,7 @@ export function ChatWorkspace({
                       isActive={isActive}
                       onRetryAgentLoad={retryAgentLoad}
                       onNewConversation={handleNewConversation}
-                      onRunStarted={(runId) => handleSlotRunStarted(slot.key, runId)}
+                      onRunStarted={ignoreRunStarted}
                       onStreamingChanged={(isStreaming) =>
                         handleSlotStreamingChanged(slot.key, isStreaming)
                       }
@@ -608,26 +478,12 @@ export function ChatWorkspace({
                         handleSlotThreadChanged(slot.key, threadId, agentId)
                       }
                       onRunFinalized={handleRunFinalized}
-                      onOpenContext={openRuntimeContext}
                     />
                   </div>
                 );
               })
             : null}
         </section>
-
-        <aside
-          className={`agentos-runtime-rail hidden min-h-0 lg:flex lg:flex-col ${
-            isMobileContextOpen ? "agentos-runtime-rail-mobile-open" : ""
-          } ${isRuntimeRailOpen ? "" : "agentos-runtime-rail-collapsed"}`}
-        >
-          {(isDesktopViewport ? isRuntimeRailOpen : isMobileContextOpen) ? (
-            <RuntimeContext
-              activeRunId={activeRunId}
-              onClose={isMobileContextOpen ? () => setIsMobileContextOpen(false) : undefined}
-            />
-          ) : null}
-        </aside>
       </div>
 
       {isMobileMenuOpen ? (
@@ -692,17 +548,6 @@ export function ChatWorkspace({
               </div>
             </footer>
           </aside>
-        </div>
-      ) : null}
-
-      {isMobileContextOpen ? (
-        <div className="agentos-mobile-context-menu lg:hidden">
-          <button
-            type="button"
-            className="agentos-mobile-menu-backdrop"
-            onClick={() => setIsMobileContextOpen(false)}
-            aria-label="关闭上下文"
-          />
         </div>
       ) : null}
     </>
