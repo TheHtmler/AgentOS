@@ -388,13 +388,23 @@ async def upsert_case_fact(
 
 def apply_attribution_policy(
     payload: ExtractedCasePayload,
+    *,
+    already_approved: bool = False,
 ) -> Literal["confirm", "propose", "skip"]:
-    """Map attribution to write action (pure; used by tests and apply path)."""
+    """Map attribution to write action (pure; used by tests and apply path).
+
+    ``already_approved`` must only be true when a human already approved this
+    exact write via HITL (``case_attribution_confirm``). The unsupervised
+    background extractor (``schedule_case_extract``) must never pass true,
+    even for attribution=="self" — a model guess is not a confirmation.
+    """
 
     if not payload.updates:
         return "skip"
     if payload.attribution == "self":
-        return "confirm"
+        # Approved writes land as confirmed; unsupervised self-attribution
+        # guesses are proposed like "unknown" until a human confirms them.
+        return "confirm" if already_approved else "propose"
     if payload.attribution == "unknown":
         # Post-run extract cannot reopen HITL on a completed Run; store proposed
         # for REST / next-turn confirmation. In-run model may still call
@@ -412,12 +422,13 @@ async def apply_case_extract(
     payload: ExtractedCasePayload,
     source_thread_id: UUID | None,
     source_run_id: UUID | None,
+    already_approved: bool = False,
 ) -> int:
     """Apply attribution policy and persist updates. Returns rows written."""
 
     if not await user_can_write_case(session, user_id=user_id, case_id=case_id):
         return 0
-    action = apply_attribution_policy(payload)
+    action = apply_attribution_policy(payload, already_approved=already_approved)
     if action == "skip":
         return 0
     status = "confirmed" if action == "confirm" else "proposed"

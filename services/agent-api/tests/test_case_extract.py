@@ -53,7 +53,10 @@ def test_parse_and_policy_branches() -> None:
             "updates": [{"key": "height_cm", "content": "身高 90 cm", "tags": ["身高"]}],
         },
     )
-    assert apply_attribution_policy(self_payload) == "confirm"
+    # Unsupervised extraction never auto-confirms, even for attribution=="self" —
+    # only an explicit HITL approval (already_approved=True) may confirm it.
+    assert apply_attribution_policy(self_payload) == "propose"
+    assert apply_attribution_policy(self_payload, already_approved=True) == "confirm"
 
     other = parse_case_extract_payload(
         {
@@ -144,7 +147,11 @@ async def test_extract_case_via_ollama_forces_json_and_strips_think() -> None:
 
 
 @pytest.mark.anyio
-async def test_apply_self_confirms_and_other_skips(database_session: AsyncSession) -> None:
+async def test_unsupervised_self_proposes_and_other_skips(
+    database_session: AsyncSession,
+) -> None:
+    """Background extraction (no HITL) must never auto-confirm, even for self."""
+
     user = User(email=f"case-extract-{uuid4().hex}@example.com", status="active")
     database_session.add(user)
     await database_session.flush()
@@ -183,6 +190,56 @@ async def test_apply_self_confirms_and_other_skips(database_session: AsyncSessio
         source_run_id=None,
     )
     assert skipped == 0
+    await database_session.flush()
+
+    assert (
+        await database_session.scalar(
+            select(CaseFact).where(
+                CaseFact.case_id == case_id,
+                CaseFact.status == "confirmed",
+            ),
+        )
+    ) is None
+    proposed = list(
+        await database_session.scalars(
+            select(CaseFact).where(
+                CaseFact.case_id == case_id,
+                CaseFact.status == "proposed",
+            ),
+        ),
+    )
+    assert len(proposed) == 1
+    assert "91" in proposed[0].content
+
+
+@pytest.mark.anyio
+async def test_approved_self_confirms(database_session: AsyncSession) -> None:
+    """The HITL-approved path (case_attribution_confirm) still writes confirmed."""
+
+    user = User(email=f"case-extract-{uuid4().hex}@example.com", status="active")
+    database_session.add(user)
+    await database_session.flush()
+    case_id = await ensure_default_case(
+        database_session,
+        user_id=user.id,
+        agent_id=IMD_AGENT_ID,
+    )
+
+    written = await apply_case_extract(
+        database_session,
+        user_id=user.id,
+        case_id=case_id,
+        payload=ExtractedCasePayload(
+            attribution="self",
+            updates=[
+                CaseFactUpdate(key="height_cm", content="身高 91 cm", tags=["身高"]),
+            ],
+        ),
+        source_thread_id=None,
+        source_run_id=None,
+        already_approved=True,
+    )
+    assert written == 1
     await database_session.flush()
 
     facts = list(
@@ -253,6 +310,7 @@ async def test_merge_fills_missing_weight_then_confirms(database_session: AsyncS
         payload=payload,
         source_thread_id=None,
         source_run_id=None,
+        already_approved=True,
     )
     assert written == 2
     await database_session.flush()
@@ -292,6 +350,7 @@ async def test_height_update_preserves_weight(database_session: AsyncSession) ->
         ),
         source_thread_id=None,
         source_run_id=None,
+        already_approved=True,
     )
     await apply_case_extract(
         database_session,
@@ -305,6 +364,7 @@ async def test_height_update_preserves_weight(database_session: AsyncSession) ->
         ),
         source_thread_id=None,
         source_run_id=None,
+        already_approved=True,
     )
     await database_session.flush()
 

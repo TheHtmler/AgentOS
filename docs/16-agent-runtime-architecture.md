@@ -44,7 +44,7 @@
 - 注册表（`tools/registry.py`）按 settings + 策略覆盖 + Case 绑定状态计算挂载集合；`deny`/`ask` 策略两级（环境变量 + Agent 版本覆盖）。
 - 外部能力走 provider 路由：`web_search`(Tavily→DuckDuckGo)、`fetch_url`(Firecrawl→local)，降级对内透明。
 - 超长结果外溢：`fetch_url`/上传文本持久化为 Artifact，模型只见预览 + 用 `read_artifact` 分页（等价 harness 的 spill 模式）。
-- Case 写入一律经 HITL(`case_slot_collect` 表单 / `case_attribution_confirm`)，禁止静默覆盖档案。
+- Case 写入一律经 HITL(`case_slot_collect` 表单 / `case_attribution_confirm`)，禁止静默覆盖档案。`case/extract.py::apply_attribution_policy` 的 `already_approved` 参数是这条约束的强制点：只有真正走过 HITL 审批的调用（`case_attribution_confirm`）才能传 `already_approved=True` 写 `confirmed`；后台无监督抽取（`schedule_case_extract`，每轮对话后自动调度）即使判定 `attribution=="self"` 也只写 `proposed`，不能绕过审批。
 - MCP(stdio）默认关闭，开启后按 allowlist + `mcp_` 前缀挂载。
 
 ## 持久化、回放与 HITL
@@ -71,5 +71,5 @@
 
 - `step budget trim` / `dropped oldest run` 日志高频 → 先升 `num_ctx` 24576(16GB 需 `iogpu.wired_limit_mb=12288`，步骤见 [15-model-upgrade-qwen3-vl.md](15-model-upgrade-qwen3-vl.md))，再考虑摘要压缩。
 - 语音输入 → ASR 旁路服务（whisper.cpp / FunASR)，复用 PaddleOCR 的 sidecar 模式，不换模型。
-- prompt/模型改动验收 → 把 `eval/runner.py` golden suite 接进每次指令改动的回归。
-- 观测加深 → run 已有 token 用量；下一步是 per-step trace(OpenTelemetry，基线已列）。
+- prompt/模型改动验收 →（已落地)`scripts/eval_agent_scenarios.py` + `eval/scenarios/*.json`：跑真实 Ollama 模型验证工具选择/HITL 触发/不虚构三类场景，改 `agent.py`/工具描述/`SYSTEM_INSTRUCTIONS` 前后手动跑一次（见 AGENTS.md）；不进 pytest/门禁（依赖真实模型，非确定性）。`eval/runner.py` 仍是纯函数级 golden suite（仅覆盖 `calculate`/`time_diff`），两者不是同一层。
+- 观测加深 →（部分落地)`run_events` 新增 `tool_result.duration_ms`（六个工具模块统一打点）与 `model_step`（整个 run 的墙钟耗时 + token 用量，`api/chat.py::persist_model_step_event`，best-effort 不影响主流程）；Ops `GET /v1/ops/sessions/{thread_id}/runs/{run_id}/events` + 会话详情页「查看事件」可读时间线。是整轮粗粒度，不是 tool-loop 内逐次模型请求的 per-step trace——AG-UI adapter（`pydantic_ai.ui.ag_ui.AGUIAdapter`）目前不暴露那个边界；仍未引入 OpenTelemetry（单机单进程，无 collector）。

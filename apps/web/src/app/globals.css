@@ -1253,6 +1253,73 @@ body {
   cursor: not-allowed;
 }
 
+.agentos-pending-facts-banner {
+  margin: 0.75rem 1rem 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel-solid));
+}
+
+.agentos-pending-facts-summary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: none;
+}
+
+.agentos-pending-facts-toggle {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.agentos-pending-facts-list {
+  margin: 0;
+  padding: 0 0.85rem 0.75rem;
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.agentos-pending-facts-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.8rem;
+}
+
+.agentos-pending-facts-content {
+  color: var(--text);
+}
+
+.agentos-pending-facts-confirm {
+  min-width: 4rem;
+  min-height: 1.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent);
+  color: var(--accent-contrast, #04120f);
+  font-size: 0.75rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.agentos-pending-facts-confirm:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* ── Invite dialog (portaled to body; never inherit drawer flex quirks) ── */
 .agentos-invite-trigger {
   width: 100%;

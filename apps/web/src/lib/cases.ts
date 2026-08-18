@@ -33,3 +33,38 @@ export function parseCaseSummaries(value: unknown): CaseSummary[] | null {
   }
   return cases;
 }
+
+export type CaseFact = {
+  id: string;
+  key: string | null;
+  content: string;
+  tags: string[];
+  status: string;
+};
+
+function isCaseFact(value: unknown): value is CaseFact {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    (typeof value.key === "string" || value.key === null) &&
+    typeof value.content === "string" &&
+    Array.isArray(value.tags) &&
+    value.tags.every((tag) => typeof tag === "string") &&
+    typeof value.status === "string"
+  );
+}
+
+export function parseCaseFacts(value: unknown): CaseFact[] | null {
+  if (!isRecord(value) || !Array.isArray(value.facts)) {
+    return null;
+  }
+
+  const facts: CaseFact[] = [];
+  for (const item of value.facts) {
+    if (!isCaseFact(item)) {
+      return null;
+    }
+    facts.push(item);
+  }
+  return facts;
+}

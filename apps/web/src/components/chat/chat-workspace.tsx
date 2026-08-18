@@ -6,6 +6,7 @@ import { InvitationManager } from "@/components/auth/invitation-manager";
 import { AgentOsLogo } from "@/components/brand/agentos-logo";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ConversationList } from "@/components/chat/conversation-list";
+import { PendingCaseFactsBanner } from "@/components/chat/pending-case-facts-banner";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { parseAgentSummaries, type AgentSummary } from "@/lib/agents";
 import type { Conversation } from "@/components/chat/conversation-list";
@@ -450,6 +451,13 @@ export function ChatWorkspace({
         </aside>
 
         <section className="agentos-main-column min-h-0">
+          <PendingCaseFactsBanner
+            agentId={selectedAgentId}
+            caseEnabled={
+              agents.find((agent) => agent.id === selectedAgentId)?.case_enabled ?? false
+            }
+            refreshKey={threadListVersion}
+          />
           {hasHydratedFromUrl
             ? slots.map((slot) => {
                 const isActive = slot.key === visibleSlotKey;

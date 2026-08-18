@@ -60,6 +60,7 @@ async def run_case_attribution_confirm(
             payload=payload,
             source_thread_id=None,
             source_run_id=deps.run_id,
+            already_approved=True,
         )
     return json.dumps(
         {
