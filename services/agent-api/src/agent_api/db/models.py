@@ -464,6 +464,11 @@ class KnowledgeChunk(Base):
     )
     # Dense vector as JSON array (Ollama embeddings); null when embedding is off/failed.
     embedding: Mapped[list[float] | None] = mapped_column(JSONB)
+    # Model that produced `embedding`; null for rows written before this column
+    # existed. Compared against the configured model before use — cosine
+    # similarity between vectors from different models is meaningless, not
+    # merely inaccurate, and dimension alone won't catch that.
+    embedding_model: Mapped[str | None] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -590,6 +595,11 @@ class UserMemory(Base):
     )
     # Dense vector as JSON array (Ollama embeddings); null when embedding is off/failed.
     embedding: Mapped[list[float] | None] = mapped_column(JSONB)
+    # Model that produced `embedding`; null for rows written before this column
+    # existed. Compared against the configured model before use — cosine
+    # similarity between vectors from different models is meaningless, not
+    # merely inaccurate, and dimension alone won't catch that.
+    embedding_model: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[str] = mapped_column(
         String(16),
         server_default=text("'active'"),

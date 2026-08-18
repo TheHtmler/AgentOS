@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import re
+from typing import cast
 from uuid import UUID
 
 import httpx
@@ -13,6 +15,9 @@ from agent_api.config import get_settings
 from agent_api.db.memory_store import list_active_memories
 from agent_api.db.models import UserMemory
 from agent_api.memory.embed import cosine_similarity, embed_text
+from agent_api.rrf import reciprocal_rank_fusion
+
+logger = logging.getLogger(__name__)
 
 SYNONYM_GROUPS: tuple[frozenset[str], ...] = (
     frozenset(("身高", "身长", "生长", "发育")),
@@ -20,7 +25,6 @@ SYNONYM_GROUPS: tuple[frozenset[str], ...] = (
     frozenset(("报告", "体检", "化验")),
 )
 _TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+")
-_VECTOR_WEIGHT = 10.0
 _MIN_VECTOR_KEEP = 0.28
 
 
@@ -127,8 +131,16 @@ def select_memories_for_message(
     top_k: int = 8,
     max_chars: int = 2_000,
     query_embedding: list[float] | None = None,
+    current_embedding_model: str | None = None,
 ) -> list[UserMemory]:
-    """Always keep profile slots; hybrid-rank notes by keyword + embedding."""
+    """Always keep profile slots; hybrid-rank notes by keyword + embedding.
+
+    ``current_embedding_model`` gates vector scoring to notes embedded by
+    that same model — vectors from a different model aren't merely less
+    accurate to compare, they're meaningless. Left ``None`` (unit tests that
+    don't model this dimension), the gate is skipped and all embeddings are
+    used as before.
+    """
 
     profiles = sorted(
         [memory for memory in memories if memory.kind == "profile"],
@@ -136,17 +148,40 @@ def select_memories_for_message(
     )
     notes = [memory for memory in memories if memory.kind != "profile"]
 
-    scored_notes: list[tuple[float, UserMemory]] = []
-    for memory in notes:
-        keyword = _keyword_score(message, memory)
-        vector = 0.0
-        if query_embedding and memory.embedding:
-            vector = cosine_similarity(query_embedding, list(memory.embedding))
-        combined = keyword + vector * _VECTOR_WEIGHT
-        if keyword > 0 or vector >= _MIN_VECTOR_KEEP:
-            scored_notes.append((combined, memory))
-    scored_notes.sort(key=lambda item: (item[0], item[1].updated_at), reverse=True)
-    ranked_notes = [memory for _, memory in scored_notes[:top_k]]
+    keyword_ranked = sorted(
+        (memory for memory in notes if _keyword_score(message, memory) > 0),
+        key=lambda memory: (_keyword_score(message, memory), memory.updated_at),
+        reverse=True,
+    )
+    vector_ranked: list[UserMemory] = []
+    if query_embedding:
+        vector_eligible = [memory for memory in notes if memory.embedding]
+        if current_embedding_model is not None:
+            mismatched = [
+                memory
+                for memory in vector_eligible
+                if getattr(memory, "embedding_model", None) not in (None, current_embedding_model)
+            ]
+            if mismatched:
+                logger.warning(
+                    "memory recall: skipping %d note(s) embedded by a different model (current=%s)",
+                    len(mismatched),
+                    current_embedding_model,
+                )
+            vector_eligible = [memory for memory in vector_eligible if memory not in mismatched]
+        vector_scored = [
+            (cosine_similarity(query_embedding, list(cast(list[float], memory.embedding))), memory)
+            for memory in vector_eligible
+        ]
+        vector_ranked = [
+            memory
+            for score, memory in sorted(vector_scored, key=lambda item: item[0], reverse=True)
+            if score >= _MIN_VECTOR_KEEP
+        ]
+    # RRF fuses by rank position, not raw score, so keyword counts and
+    # cosine similarity never need a shared scale or a tuned cross-weight.
+    fused_notes = reciprocal_rank_fusion(keyword_ranked, vector_ranked, key=id)
+    ranked_notes = fused_notes[:top_k]
 
     # Profile first (always-on), then ranked notes, then size bound.
     ordered = [*profiles, *ranked_notes]
@@ -187,4 +222,5 @@ async def load_relevant_memories(
         top_k=top_k,
         max_chars=max_chars,
         query_embedding=query_embedding,
+        current_embedding_model=settings.memory_embedding_model,
     )

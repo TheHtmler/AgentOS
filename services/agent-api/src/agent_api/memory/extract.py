@@ -224,6 +224,7 @@ async def upsert_note_facts(
 
     created = 0
     embedding_map = embeddings or {}
+    embedding_model = get_settings().memory_embedding_model
     for note in _valid_notes(notes):
         content = cast(str, note["content"])
         tags = cast(list[str], note["tags"])
@@ -248,6 +249,7 @@ async def upsert_note_facts(
             duplicate.updated_at = datetime.now(UTC)
             if duplicate.embedding is None and embedding_map.get(content) is not None:
                 duplicate.embedding = embedding_map[content]
+                duplicate.embedding_model = embedding_model
             continue
         if matching:
             await session.execute(
@@ -267,6 +269,7 @@ async def upsert_note_facts(
                 content=content,
                 tags=tags,
                 embedding=embedding_map.get(content),
+                embedding_model=embedding_model if embedding_map.get(content) is not None else None,
                 status="active",
             ),
         )

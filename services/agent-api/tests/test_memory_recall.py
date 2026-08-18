@@ -28,6 +28,7 @@ def fake_memory(
     kind: str = "note",
     key: str | None = None,
     embedding: list[float] | None = None,
+    embedding_model: str | None = None,
     updated_at: datetime | None = None,
 ):
     return SimpleNamespace(
@@ -36,6 +37,7 @@ def fake_memory(
         kind=kind,
         key=key,
         embedding=embedding,
+        embedding_model=embedding_model,
         updated_at=updated_at or datetime.now(UTC),
     )
 
@@ -92,6 +94,35 @@ def test_hybrid_note_recall_uses_embedding_similarity() -> None:
         query_embedding=[0.95, 0.05, 0.0],
     )
     assert selected[0].tags == ["饮食"]
+
+
+def test_vector_score_skipped_for_mismatched_embedding_model() -> None:
+    memories = [
+        fake_memory(
+            kind="note",
+            tags=["饮食"],
+            content="发热时按代谢门诊应急方案加糖水",
+            embedding=[1.0, 0.0, 0.0],
+            embedding_model="old-model",
+        ),
+        fake_memory(
+            kind="note",
+            tags=["玩具"],
+            content="喜欢积木",
+            embedding=[0.0, 1.0, 0.0],
+            embedding_model="nomic-embed-text",
+        ),
+    ]
+    selected = select_memories_for_message(
+        "生病发烧能不能随便吃东西",
+        cast(list[UserMemory], memories),
+        query_embedding=[0.95, 0.05, 0.0],
+        current_embedding_model="nomic-embed-text",
+    )
+    # The strong vector match was embedded by a different model, so it must
+    # not win purely on a cosine score that isn't comparable — with the
+    # model-mismatch guard, neither note has a usable signal here.
+    assert not any(memory.tags == ["饮食"] for memory in selected)
 
 
 def test_keyword_score_still_ranks_tag_hits() -> None:
