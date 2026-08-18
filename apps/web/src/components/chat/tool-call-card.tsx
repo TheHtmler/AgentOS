@@ -1,6 +1,7 @@
 "use client";
 
 import { ToolIcon } from "./tool-icons";
+import { toolDisplayName, toolProgressLabel } from "./tool-labels";
 
 export type ToolCallStatus = "running" | "done" | "error" | "awaiting_approval";
 
@@ -162,10 +163,10 @@ export function toolCallKeyParam(toolCall: ToolCallState): string | null {
 
 export function toolCallStatusLabel(status: ToolCallStatus): string {
   if (status === "running") {
-    return "执行中…";
+    return "进行中…";
   }
   if (status === "awaiting_approval") {
-    return "待审批";
+    return "等待确认";
   }
   if (status === "error") {
     return "失败";
@@ -176,7 +177,8 @@ export function toolCallStatusLabel(status: ToolCallStatus): string {
 /** @deprecated Prefer toolCallKeyParam + toolName; kept for any external imports. */
 export function toolCallHeadline(toolCall: ToolCallState): string {
   const param = toolCallKeyParam(toolCall);
-  return param ? `${toolCall.toolName}  ${param}` : toolCall.toolName;
+  const name = toolDisplayName(toolCall.toolName);
+  return param ? `${name}  ${param}` : name;
 }
 
 export function ToolCallCard({
@@ -190,8 +192,12 @@ export function ToolCallCard({
   const url = urlFromArgsText(toolCall.argsText);
   const expression = stringField(parseArgsRecord(toolCall.argsText) ?? {}, "expression");
   const keyParam = toolCallKeyParam(toolCall);
-  const statusLabel = toolCallStatusLabel(toolCall.status);
-  const title = keyParam ? `${toolCall.toolName} ${keyParam}` : toolCall.toolName;
+  const statusLabel =
+    toolCall.status === "awaiting_approval"
+      ? toolCallStatusLabel(toolCall.status)
+      : toolProgressLabel(toolCall.toolName, toolCall.status);
+  const displayName = toolDisplayName(toolCall.toolName);
+  const title = keyParam ? `${displayName} ${keyParam}` : displayName;
 
   return (
     <section
@@ -212,7 +218,7 @@ export function ToolCallCard({
           </span>
           <span className="agentos-tool-call-text">
             <span className="agentos-tool-call-headline">
-              <span className="agentos-tool-call-name">{toolCall.toolName}</span>
+              <span className="agentos-tool-call-name">{displayName}</span>
               {keyParam ? <span className="agentos-tool-call-param">{keyParam}</span> : null}
             </span>
             <span className="agentos-tool-call-status">{statusLabel}</span>
@@ -227,19 +233,19 @@ export function ToolCallCard({
         <div className="agentos-tool-call-content">
           {query ? (
             <p>
-              <span className="agentos-tool-call-label">query</span>
+              <span className="agentos-tool-call-label">查询内容</span>
               {query}
             </p>
           ) : null}
           {url ? (
             <p>
-              <span className="agentos-tool-call-label">url</span>
+              <span className="agentos-tool-call-label">网页</span>
               {url}
             </p>
           ) : null}
           {expression ? (
             <p>
-              <span className="agentos-tool-call-label">expression</span>
+              <span className="agentos-tool-call-label">计算内容</span>
               {expression}
             </p>
           ) : null}
@@ -248,14 +254,14 @@ export function ToolCallCard({
           ) : null}
           {toolCall.provider ? (
             <p>
-              <span className="agentos-tool-call-label">provider</span>
+              <span className="agentos-tool-call-label">来源</span>
               {toolCall.provider}
             </p>
           ) : null}
           {toolCall.resultSummary ? (
             <p>
               <span className="agentos-tool-call-label">
-                {toolCall.status === "error" ? "error" : "result"}
+                {toolCall.status === "error" ? "提示" : "结果"}
               </span>
               {toolCall.resultSummary}
             </p>

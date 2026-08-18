@@ -46,7 +46,7 @@ function IconButton({
   return (
     <button
       type="button"
-      className={`demo-icon-button${active ? " is-active" : ""}`}
+      className={active ? "demo-icon-button is-active" : "demo-icon-button"}
       aria-label={label}
       title={label}
       onClick={onClick}
@@ -61,17 +61,17 @@ function SourcePanel({ onClose }: { onClose: () => void }) {
     <aside className="demo-context-panel">
       <div className="demo-panel-heading">
         <div>
-          <span className="demo-kicker">Context</span>
-          <h2>本轮上下文</h2>
+          <span className="demo-kicker">资料范围</span>
+          <h2>本轮资料</h2>
         </div>
-        <IconButton label="关闭上下文面板" onClick={onClose}>
+        <IconButton label="关闭资料面板" onClick={onClose}>
           ×
         </IconButton>
       </div>
 
       <section className="demo-context-section">
         <div className="demo-section-label">
-          <span>当前 Case</span>
+          <span>当前资料</span>
           <span className="demo-status-dot">已绑定</span>
         </div>
         <div className="demo-case-card">
@@ -94,7 +94,7 @@ function SourcePanel({ onClose }: { onClose: () => void }) {
             <span className="demo-source-type pdf">PDF</span>
             <div>
               <strong>2026-08-16 生长记录</strong>
-              <span>第 1 页 · OCR + 视觉</span>
+              <span>第 1 页 · 文档识别 + 图片分析</span>
             </div>
             <span className="demo-source-check">✓</span>
           </div>
@@ -110,7 +110,7 @@ function SourcePanel({ onClose }: { onClose: () => void }) {
             <span className="demo-source-type note">NOTE</span>
             <div>
               <strong>家庭记录 · 7月</strong>
-              <span>Case 事实 · 用户确认</span>
+              <span>资料事实 · 用户确认</span>
             </div>
             <span className="demo-source-check">✓</span>
           </div>
@@ -119,15 +119,15 @@ function SourcePanel({ onClose }: { onClose: () => void }) {
 
       <section className="demo-context-section demo-runtime-section">
         <div className="demo-section-label">
-          <span>运行状态</span>
+          <span>助手状态</span>
           <span className="demo-live-label">
-            <i /> Ready
+            <i /> 已就绪
           </span>
         </div>
         <dl className="demo-runtime-list">
           <div>
-            <dt>Agent</dt>
-            <dd>General Agent</dd>
+            <dt>助手</dt>
+            <dd>通用助手</dd>
           </div>
           <div>
             <dt>模型</dt>
@@ -141,7 +141,7 @@ function SourcePanel({ onClose }: { onClose: () => void }) {
       </section>
 
       <button type="button" className="demo-outline-action">
-        查看完整运行记录 <span>↗</span>
+        查看处理详情 <span>↗</span>
       </button>
     </aside>
   );
@@ -203,17 +203,17 @@ export default function DesignDemoPage() {
   }
 
   return (
-    <main className={`agentos-design-demo${darkMode ? " is-dark" : ""}`}>
+    <main className={darkMode ? "agentos-design-demo is-dark" : "agentos-design-demo"}>
       <div className="demo-mobile-topbar">
         <IconButton label="打开会话导航" onClick={() => setShowMobileNav(true)}>
           ☰
         </IconButton>
         <div className="demo-mobile-title">
-          <span>CASE / 01</span>
+          <span>资料 / 01</span>
           <strong>生长评估</strong>
         </div>
         <IconButton
-          label="打开上下文面板"
+          label="打开资料面板"
           onClick={() => setShowContext((current) => !current)}
           active={showContext}
         >
@@ -222,7 +222,7 @@ export default function DesignDemoPage() {
       </div>
 
       <div className="demo-shell">
-        <aside className={`demo-sidebar${showMobileNav ? " is-mobile-open" : ""}`}>
+        <aside className={showMobileNav ? "demo-sidebar is-mobile-open" : "demo-sidebar"}>
           <div className="demo-brand-row">
             <div className="demo-brand-mark">A</div>
             <div>
@@ -250,7 +250,7 @@ export default function DesignDemoPage() {
             </button>
             <button type="button" className="demo-nav-item">
               <span className="demo-nav-symbol">◇</span>
-              <span>Case 档案</span>
+              <span>资料档案</span>
               <span className="demo-nav-count">4</span>
             </button>
           </div>
@@ -266,7 +266,9 @@ export default function DesignDemoPage() {
               {conversations.map((conversation) => (
                 <button
                   type="button"
-                  className={`demo-conversation${conversation.active ? " is-active" : ""}`}
+                  className={
+                    conversation.active ? "demo-conversation is-active" : "demo-conversation"
+                  }
                   key={conversation.title}
                 >
                   <span className={`demo-conversation-dot ${conversation.dot}`} />
@@ -310,7 +312,7 @@ export default function DesignDemoPage() {
         <section className="demo-chat-column">
           <header className="demo-chat-header">
             <div className="demo-thread-heading">
-              <span className="demo-kicker">Case / 生长与代谢管理</span>
+              <span className="demo-kicker">资料 / 生长与代谢管理</span>
               <div className="demo-title-line">
                 <h1>生长评估 · 2026年8月</h1>
                 <span className="demo-saved-pill">
@@ -324,7 +326,7 @@ export default function DesignDemoPage() {
                 className="demo-header-button"
                 onClick={() => setShowContext((current) => !current)}
               >
-                <span>◫</span> 上下文
+                <span>◫</span> 资料
               </button>
               <IconButton label="会话更多操作">•••</IconButton>
             </div>
@@ -342,7 +344,7 @@ export default function DesignDemoPage() {
                   ) : null}
                   <div className={`demo-message ${message.role}`}>
                     <div className="demo-message-meta">
-                      <strong>{message.role === "assistant" ? "AgentOS" : "你"}</strong>
+                      <strong>{message.role === "assistant" ? "助手" : "你"}</strong>
                       <span>{message.time}</span>
                     </div>
                     <MessageBody message={message} />
@@ -383,7 +385,7 @@ export default function DesignDemoPage() {
             <form className="demo-composer" onSubmit={submitMessage}>
               <div className="demo-composer-topline">
                 <button type="button" className="demo-mode-button">
-                  <span>✦</span> General Agent <span className="demo-chevron">⌄</span>
+                  <span>✦</span> 通用助手 <span className="demo-chevron">⌄</span>
                 </button>
                 <span className="demo-composer-hint">Enter 发送 · Shift + Enter 换行</span>
               </div>
@@ -415,7 +417,7 @@ export default function DesignDemoPage() {
               </div>
             </form>
             <p className="demo-disclaimer">
-              AgentOS 可能会出错。重要信息请结合原始报告和专业意见确认。
+              助手可能会出错。重要信息请结合原始报告和专业意见确认。
             </p>
           </div>
         </section>

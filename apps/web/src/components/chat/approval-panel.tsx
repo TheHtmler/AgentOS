@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 
+import { toolDisplayName } from "./tool-labels";
+
 export type PendingInterrupt = {
   id: string;
   tool_call_id: string;
@@ -136,14 +138,14 @@ export function ApprovalPanel({ runId, interrupts, onResolved, onError }: Approv
           "detail" in payload &&
           typeof (payload as { detail: unknown }).detail === "string"
             ? (payload as { detail: string }).detail
-            : `审批提交失败（${response.status}）`;
+            : `确认提交失败（${response.status}）`;
         onError(detail);
         return;
       }
 
       onResolved();
     } catch {
-      onError("无法连接审批服务，请稍后重试。");
+      onError("暂时无法提交确认，请稍后重试。");
     } finally {
       setSubmitting(false);
     }
@@ -152,16 +154,16 @@ export function ApprovalPanel({ runId, interrupts, onResolved, onError }: Approv
   return (
     <section
       className="agentos-approval-panel"
-      aria-label={isCollectForm ? "补充档案信息" : "工具审批"}
+      aria-label={isCollectForm ? "补充资料" : "确认操作"}
     >
       <header className="agentos-approval-panel-header">
         <p className="agentos-approval-panel-title">
-          {isCollectForm ? "需要补充档案信息" : "需要你的批准才能继续"}
+          {isCollectForm ? "需要补充资料" : "需要你的确认才能继续"}
         </p>
         <p className="agentos-approval-panel-subtitle">
           {isCollectForm
-            ? "填写后将写入当前档案并继续回答；取消后模型会改用已有信息或说明缺口。"
-            : "批准后将执行下列工具并继续生成；拒绝后模型会收到说明并可改口。"}
+            ? "填写后会保存到当前资料并继续回答；取消后助手会改用已有信息或说明缺口。"
+            : "确认后助手会继续处理；拒绝后助手会根据你的说明调整回答。"}
         </p>
       </header>
 
@@ -203,7 +205,7 @@ export function ApprovalPanel({ runId, interrupts, onResolved, onError }: Approv
         <ul className="agentos-approval-list">
           {interrupts.map((item) => (
             <li key={item.id} className="agentos-approval-item">
-              <span className="agentos-approval-tool">{item.tool_name}</span>
+              <span className="agentos-approval-tool">{toolDisplayName(item.tool_name)}</span>
               <span className="agentos-approval-args">{argPreview(item.tool_args)}</span>
               <span className="agentos-approval-expires">
                 过期：{new Date(item.expires_at).toLocaleString()}
@@ -242,7 +244,7 @@ export function ApprovalPanel({ runId, interrupts, onResolved, onError }: Approv
           disabled={submitting}
           onClick={() => void submit("approve")}
         >
-          {submitting ? "提交中…" : isCollectForm ? "提交并继续" : "批准"}
+          {submitting ? "提交中…" : isCollectForm ? "提交并继续" : "确认"}
         </button>
       </div>
     </section>

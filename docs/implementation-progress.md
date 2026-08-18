@@ -1,6 +1,6 @@
 # 实施进度
 
-最后更新：2026-08-16（图片 OCR 解析 PaddleX 包装结构并规范化上传图）
+最后更新：2026-08-18（聊天界面科技蓝主题与实时处理进度）
 
 ## 当前状态
 
@@ -64,7 +64,7 @@
 - 前端无感重连：SSE/`RunError` 断流时先探测 Run 是否仍 `running`；是则不弹红字、保持生成中并轮询，终态后刷历史；`visibilitychange` / `online` 触发同样同步。
 - 聊天体验 P0：多段 Thinking 与 Tool 共用有序 `timelineSteps`；助手气泡 Markdown（GFM + sanitize）；消息时间戳与 Run 总耗时。
 - 聊天体验 P1：Thread 重命名（`PATCH /v1/threads/{id}`）与软删除（`deleted_at` + `DELETE`）；列表隐藏已删会话；Next.js 同域代理与侧栏操作菜单。
-- 聊天体验 P2：深色科技风 design tokens / 玻璃面板 / 霓虹薄荷绿强调；Space Grotesk + IBM Plex Sans；AgentOS 几何 Logo 与 favicon；桌面右侧 Run 检视默认收起可切换。
+- 聊天体验 P2：深色科技风 design tokens / 玻璃面板 / 科技蓝强调；Space Grotesk + IBM Plex Sans；AgentOS 几何 Logo 与 favicon；桌面右侧处理详情默认收起可切换。
 - 多会话并行：切换/新建会话不再 abort 后台 Run；workspace 按 slot 保活多个 `ChatPanel`；侧栏按 Thread 显示「生成中」。
 - 模型并发：`MODEL_MAX_CONCURRENT_RUNS`（默认 3）控制进程内同时执行的模型流；同 Thread 仍最多一个 `running` Run。
 - 模型上下文在 `run_message_histories` 缺失时回退到 `messages` 表成对历史。
@@ -74,7 +74,7 @@
 - HITL 闭环：`waiting_approval` Run 状态、`interrupts` 表、checkpoint 历史、`POST /v1/runs/{id}/resume`（幂等）、取消 waiting、超时自动 deny 续跑（`HITL_APPROVAL_TIMEOUT_SECONDS`，默认 1800）；前端审批卡 + 侧栏「待审批」。
 - 自动会话标题：首轮 Run 成功后后台用模型生成短标题；仅 `title IS NULL` 时写入；`AUTO_THREAD_TITLE_*` 配置；侧栏靠既有 run finalize 刷新拉取。
 - 聊天过程组 UI（Codex 风格）：Thinking + 工具收入「处理中 / 已处理」可折叠组；紧凑工具行；邀请弹窗移动端自适应；深色次要文字对比抬高。
-- Thinking UI 默认只显示紧凑状态，不实时展开模型 reasoning 文本。
+- Thinking UI 实时显示简短阶段进度并自动跟随消息区滚动；不展示模型内部 reasoning 原文。
 - 多 Agent 数据模型：`agents`、`agent_versions`、`user_memories` 表；`threads.agent_id` 创建后不可变；迁移 `d8e9f0a1b2c3` 种子后经 `seed_agents.py` 收敛为 `general`（默认、记忆关）与 `imd` /「遗传代谢」（垂类、记忆开；合并原 parenting + mma-pa）。
 - `GET /v1/agents` 与 Web BFF `/api/agents`：返回可选 Agent 列表及 published 版本的 `memory_enabled`。
 - Thread 绑定与过滤：新建 Thread 经 `start_run` + `X-AgentOS-Agent-Id` 绑定当前 Agent（非 `POST /v1/threads`）；`GET /v1/threads?agent_id=` 按 Agent 过滤；既有 Thread 忽略客户端 agent 头。

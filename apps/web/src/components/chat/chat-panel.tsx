@@ -415,6 +415,23 @@ function upsertTimelineStep(current: TimelineStep[], next: TimelineStep): Timeli
   return updated;
 }
 
+function updateLatestThinkingStep(
+  current: TimelineStep[],
+  afterMessageId: string,
+  update: Partial<ThinkingStepState>,
+): TimelineStep[] {
+  for (let index = current.length - 1; index >= 0; index -= 1) {
+    const step = current[index];
+    if (step?.kind === "thinking" && step.afterMessageId === afterMessageId) {
+      const next = [...current];
+      next[index] = { ...step, ...update };
+      return next;
+    }
+  }
+
+  return current;
+}
+
 function toolStatesFromTimeline(steps: TimelineStep[]): ToolCallState[] {
   return steps
     .filter((step): step is ToolTimelineStep => step.kind === "tool")
@@ -466,10 +483,10 @@ function updateThreadInUrl(threadId: string) {
 
 function agentErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.includes("409")) {
-    return "当前会话仍在生成，请等待完成或停止当前请求。";
+    return "当前会话仍在处理中，请等待完成或停止当前操作。";
   }
 
-  return "Agent 生成失败，请稍后重试。";
+  return "助手处理失败，请稍后重试。";
 }
 
 async function fetchRunStatus(runId: string): Promise<string | null> {
@@ -1085,7 +1102,7 @@ export function ChatPanel({
 
     const agent = agentRef.current;
     if (agent === null) {
-      setError("聊天客户端尚未初始化。");
+      setError("助手尚未准备好，请稍后重试。");
       return;
     }
 
@@ -1150,18 +1167,42 @@ export function ChatPanel({
         onRunErrorEvent: ({ event }) => {
           // Mobile background / SSE drop often emits RunError while the server keeps going.
           // Defer hard UI failure until we probe Run status in the catch path.
-          deferredStreamErrorRef.current = event.message || "Agent 生成失败，请稍后重试。";
+          deferredStreamErrorRef.current = event.message || "助手处理失败，请稍后重试。";
         },
         onReasoningStartEvent: ({ event }) => {
           setTimelineSteps((current) =>
             upsertTimelineStep(current, {
               kind: "thinking",
               id: event.messageId,
-              content: "",
+              content: "正在理解问题与相关上下文",
               status: "running",
-              // Compact 2-line preview; no tall expand panel.
               expanded: false,
               afterMessageId: userMessageId,
+            }),
+          );
+        },
+        onReasoningMessageStartEvent: () => {
+          setTimelineSteps((current) =>
+            updateLatestThinkingStep(current, userMessageId, {
+              content: "正在拆解任务目标",
+            }),
+          );
+        },
+        onReasoningMessageContentEvent: ({ reasoningMessageBuffer }) => {
+          if (!reasoningMessageBuffer.trim()) {
+            return;
+          }
+
+          setTimelineSteps((current) =>
+            updateLatestThinkingStep(current, userMessageId, {
+              content: "正在整理分析结果",
+            }),
+          );
+        },
+        onReasoningMessageEndEvent: () => {
+          setTimelineSteps((current) =>
+            updateLatestThinkingStep(current, userMessageId, {
+              content: "分析完成，正在准备下一步",
             }),
           );
         },
@@ -1169,15 +1210,22 @@ export function ChatPanel({
           setTimelineSteps((current) =>
             current.map((step) =>
               step.kind === "thinking" && step.id === event.messageId
-                ? { ...step, status: "done", expanded: false }
+                ? {
+                    ...step,
+                    status: "done",
+                    content: step.content || "已完成这一步处理",
+                    expanded: false,
+                  }
                 : step,
             ),
           );
         },
         onToolCallStartEvent: ({ event }) => {
-          // Keep tools as a single status line; details only after the user expands.
-          setTimelineSteps((current) =>
-            upsertTimelineStep(current, {
+          setTimelineSteps((current) => {
+            const next = updateLatestThinkingStep(current, userMessageId, {
+              content: "正在调用相关能力",
+            });
+            return upsertTimelineStep(next, {
               kind: "tool",
               id: event.toolCallId,
               toolName: event.toolCallName,
@@ -1185,8 +1233,8 @@ export function ChatPanel({
               status: "running",
               expanded: false,
               afterMessageId: userMessageId,
-            }),
-          );
+            });
+          });
         },
         onToolCallArgsEvent: ({ event, toolCallBuffer, toolCallName }) => {
           setTimelineSteps((current) => {
@@ -1375,7 +1423,7 @@ export function ChatPanel({
         typeof payload.id !== "string" ||
         !isUuid(payload.id)
       ) {
-        setError("无法创建会话，请稍后重试后再上传报告。");
+        setError("无法创建会话，请稍后重试后再上传文件。");
         return null;
       }
 
@@ -1529,12 +1577,12 @@ export function ChatPanel({
   );
 
   const statusLabel = isLoadingHistory
-    ? "读取会话中"
+    ? "正在读取会话"
     : pendingInterrupts.length > 0
-      ? "等待审批"
+      ? "等待确认"
       : isStreaming
-        ? "Agent 正在执行"
-        : "Runtime ready";
+        ? "正在处理"
+        : "助手已就绪";
 
   return (
     <section
@@ -1544,18 +1592,16 @@ export function ChatPanel({
     >
       <header className="agentos-chat-header">
         <div className="agentos-thread-heading">
-          <p className="agentos-thread-kicker">Agent / General Agent</p>
+          <p className="agentos-thread-kicker">通用助手</p>
           <div className="agentos-thread-title-row">
-            <h1 className="agentos-chat-heading">
-              {threadId === null ? "新建 Agent 会话" : "Agent conversation"}
-            </h1>
+            <h1 className="agentos-chat-heading">{threadId === null ? "新建会话" : "当前会话"}</h1>
             <p aria-live="polite" className="agentos-chat-status">
               <span aria-hidden="true" />
               {statusLabel}
             </p>
           </div>
           <p className="agentos-chat-subheading">
-            {threadId === null ? "准备新的执行上下文" : "当前 Thread 已恢复"}
+            {threadId === null ? "准备开始新的任务" : "已恢复这个会话"}
           </p>
         </div>
 
@@ -1574,7 +1620,7 @@ export function ChatPanel({
 
       {agentLoadError !== null ? (
         <div role="alert" className="agentos-chat-error border-b px-5 py-3 text-sm">
-          无法加载 Agent 列表，将使用默认 Agent 继续对话。
+          无法加载助手列表，将使用默认助手继续对话。
           <button
             type="button"
             onClick={onRetryAgentLoad}
@@ -1599,7 +1645,7 @@ export function ChatPanel({
               <p className="agentos-empty-eyebrow">Start with a task</p>
               <p className="agentos-chat-heading">从一个任务开始</p>
               <p className="agentos-chat-subheading">
-                AgentOS 会在同一条运行轨迹中展示对话、思考过程与最终执行结果。
+                助手会实时展示处理进度、相关资料和最终回答。
               </p>
               <div className="agentos-starter-prompts">
                 {STARTER_PROMPTS.map((prompt) => (
@@ -1703,7 +1749,7 @@ export function ChatPanel({
                   >
                     <div className="agentos-message-meta-row">
                       <p className="agentos-message-author">
-                        {message.role === "user" ? "你" : "AgentOS"}
+                        {message.role === "user" ? "你" : "助手"}
                         {message.createdAt ? (
                           <span className="agentos-message-meta">
                             {" "}
@@ -1794,7 +1840,7 @@ export function ChatPanel({
                   {orphanLiveSteps.length > 0 ? (
                     <article className="agentos-message agentos-message-assistant agentos-message-streaming">
                       <div className="agentos-message-meta-row">
-                        <p className="agentos-message-author">AgentOS</p>
+                        <p className="agentos-message-author">助手</p>
                       </div>
                       <div className="agentos-message-process">
                         {orphanLiveSteps.map((step) => {
@@ -1916,8 +1962,8 @@ export function ChatPanel({
           maxLength={4_000}
           placeholder={
             pendingInterrupts.length > 0
-              ? "请先批准或拒绝上方的工具调用"
-              : "输入任务、问题或需要 Agent 执行的操作"
+              ? "请先确认或取消上方的操作"
+              : "输入任务、问题或需要助手处理的内容"
           }
           rows={1}
           className="agentos-composer-input block w-full resize-none outline-none disabled:cursor-not-allowed"

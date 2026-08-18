@@ -119,12 +119,12 @@ export function ChatWorkspace({
           signal: controller.signal,
         });
         if (!response.ok) {
-          throw new Error("无法加载 Agent 列表。");
+          throw new Error("无法加载助手列表。");
         }
 
         const nextAgents = parseAgentSummaries((await response.json()) as unknown);
         if (nextAgents === null) {
-          throw new Error("Agent 列表格式无效。");
+          throw new Error("助手列表格式无效。");
         }
         if (!isCurrent) {
           return;
@@ -139,7 +139,7 @@ export function ChatWorkspace({
         });
       } catch (error: unknown) {
         if (isCurrent && !controller.signal.aborted) {
-          setAgentLoadError(error instanceof Error ? error.message : "无法加载 Agent 列表。");
+          setAgentLoadError(error instanceof Error ? error.message : "无法加载助手列表。");
         }
       }
     })();
@@ -408,11 +408,11 @@ export function ChatWorkspace({
             <span />
           </button>
 
-          <AgentOsLogo subtitle="personal workspace" />
+          <AgentOsLogo subtitle="助手工作台" />
 
           <div className="ml-auto hidden items-center gap-3 lg:flex">
             <ThemeToggle />
-            <span className="agentos-runtime-tag">Local runtime · Ready</span>
+            <span className="agentos-runtime-tag">本地服务 · 已就绪</span>
             <p className="max-w-48 truncate text-sm text-zinc-600" title={userEmail}>
               {userEmail}
             </p>
@@ -429,7 +429,7 @@ export function ChatWorkspace({
 
           <div className="ml-auto flex items-center gap-2 lg:hidden">
             <ThemeToggle compact />
-            <span className="agentos-runtime-tag">Ready</span>
+            <span className="agentos-runtime-tag">已就绪</span>
           </div>
         </div>
       </header>

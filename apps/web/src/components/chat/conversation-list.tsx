@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-import type { AgentSummary } from "@/lib/agents";
+import { displayAgentName, type AgentSummary } from "@/lib/agents";
 
 export type Conversation = {
   id: string;
@@ -302,18 +302,18 @@ export function ConversationList({
     <section className="agentos-conversation-list">
       <header className="agentos-conversation-list-header">
         <label className="agentos-agent-picker">
-          <span>当前 Agent</span>
+          <span>当前助手</span>
           <select
-            aria-label="选择 Agent"
+            aria-label="选择助手"
             value={selectedAgentId ?? ""}
             disabled={agents.length === 0}
             onChange={(event) => onSelectAgent(event.target.value)}
             className="agentos-agent-select disabled:cursor-wait disabled:opacity-60"
           >
-            {agents.length === 0 ? <option value="">正在加载 Agent…</option> : null}
+            {agents.length === 0 ? <option value="">正在加载助手…</option> : null}
             {agents.map((agent) => (
               <option key={agent.id} value={agent.id}>
-                {agent.name}
+                {displayAgentName(agent.name)}
               </option>
             ))}
           </select>
@@ -424,12 +424,12 @@ export function ConversationList({
                               {conversationLabel(conversation)}
                               {isStreaming ? (
                                 <span className="agentos-conversation-status is-streaming">
-                                  生成中
+                                  处理中
                                 </span>
                               ) : null}
                               {!isStreaming && isAwaitingApproval ? (
                                 <span className="agentos-conversation-status is-awaiting">
-                                  待审批
+                                  等待确认
                                 </span>
                               ) : null}
                             </p>
