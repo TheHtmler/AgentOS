@@ -620,47 +620,9 @@ body {
   animation: agentos-stream-pulse 1.4s ease-in-out infinite;
 }
 
-.agentos-message-author {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 650;
-  letter-spacing: 0.03em;
-}
-
-.agentos-message-user .agentos-message-author {
-  color: var(--accent-dim);
-}
-
-.agentos-message-user .agentos-message-author::before {
-  width: 0.38rem;
-  height: 0.38rem;
-  border-radius: 999px;
-  background: var(--success);
-  content: "";
-}
-
-.agentos-message-assistant .agentos-message-author::before {
-  width: 0.38rem;
-  height: 0.38rem;
-  border: 1px solid var(--accent-border);
-  border-radius: 2px;
-  background: var(--accent-soft);
-  content: "";
-}
-
 .agentos-message p:last-child {
   position: relative;
   z-index: 1;
-}
-
-.agentos-message-meta {
-  color: var(--muted);
-  font-weight: 400;
 }
 
 /* ── Markdown ── */
@@ -2492,7 +2454,7 @@ body {
 
 .agentos-thread-title-row,
 .agentos-chat-header-actions,
-.agentos-message-meta-row,
+.agentos-message-toolbar,
 .agentos-composer-toolbar,
 .agentos-composer-tools {
   display: flex;
@@ -2613,7 +2575,7 @@ body {
 
 .agentos-message {
   width: fit-content;
-  max-width: min(100%, 42rem);
+  max-width: 100%;
   padding: 0.7rem 0.85rem;
   border-radius: 9px;
   box-shadow: none;
@@ -2621,9 +2583,25 @@ body {
   line-height: 1.6;
 }
 
-.agentos-message-user {
+.agentos-message-wrap {
+  display: flex;
+  width: fit-content;
+  max-width: min(100%, 42rem);
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.agentos-message-wrap-user {
   align-self: flex-end;
   max-width: min(70%, 28rem);
+}
+
+.agentos-message-wrap-assistant {
+  align-self: flex-start;
+  max-width: min(100%, 42rem);
+}
+
+.agentos-message-user {
   border: 1px solid var(--accent-border);
   background: color-mix(in srgb, var(--accent-soft) 72%, var(--surface-elevated));
   color: var(--message-user-fg);
@@ -2634,8 +2612,6 @@ body {
 }
 
 .agentos-message-assistant {
-  align-self: flex-start;
-  max-width: min(100%, 42rem);
   border: 1px solid var(--border);
   background: var(--surface-elevated);
   color: var(--message-assistant-fg);
@@ -2647,15 +2623,20 @@ body {
   background: var(--accent-border);
 }
 
-.agentos-message-meta-row {
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.3rem;
+.agentos-message-toolbar {
+  justify-content: flex-end;
+  margin-bottom: 0.25rem;
 }
 
-.agentos-message-author {
-  font-size: 0.65rem;
-  letter-spacing: 0.02em;
+.agentos-message-time {
+  padding-inline: 0.25rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.2;
+}
+
+.agentos-message-time-user {
+  text-align: right;
 }
 
 .agentos-copy-button {
@@ -2849,6 +2830,10 @@ body {
   }
 
   .agentos-message-user {
+    max-width: 100%;
+  }
+
+  .agentos-message-wrap-user {
     max-width: 88%;
   }
 
@@ -2917,6 +2902,10 @@ body {
   }
 
   .agentos-message-user {
+    max-width: 100%;
+  }
+
+  .agentos-message-wrap-user {
     max-width: 90%;
   }
 
@@ -3002,7 +2991,6 @@ body {
 .demo-composer-bottomline,
 .demo-nav-label,
 .demo-section-label,
-.demo-message-meta,
 .demo-message-actions,
 .demo-account-button,
 .demo-footer-actions,
@@ -3440,8 +3428,21 @@ body {
   font-size: 0.7rem;
 }
 
+.demo-message-wrap {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  width: min(100%, 42rem);
+}
+
+.demo-message-wrap.user {
+  width: min(100%, 26rem);
+  align-items: flex-end;
+}
+
 .demo-message {
   min-width: 0;
+  width: 100%;
   border: 1px solid var(--demo-line);
   border-radius: 4px 12px 12px 12px;
   background: var(--demo-paper);
@@ -3452,12 +3453,7 @@ body {
   line-height: 1.58;
 }
 
-.demo-message.assistant {
-  width: min(100%, 42rem);
-}
-
 .demo-message.user {
-  width: min(100%, 26rem);
   border-color: #c4e0d9;
   border-radius: 12px 4px 12px 12px;
   background: var(--demo-teal-soft);
@@ -3465,16 +3461,14 @@ body {
   box-shadow: none;
 }
 
-.demo-message-meta {
-  gap: 0.5rem;
-  margin-bottom: 0.3rem;
+.demo-message-time {
+  padding: 0.25rem 0.25rem 0;
   color: var(--demo-muted);
   font-size: 0.64rem;
 }
 
-.demo-message-meta strong {
-  color: var(--demo-ink);
-  font-weight: 650;
+.demo-message-wrap.user .demo-message-time {
+  text-align: right;
 }
 
 .demo-message p {
@@ -4112,6 +4106,11 @@ body {
   .demo-message {
     padding: 0.8rem 0.85rem;
     font-size: 0.78rem;
+  }
+
+  .demo-message-wrap,
+  .demo-message-wrap.user {
+    width: min(100%, 92%);
   }
 
   .demo-metric-grid {

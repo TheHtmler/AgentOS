@@ -1738,112 +1738,127 @@ export function ChatPanel({
 
               return (
                 <Fragment key={message.id}>
-                  <article
-                    className={`agentos-message ${
+                  <div
+                    className={`agentos-message-wrap ${
                       message.role === "user"
-                        ? "agentos-message-user"
-                        : `agentos-message-assistant ${
-                            isStreaming && index === currentAssistantMessageIndex
-                              ? "agentos-message-streaming"
-                              : ""
-                          }`
+                        ? "agentos-message-wrap-user"
+                        : "agentos-message-wrap-assistant"
                     }`}
                   >
-                    <div className="agentos-message-meta-row">
-                      <p className="agentos-message-author">
-                        {message.role === "user" ? "你" : "助手"}
+                    <article
+                      className={`agentos-message ${
+                        message.role === "user"
+                          ? "agentos-message-user"
+                          : `agentos-message-assistant ${
+                              isStreaming && index === currentAssistantMessageIndex
+                                ? "agentos-message-streaming"
+                                : ""
+                            }`
+                      }`}
+                    >
+                      {message.role === "assistant" && message.content ? (
+                        <div className="agentos-message-toolbar">
+                          <button
+                            type="button"
+                            onClick={() => void copyAssistantMessage(message)}
+                            className="agentos-copy-button"
+                          >
+                            {copiedMessageId === message.id ? "已复制" : "复制"}
+                          </button>
+                        </div>
+                      ) : null}
+
+                      {processChildren.length > 0 ? (
+                        <div className="agentos-message-process">{processChildren}</div>
+                      ) : null}
+
+                      {message.content ? (
+                        message.role === "assistant" ? (
+                          <AssistantMarkdown content={message.content} />
+                        ) : (
+                          (() => {
+                            const { displayText, artifactIds } = parseUserMessageAttachments(
+                              message.content,
+                            );
+                            return (
+                              <div className="space-y-2">
+                                {artifactIds.length > 0 ? (
+                                  <div
+                                    className="agentos-message-attachments flex flex-wrap gap-2"
+                                    aria-label="附件"
+                                  >
+                                    {artifactIds.map((artifactId) => (
+                                      <a
+                                        key={artifactId}
+                                        href={uploadContentUrl(artifactId)}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="agentos-upload-thumb block overflow-hidden"
+                                        title="查看附件"
+                                      >
+                                        {/* Heuristic: try image; PDF still loads as object/download via link */}
+                                        <img
+                                          src={uploadContentUrl(artifactId)}
+                                          alt=""
+                                          className="agentos-upload-thumb-image h-20 w-20 object-cover"
+                                          onError={(event) => {
+                                            const target = event.currentTarget;
+                                            target.style.display = "none";
+                                            const fallback = target.nextElementSibling;
+                                            if (fallback instanceof HTMLElement) {
+                                              fallback.hidden = false;
+                                            }
+                                          }}
+                                        />
+                                        <span
+                                          hidden
+                                          className="agentos-upload-chip inline-flex h-20 w-20 items-center justify-center px-2 text-center text-[11px] leading-tight"
+                                        >
+                                          文件
+                                        </span>
+                                      </a>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                {displayText ? (
+                                  <p className="break-words whitespace-pre-wrap">{displayText}</p>
+                                ) : null}
+                              </div>
+                            );
+                          })()
+                        )
+                      ) : message.role === "assistant" && isStreaming ? (
+                        <p aria-live="polite" className="agentos-chat-subheading">
+                          {processChildren.length > 0 ? "继续生成中…" : "正在生成最终回答..."}
+                        </p>
+                      ) : null}
+                    </article>
+
+                    {message.createdAt || message.durationLabel ? (
+                      <div
+                        className={`agentos-message-time ${
+                          message.role === "user"
+                            ? "agentos-message-time-user"
+                            : "agentos-message-time-assistant"
+                        }`}
+                      >
                         {message.createdAt ? (
-                          <span className="agentos-message-meta">
-                            {" "}
-                            · {formatMessageTimestamp(message.createdAt)}
+                          <time dateTime={message.createdAt}>
+                            {formatMessageTimestamp(message.createdAt)}
+                          </time>
+                        ) : null}
+                        {message.durationLabel ? (
+                          <span>
+                            {message.createdAt ? " · " : ""}
+                            {message.durationLabel}
                           </span>
                         ) : null}
-                        {message.role === "assistant" && message.durationLabel ? (
-                          <span className="agentos-message-meta"> · {message.durationLabel}</span>
-                        ) : null}
-                      </p>
-                      {message.role === "assistant" && message.content ? (
-                        <button
-                          type="button"
-                          onClick={() => void copyAssistantMessage(message)}
-                          className="agentos-copy-button"
-                        >
-                          {copiedMessageId === message.id ? "已复制" : "复制"}
-                        </button>
-                      ) : null}
-                    </div>
-
-                    {processChildren.length > 0 ? (
-                      <div className="agentos-message-process">{processChildren}</div>
+                      </div>
                     ) : null}
-
-                    {message.content ? (
-                      message.role === "assistant" ? (
-                        <AssistantMarkdown content={message.content} />
-                      ) : (
-                        (() => {
-                          const { displayText, artifactIds } = parseUserMessageAttachments(
-                            message.content,
-                          );
-                          return (
-                            <div className="space-y-2">
-                              {artifactIds.length > 0 ? (
-                                <div
-                                  className="agentos-message-attachments flex flex-wrap gap-2"
-                                  aria-label="附件"
-                                >
-                                  {artifactIds.map((artifactId) => (
-                                    <a
-                                      key={artifactId}
-                                      href={uploadContentUrl(artifactId)}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="agentos-upload-thumb block overflow-hidden"
-                                      title="查看附件"
-                                    >
-                                      {/* Heuristic: try image; PDF still loads as object/download via link */}
-                                      <img
-                                        src={uploadContentUrl(artifactId)}
-                                        alt=""
-                                        className="agentos-upload-thumb-image h-20 w-20 object-cover"
-                                        onError={(event) => {
-                                          const target = event.currentTarget;
-                                          target.style.display = "none";
-                                          const fallback = target.nextElementSibling;
-                                          if (fallback instanceof HTMLElement) {
-                                            fallback.hidden = false;
-                                          }
-                                        }}
-                                      />
-                                      <span
-                                        hidden
-                                        className="agentos-upload-chip inline-flex h-20 w-20 items-center justify-center px-2 text-center text-[11px] leading-tight"
-                                      >
-                                        文件
-                                      </span>
-                                    </a>
-                                  ))}
-                                </div>
-                              ) : null}
-                              {displayText ? (
-                                <p className="break-words whitespace-pre-wrap">{displayText}</p>
-                              ) : null}
-                            </div>
-                          );
-                        })()
-                      )
-                    ) : message.role === "assistant" && isStreaming ? (
-                      <p aria-live="polite" className="agentos-chat-subheading">
-                        {processChildren.length > 0 ? "继续生成中…" : "正在生成最终回答..."}
-                      </p>
-                    ) : null}
-                  </article>
+                  </div>
 
                   {orphanLiveSteps.length > 0 ? (
                     <article className="agentos-message agentos-message-assistant agentos-message-streaming">
-                      <div className="agentos-message-meta-row">
-                        <p className="agentos-message-author">助手</p>
-                      </div>
                       <div className="agentos-message-process">
                         {orphanLiveSteps.map((step) => {
                           if (step.kind === "thinking") {

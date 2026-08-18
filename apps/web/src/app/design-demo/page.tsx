@@ -340,19 +340,18 @@ export default function DesignDemoPage() {
                   {message.role === "assistant" ? (
                     <div className="demo-assistant-mark">A</div>
                   ) : null}
-                  <div className={`demo-message ${message.role}`}>
-                    <div className="demo-message-meta">
-                      <strong>{message.role === "assistant" ? "助手" : "你"}</strong>
-                      <span>{message.time}</span>
+                  <div className={`demo-message-wrap ${message.role}`}>
+                    <div className={`demo-message ${message.role}`}>
+                      <MessageBody message={message} />
+                      {message.role === "assistant" ? (
+                        <div className="demo-message-actions">
+                          <button type="button">复制</button>
+                          <button type="button">有帮助</button>
+                          <button type="button">重新生成</button>
+                        </div>
+                      ) : null}
                     </div>
-                    <MessageBody message={message} />
-                    {message.role === "assistant" ? (
-                      <div className="demo-message-actions">
-                        <button type="button">复制</button>
-                        <button type="button">有帮助</button>
-                        <button type="button">重新生成</button>
-                      </div>
-                    ) : null}
+                    <time className="demo-message-time">{message.time}</time>
                   </div>
                 </article>
               ))}
