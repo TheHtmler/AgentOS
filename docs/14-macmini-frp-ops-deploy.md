@@ -53,7 +53,8 @@ Mac mini 仓库根目录：
 # 首次安装 launchd（api / web / ops；会替换占位符并启动）
 ./scripts/install-launchd.sh
 
-# 日常：pull + uv sync + migrate + build web/ops + kickstart
+# 日常：pull + uv sync + migrate + 重建 web/ops + 重启
+# （前端构建期间会先停掉对应服务，构建窗口内短暂不可用；构建失败自动回滚旧 .next）
 ./scripts/macmini-deploy.sh
 
 # 只更某一侧

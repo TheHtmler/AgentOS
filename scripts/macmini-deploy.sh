@@ -112,6 +112,61 @@ kick() {
   fi
 }
 
+start_service() {
+  local label="$1"
+  local plist="${HOME}/Library/LaunchAgents/${label}.plist"
+  if service_loaded "$label"; then
+    kick "$label" || true
+    return
+  fi
+  if [[ ! -f "$plist" ]]; then
+    warn "launchd plist missing: ${plist}"
+    warn "install with: ./scripts/install-launchd.sh ${label##com.local.agentos-}"
+    return 1
+  fi
+  log "bootstrap $label"
+  launchctl bootstrap "$DOMAIN" "$plist"
+}
+
+# Rebuilding `.next` under a live `next start` is broken: the old process renders
+# HTML from its in-memory build while `/_next/static/*` is read from the deleted/
+# replaced dir on disk, so every CSS/JS asset 404s (the "unstyled login page").
+# Stop the service first, build, then start; keep the old build for rollback.
+deploy_frontend() {
+  local name="$1" label="$2" cache_mode="$3"
+  local app_dir="$ROOT/apps/$name"
+  local next_dir="$app_dir/.next"
+  local prev_dir="$app_dir/.next.prev"
+
+  if service_loaded "$label"; then
+    log "stop $label while .next is rebuilt"
+    launchctl bootout "${DOMAIN}/${label}"
+  fi
+
+  rm -rf "$prev_dir"
+  if [[ -d "$next_dir" ]]; then
+    mv "$next_dir" "$prev_dir"
+  fi
+  if [[ "$cache_mode" == "reuse" && -d "$prev_dir/cache" ]]; then
+    mkdir -p "$next_dir"
+    mv "$prev_dir/cache" "$next_dir/cache"
+  fi
+
+  log "build $name"
+  if ! CI=1 pnpm --filter "$name" build; then
+    warn "$name build failed — restoring previous .next"
+    rm -rf "$next_dir"
+    if [[ -d "$prev_dir" ]]; then
+      mv "$prev_dir" "$next_dir"
+    fi
+    start_service "$label" || true
+    exit 1
+  fi
+
+  rm -rf "$prev_dir"
+  start_service "$label" || true
+}
+
 http_code() {
   local url="$1"
   curl -sS --noproxy '*' -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 8 "$url" 2>/dev/null || echo "down"
@@ -188,17 +243,12 @@ if [[ "$DO_WEB" -eq 1 || "$DO_OPS" -eq 1 ]]; then
 fi
 
 if [[ "$DO_WEB" -eq 1 ]]; then
-  log "build web"
-  CI=1 pnpm --filter web build
-  kick "$WEB_LABEL" || true
+  deploy_frontend web "$WEB_LABEL" reuse
 fi
 
 if [[ "$DO_OPS" -eq 1 ]]; then
-  log "clean ops .next (avoid stale prerender cache)"
-  rm -rf "$ROOT/apps/ops/.next"
-  log "build ops"
-  CI=1 pnpm --filter ops build
-  kick "$OPS_LABEL" || true
+  # ops: clean rebuild (no cache carry-over) — stale prerender cache has bitten before.
+  deploy_frontend ops "$OPS_LABEL" clean
 fi
 
 sleep 2
