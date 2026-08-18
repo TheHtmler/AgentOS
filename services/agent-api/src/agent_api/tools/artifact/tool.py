@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from uuid import UUID
 
 from pydantic_ai import RunContext
@@ -60,6 +61,7 @@ async def run_read_artifact(
     start = max(0, int(offset))
     limit = clamp_read_max_chars(max_chars)
 
+    started_at = time.monotonic()
     if deps.persist_tool_events and deps.run_id is not None:
         await _persist_tool_call(deps.run_id, normalized, start, limit)
 
@@ -77,7 +79,12 @@ async def run_read_artifact(
     except Exception as exc:
         logger.exception("read_artifact failed for %s", normalized)
         if deps.persist_tool_events and deps.run_id is not None:
-            await _persist_tool_result(deps.run_id, ok=False, summary=str(exc)[:500])
+            await _persist_tool_result(
+                deps.run_id,
+                ok=False,
+                summary=str(exc)[:500],
+                duration_ms=round((time.monotonic() - started_at) * 1000),
+            )
         return json.dumps(
             {"error": "unable to read artifact", "code": "artifact_read_failed"},
             ensure_ascii=False,
@@ -89,6 +96,7 @@ async def run_read_artifact(
                 deps.run_id,
                 ok=False,
                 summary="artifact not found",
+                duration_ms=round((time.monotonic() - started_at) * 1000),
             )
         return json.dumps(
             {"error": "artifact not found", "code": "artifact_not_found"},
@@ -114,6 +122,7 @@ async def run_read_artifact(
             deps.run_id,
             ok=True,
             summary=f"{row.title}@{start}+{len(slice_text)}/{total}"[:500],
+            duration_ms=round((time.monotonic() - started_at) * 1000),
         )
     return json.dumps(payload, ensure_ascii=False)
 
@@ -154,7 +163,13 @@ async def _persist_tool_call(
         logger.exception("Unable to persist tool_call for run %s", run_id)
 
 
-async def _persist_tool_result(run_id: UUID, *, ok: bool, summary: str) -> None:
+async def _persist_tool_result(
+    run_id: UUID,
+    *,
+    ok: bool,
+    summary: str,
+    duration_ms: int | None = None,
+) -> None:
     try:
         from agent_api.db.chat_store import append_tool_result_event
         from agent_api.db.session import session_factory
@@ -167,6 +182,7 @@ async def _persist_tool_result(run_id: UUID, *, ok: bool, summary: str) -> None:
                 provider="artifact",
                 ok=ok,
                 summary=summary,
+                duration_ms=duration_ms,
             )
     except Exception:
         logger.exception("Unable to persist tool_result for run %s", run_id)

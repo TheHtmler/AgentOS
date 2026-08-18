@@ -587,6 +587,32 @@ async def append_run_event(
     return event
 
 
+_OPS_TIMELINE_EVENT_TYPES = ("tool_call", "tool_result", "model_step")
+
+
+async def list_run_events_for_ops(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+) -> list[RunEvent]:
+    """List one run's tool/model timing events, ordered, for the Ops timeline.
+
+    Excludes ``run_started``/``text_delta`` — high-volume and not useful for
+    a timing/tool-audit view.
+    """
+
+    return list(
+        await session.scalars(
+            select(RunEvent)
+            .where(
+                RunEvent.run_id == run_id,
+                RunEvent.event_type.in_(_OPS_TIMELINE_EVENT_TYPES),
+            )
+            .order_by(RunEvent.seq),
+        ),
+    )
+
+
 async def append_text_delta(
     session: AsyncSession,
     *,
@@ -628,18 +654,51 @@ async def append_tool_result_event(
     provider: str | None,
     ok: bool,
     summary: str,
+    duration_ms: int | None = None,
 ) -> RunEvent:
     """Record a short tool outcome summary for debugging and audits."""
 
+    payload: dict[str, object] = {
+        "tool": tool_name,
+        "provider": provider,
+        "ok": ok,
+        "summary": summary[:500],
+    }
+    if duration_ms is not None:
+        payload["duration_ms"] = duration_ms
     return await append_run_event(
         session,
         run_id=run_id,
         event_type="tool_result",
+        payload=payload,
+    )
+
+
+async def append_model_step_event(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    duration_ms: int,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+) -> RunEvent:
+    """Record one run's total wall-clock + token usage in the event timeline.
+
+    Lightweight structured tracing (JSONB payload on the existing append-only
+    run_events table) rather than a full OpenTelemetry pipeline — see
+    docs/16 for why: single-machine, single-process, no collector to run.
+    Coarse (whole run, not per internal model request — see
+    api/chat.py::persist_model_step_event for the caller-side caveat).
+    """
+
+    return await append_run_event(
+        session,
+        run_id=run_id,
+        event_type="model_step",
         payload={
-            "tool": tool_name,
-            "provider": provider,
-            "ok": ok,
-            "summary": summary[:500],
+            "duration_ms": duration_ms,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
         },
     )
 

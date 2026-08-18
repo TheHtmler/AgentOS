@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -67,6 +68,7 @@ async def run_web_search(
     limit = clamp_max_results(max_results)
     settings = get_settings()
 
+    started_at = time.monotonic()
     if deps.persist_tool_events and deps.run_id is not None:
         await _persist_tool_call(deps.run_id, normalized, limit)
 
@@ -83,6 +85,7 @@ async def run_web_search(
                 provider=exc.provider,
                 ok=False,
                 summary=str(exc),
+                duration_ms=round((time.monotonic() - started_at) * 1000),
             )
         return json.dumps(
             {"error": str(exc), "query": normalized},
@@ -97,6 +100,7 @@ async def run_web_search(
             provider=response.provider,
             ok=True,
             summary=_summarize_response(response),
+            duration_ms=round((time.monotonic() - started_at) * 1000),
         )
 
     return json.dumps(asdict(response), ensure_ascii=False)
@@ -142,6 +146,7 @@ async def _persist_tool_result(
     provider: str | None,
     ok: bool,
     summary: str,
+    duration_ms: int | None = None,
 ) -> None:
     try:
         from agent_api.db.chat_store import append_tool_result_event
@@ -155,6 +160,7 @@ async def _persist_tool_result(
                 provider=provider,
                 ok=ok,
                 summary=summary,
+                duration_ms=duration_ms,
             )
     except Exception:
         logger.exception("Unable to persist tool_result for run %s", run_id)

@@ -17,6 +17,7 @@ from agent_api.context_budget import (
     is_context_overflow_error,
 )
 from agent_api.db.chat_store import (
+    append_model_step_event,
     append_text_delta,
     cancel_run,
     complete_run,
@@ -164,6 +165,36 @@ async def persist_completed_run(
             output_tokens=output_tokens,
             model_request_count=model_request_count,
         )
+
+
+async def persist_model_step_event(
+    run_id: UUID,
+    *,
+    duration_ms: int,
+    input_tokens: int | None,
+    output_tokens: int | None,
+) -> None:
+    """Record total run wall-clock + token usage for the Ops timeline; best-effort only.
+
+    Coarse (whole-run from request-start to completion, not per internal
+    tool-loop model request — the AG-UI adapter doesn't expose that
+    boundary) but still real signal: subtracting the interleaved
+    tool_result events' own duration_ms from this total approximates time
+    actually spent waiting on the model. Must never fail the run itself
+    over an observability write.
+    """
+
+    try:
+        async with session_factory() as session, session.begin():
+            await append_model_step_event(
+                session,
+                run_id=run_id,
+                duration_ms=duration_ms,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+    except Exception:
+        logger.exception("Unable to persist model_step event for run %s", run_id)
 
 
 def format_run_failure_message(error: BaseException, *, limit: int = 500) -> str:

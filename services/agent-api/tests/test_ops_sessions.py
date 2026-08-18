@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.api import ops_auth as ops_auth_api
 from agent_api.config import get_settings
+from agent_api.db.chat_store import append_model_step_event, append_tool_result_event
 from agent_api.db.models import Agent, Message, Run, Thread, User
 from agent_api.db.ops_store import create_ops_session
 from agent_api.db.session import close_database, session_factory
@@ -106,3 +107,58 @@ async def test_ops_sessions_list_and_detail(
         assert str(other_thread.id) not in filtered_ids
         assert any(item["id"] == str(user.id) for item in filtered.json()["users"])
         assert any(item["email"] == user.email for item in filtered.json()["users"])
+
+
+@pytest.mark.anyio
+async def test_ops_run_events_timeline(
+    database_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = await database_session.scalar(select(Agent).where(Agent.is_default.is_(True)))
+    if agent is None:
+        pytest.skip("no default agent seeded in database")
+
+    user = User(email=f"ops-events-{uuid4().hex}@example.com", status="active")
+    thread = Thread(user_id=user.id, agent_id=agent.id, title="ops-events-thread")
+    database_session.add_all([user, thread])
+    await database_session.flush()
+    run = Run(thread_id=thread.id, status="completed", model_name="test-model")
+    database_session.add(run)
+    await database_session.flush()
+    await append_tool_result_event(
+        database_session,
+        run_id=run.id,
+        tool_name="knowledge_search",
+        provider="postgres",
+        ok=True,
+        summary="3 hits",
+        duration_ms=42,
+    )
+    await append_model_step_event(
+        database_session,
+        run_id=run.id,
+        duration_ms=1200,
+        input_tokens=500,
+        output_tokens=80,
+    )
+    await database_session.commit()
+
+    token = await _ops_cookie(monkeypatch)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        unauth = await client.get(f"/v1/ops/sessions/{thread.id}/runs/{run.id}/events")
+        assert unauth.status_code == 401
+
+        client.cookies.set("ops_session", token)
+        response = await client.get(f"/v1/ops/sessions/{thread.id}/runs/{run.id}/events")
+        assert response.status_code == 200
+        events = response.json()["events"]
+        assert [event["event_type"] for event in events] == ["tool_result", "model_step"]
+        assert events[0]["payload"]["duration_ms"] == 42
+        assert events[1]["payload"]["input_tokens"] == 500
+
+        other_thread = Thread(user_id=user.id, agent_id=agent.id, title="ops-events-mismatch")
+        database_session.add(other_thread)
+        await database_session.commit()
+        mismatched = await client.get(f"/v1/ops/sessions/{other_thread.id}/runs/{run.id}/events")
+        assert mismatched.status_code == 404

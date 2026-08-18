@@ -30,6 +30,13 @@ type OpsRun = {
   completed_at: string | null;
 };
 
+type OpsRunEvent = {
+  seq: number;
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
 type OpsThreadDetail = {
   id: string;
   title: string | null;
@@ -52,6 +59,32 @@ export default function SessionDetailPage() {
   const params = useParams<{ threadId: string }>();
   const [detail, setDetail] = useState<OpsThreadDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [eventsByRunId, setEventsByRunId] = useState<Record<string, OpsRunEvent[]>>({});
+  const [eventsError, setEventsError] = useState<string | null>(null);
+
+  const toggleRunEvents = useCallback(
+    async (runId: string) => {
+      if (expandedRunId === runId) {
+        setExpandedRunId(null);
+        return;
+      }
+      setExpandedRunId(runId);
+      setEventsError(null);
+      if (eventsByRunId[runId] !== undefined) {
+        return;
+      }
+      try {
+        const result = await opsJson<{ events: OpsRunEvent[] }>(
+          `/api/ops/sessions/${params.threadId}/runs/${runId}/events`,
+        );
+        setEventsByRunId((current) => ({ ...current, [runId]: result.events }));
+      } catch (err) {
+        setEventsError(err instanceof Error ? err.message : "加载事件失败");
+      }
+    },
+    [expandedRunId, eventsByRunId, params.threadId],
+  );
 
   const load = useCallback(async () => {
     try {
@@ -147,8 +180,42 @@ export default function SessionDetailPage() {
                   <span>
                     tokens {run.input_tokens ?? "—"} / {run.output_tokens ?? "—"}
                   </span>
+                  <button
+                    type="button"
+                    className="linkish"
+                    onClick={() => void toggleRunEvents(run.id)}
+                  >
+                    {expandedRunId === run.id ? "收起事件" : "查看事件"}
+                  </button>
                 </div>
                 {run.error_message ? <pre className="chunk-body">{run.error_message}</pre> : null}
+                {expandedRunId === run.id ? (
+                  <div className="stack">
+                    {eventsError ? <p className="error">{eventsError}</p> : null}
+                    {eventsByRunId[run.id] === undefined && !eventsError ? (
+                      <p className="muted">加载中…</p>
+                    ) : null}
+                    {eventsByRunId[run.id]?.length === 0 ? (
+                      <p className="muted">该 Run 没有工具/模型耗时事件</p>
+                    ) : null}
+                    {eventsByRunId[run.id]?.map((event) => (
+                      <div key={event.seq} className="doc-card__meta">
+                        <span>#{event.seq}</span>
+                        <span>{event.event_type}</span>
+                        <span>{formatTime(event.created_at)}</span>
+                        {typeof event.payload.tool === "string" ? (
+                          <span>{event.payload.tool}</span>
+                        ) : null}
+                        {typeof event.payload.duration_ms === "number" ? (
+                          <span>{event.payload.duration_ms} ms</span>
+                        ) : null}
+                        {event.payload.ok === false ? (
+                          <span className="badge badge--failed">失败</span>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </article>
             ))}
           </section>

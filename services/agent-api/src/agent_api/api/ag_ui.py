@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
@@ -29,6 +30,7 @@ from agent_api.api.chat import (
     persist_cancelled_run,
     persist_completed_run,
     persist_failed_run,
+    persist_model_step_event,
     persist_text_delta,
     strip_thinking_parts,
     user_facing_run_error_message,
@@ -175,6 +177,8 @@ async def stream_ag_ui_run(
         raise HTTPException(status_code=404, detail="Case not found") from error
     except ThreadBusyError as error:
         raise HTTPException(status_code=409, detail="Thread is already running") from error
+
+    run_started_at = time.monotonic()
 
     try:
         history = await load_thread_model_history(started.thread_id, user_id=user.id)
@@ -399,6 +403,12 @@ async def stream_ag_ui_run(
                 input_tokens=usage.input_tokens or None,
                 output_tokens=usage.output_tokens or None,
                 model_request_count=usage.requests,
+            )
+            await persist_model_step_event(
+                started.run_id,
+                duration_ms=round((time.monotonic() - run_started_at) * 1000),
+                input_tokens=usage.input_tokens or None,
+                output_tokens=usage.output_tokens or None,
             )
             # Same fire-and-forget path as classic SSE chat.
             if runtime.ollama_http_client is not None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any
 from uuid import UUID
 
@@ -26,6 +27,7 @@ async def run_calculate(deps: AgentDeps, *, expression: str) -> str:
     if blocked is not None:
         return blocked
 
+    started_at = time.monotonic()
     if deps.persist_tool_events and deps.run_id is not None:
         await _persist_tool_call(deps.run_id, "calculate", {"expression": expression})
 
@@ -42,6 +44,7 @@ async def run_calculate(deps: AgentDeps, *, expression: str) -> str:
             "calculate",
             ok=bool(payload.get("ok")),
             summary=summary[:500],
+            duration_ms=round((time.monotonic() - started_at) * 1000),
         )
 
     return json.dumps(payload, ensure_ascii=False)
@@ -72,6 +75,7 @@ async def run_time_diff(
     if units is not None:
         args["units"] = units
 
+    started_at = time.monotonic()
     if deps.persist_tool_events and deps.run_id is not None:
         await _persist_tool_call(deps.run_id, "time_diff", args)
 
@@ -94,6 +98,7 @@ async def run_time_diff(
             "time_diff",
             ok=bool(payload.get("ok")),
             summary=summary[:500],
+            duration_ms=round((time.monotonic() - started_at) * 1000),
         )
 
     return json.dumps(payload, ensure_ascii=False)
@@ -152,6 +157,7 @@ async def _persist_tool_result(
     *,
     ok: bool,
     summary: str,
+    duration_ms: int | None = None,
 ) -> None:
     try:
         from agent_api.db.chat_store import append_tool_result_event
@@ -165,6 +171,7 @@ async def _persist_tool_result(
                 provider="util",
                 ok=ok,
                 summary=summary,
+                duration_ms=duration_ms,
             )
     except Exception:
         logger.exception("Unable to persist %s tool_result run=%s", tool_name, run_id)

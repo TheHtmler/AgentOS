@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from dataclasses import replace
 from urllib.parse import urlparse
 from uuid import UUID
@@ -48,6 +49,7 @@ async def run_fetch_url(
     settings = get_settings()
     host = urlparse(normalized).hostname or normalized
 
+    started_at = time.monotonic()
     if deps.persist_tool_events and deps.run_id is not None:
         await _persist_tool_call(deps.run_id, normalized, limit)
 
@@ -64,6 +66,7 @@ async def run_fetch_url(
                 provider=exc.provider,
                 ok=False,
                 summary=f"{host}: {exc}"[:500],
+                duration_ms=round((time.monotonic() - started_at) * 1000),
             )
         return json.dumps(
             {"error": str(exc), "url": normalized},
@@ -80,6 +83,7 @@ async def run_fetch_url(
             provider=response.provider,
             ok=True,
             summary=_summarize_response(response),
+            duration_ms=round((time.monotonic() - started_at) * 1000),
         )
 
     return json.dumps(
@@ -119,7 +123,7 @@ async def _maybe_persist_artifact(
     if not full_text:
         return response
 
-    content = full_text[:settings.artifact_max_chars]
+    content = full_text[: settings.artifact_max_chars]
     try:
         from agent_api.db.artifact_store import create_artifact
         from agent_api.db.session import session_factory
@@ -156,9 +160,7 @@ def _summarize_response(response: FetchResponse) -> str:
     title = response.title or host
     flag = "truncated" if response.truncated else "full"
     artifact = f", artifact={response.artifact_id}" if response.artifact_id else ""
-    return (
-        f"{response.provider}: {title} ({flag}, {response.total_chars} chars{artifact})"
-    )[:500]
+    return (f"{response.provider}: {title} ({flag}, {response.total_chars} chars{artifact})")[:500]
 
 
 async def _persist_tool_call(run_id: UUID, url: str, max_chars: int) -> None:
@@ -184,6 +186,7 @@ async def _persist_tool_result(
     provider: str | None,
     ok: bool,
     summary: str,
+    duration_ms: int | None = None,
 ) -> None:
     try:
         from agent_api.db.chat_store import append_tool_result_event
@@ -197,6 +200,7 @@ async def _persist_tool_result(
                 provider=provider,
                 ok=ok,
                 summary=summary,
+                duration_ms=duration_ms,
             )
     except Exception:
         logger.exception("Unable to persist tool_result for run %s", run_id)

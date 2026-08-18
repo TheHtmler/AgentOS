@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import time
 from datetime import date
 from typing import Any, cast
 from uuid import UUID
@@ -148,10 +149,7 @@ async def run_growth_assess(
     if resolved_age is None and not has_age_months and not has_dob_pair:
         return json.dumps(
             {
-                "error": (
-                    "Provide age_months, or both date_of_birth and measured_on "
-                    "(YYYY-MM-DD)"
-                ),
+                "error": ("Provide age_months, or both date_of_birth and measured_on (YYYY-MM-DD)"),
             },
             ensure_ascii=False,
         )
@@ -172,6 +170,7 @@ async def run_growth_assess(
     if weight_kg is not None:
         payload["weight_kg"] = float(weight_kg)
 
+    started_at = time.monotonic()
     if deps.persist_tool_events and deps.run_id is not None:
         await _persist_tool_call(deps.run_id, payload)
 
@@ -182,6 +181,7 @@ async def run_growth_assess(
             age_months=resolved_age,
             height_cm=height_cm,
             weight_kg=weight_kg,
+            started_at=started_at,
         )
 
     return await _run_who_assess(
@@ -189,6 +189,7 @@ async def run_growth_assess(
         payload=payload,
         height_cm=height_cm,
         weight_kg=weight_kg,
+        started_at=started_at,
     )
 
 
@@ -199,6 +200,7 @@ async def _run_nhc_assess(
     age_months: float,
     height_cm: float | None,
     weight_kg: float | None,
+    started_at: float,
 ) -> str:
     from agent_api.tools.growth.nhc import assess_nhc
 
@@ -212,7 +214,13 @@ async def _run_nhc_assess(
     except Exception as exc:
         logger.exception("growth_assess NHC compute failed")
         if deps.persist_tool_events and deps.run_id is not None:
-            await _persist_tool_result(deps.run_id, ok=False, summary=str(exc)[:500], provider="nhc")
+            await _persist_tool_result(
+                deps.run_id,
+                ok=False,
+                summary=str(exc)[:500],
+                provider="nhc",
+                duration_ms=round((time.monotonic() - started_at) * 1000),
+            )
         return json.dumps({"error": f"growth computation failed: {exc}"}, ensure_ascii=False)
 
     indicators = [
@@ -242,10 +250,17 @@ async def _run_nhc_assess(
     }
 
     if deps.persist_tool_events and deps.run_id is not None:
-        summary = ", ".join(
-            f"{row['indicator']} p{row['percentile']}" for row in indicators[:3]
-        ) or "no indicators"
-        await _persist_tool_result(deps.run_id, ok=True, summary=summary[:500], provider="nhc")
+        summary = (
+            ", ".join(f"{row['indicator']} p{row['percentile']}" for row in indicators[:3])
+            or "no indicators"
+        )
+        await _persist_tool_result(
+            deps.run_id,
+            ok=True,
+            summary=summary[:500],
+            provider="nhc",
+            duration_ms=round((time.monotonic() - started_at) * 1000),
+        )
 
     return json.dumps(response, ensure_ascii=False)
 
@@ -256,6 +271,7 @@ async def _run_who_assess(
     payload: dict[str, object],
     height_cm: float | None,
     weight_kg: float | None,
+    started_at: float,
 ) -> str:
     try:
         import importlib
@@ -265,7 +281,13 @@ async def _run_who_assess(
     except Exception as exc:
         logger.exception("growth_assess compute failed")
         if deps.persist_tool_events and deps.run_id is not None:
-            await _persist_tool_result(deps.run_id, ok=False, summary=str(exc)[:500], provider="anthro")
+            await _persist_tool_result(
+                deps.run_id,
+                ok=False,
+                summary=str(exc)[:500],
+                provider="anthro",
+                duration_ms=round((time.monotonic() - started_at) * 1000),
+            )
         return json.dumps({"error": f"growth computation failed: {exc}"}, ensure_ascii=False)
 
     indicators = [
@@ -297,10 +319,17 @@ async def _run_who_assess(
     }
 
     if deps.persist_tool_events and deps.run_id is not None:
-        summary = ", ".join(
-            f"{row['indicator']} p{row['percentile']}" for row in indicators[:3]
-        ) or "no indicators"
-        await _persist_tool_result(deps.run_id, ok=True, summary=summary[:500], provider="anthro")
+        summary = (
+            ", ".join(f"{row['indicator']} p{row['percentile']}" for row in indicators[:3])
+            or "no indicators"
+        )
+        await _persist_tool_result(
+            deps.run_id,
+            ok=True,
+            summary=summary[:500],
+            provider="anthro",
+            duration_ms=round((time.monotonic() - started_at) * 1000),
+        )
 
     return json.dumps(response, ensure_ascii=False)
 
@@ -355,6 +384,7 @@ async def _persist_tool_result(
     ok: bool,
     summary: str,
     provider: str = "anthro",
+    duration_ms: int | None = None,
 ) -> None:
     try:
         from agent_api.db.chat_store import append_tool_result_event
@@ -368,6 +398,7 @@ async def _persist_tool_result(
                 provider=provider,
                 ok=ok,
                 summary=summary,
+                duration_ms=duration_ms,
             )
     except Exception:
         logger.exception("Unable to persist growth_assess tool_result run=%s", run_id)

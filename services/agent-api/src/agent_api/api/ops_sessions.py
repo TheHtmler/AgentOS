@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import ColumnElement, String, cast, func, or_, select
 
 from agent_api.api.ops_auth import get_ops_subject
+from agent_api.db.chat_store import list_run_events_for_ops
 from agent_api.db.models import Agent, Message, Run, Thread, User
 from agent_api.db.session import session_factory
 
@@ -348,5 +349,43 @@ async def get_ops_session(
                 completed_at=run.completed_at,
             )
             for run in runs
+        ],
+    )
+
+
+class OpsRunEventOut(BaseModel):
+    seq: int
+    event_type: str
+    payload: dict[str, object]
+    created_at: datetime
+
+
+class OpsRunEventListOut(BaseModel):
+    events: list[OpsRunEventOut]
+
+
+@router.get("/{thread_id}/runs/{run_id}/events", response_model=OpsRunEventListOut)
+async def get_ops_run_events(
+    thread_id: UUID,
+    run_id: UUID,
+    _subject: Annotated[str, Depends(get_ops_subject)],
+) -> OpsRunEventListOut:
+    """List one run's tool_call/tool_result/model_step timeline for the Ops console."""
+
+    async with session_factory() as session:
+        run = await session.get(Run, run_id)
+        if run is None or run.thread_id != thread_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+        events = await list_run_events_for_ops(session, run_id=run_id)
+
+    return OpsRunEventListOut(
+        events=[
+            OpsRunEventOut(
+                seq=event.seq,
+                event_type=event.event_type,
+                payload=event.payload,
+                created_at=event.created_at,
+            )
+            for event in events
         ],
     )
