@@ -412,7 +412,6 @@ export function ChatWorkspace({
 
           <div className="ml-auto hidden items-center gap-3 lg:flex">
             <ThemeToggle />
-            <span className="agentos-runtime-tag">本地服务 · 已就绪</span>
             <p className="max-w-48 truncate text-sm text-zinc-600" title={userEmail}>
               {userEmail}
             </p>
@@ -429,7 +428,6 @@ export function ChatWorkspace({
 
           <div className="ml-auto flex items-center gap-2 lg:hidden">
             <ThemeToggle compact />
-            <span className="agentos-runtime-tag">已就绪</span>
           </div>
         </div>
       </header>

@@ -64,7 +64,7 @@
 - 前端无感重连：SSE/`RunError` 断流时先探测 Run 是否仍 `running`；是则不弹红字、保持生成中并轮询，终态后刷历史；`visibilitychange` / `online` 触发同样同步。
 - 聊天体验 P0：多段 Thinking 与 Tool 共用有序 `timelineSteps`；助手气泡 Markdown（GFM + sanitize）；消息时间戳与 Run 总耗时。
 - 聊天体验 P1：Thread 重命名（`PATCH /v1/threads/{id}`）与软删除（`deleted_at` + `DELETE`）；列表隐藏已删会话；Next.js 同域代理与侧栏操作菜单。
-- 聊天体验 P2：深色科技风 design tokens / 玻璃面板 / 科技蓝强调；Space Grotesk + IBM Plex Sans；AgentOS 几何 Logo 与 favicon；桌面右侧处理详情默认收起可切换。
+- 聊天体验 P2：深色科技风 design tokens / 玻璃面板 / 科技蓝强调；Space Grotesk + IBM Plex Sans；AgentOS 几何 Logo 与 favicon；聊天工作区采用侧栏 + 主聊天两列自适应布局，处理进度内联展示。
 - 多会话并行：切换/新建会话不再 abort 后台 Run；workspace 按 slot 保活多个 `ChatPanel`；侧栏按 Thread 显示「生成中」。
 - 模型并发：`MODEL_MAX_CONCURRENT_RUNS`（默认 3）控制进程内同时执行的模型流；同 Thread 仍最多一个 `running` Run。
 - 模型上下文在 `run_message_histories` 缺失时回退到 `messages` 表成对历史。

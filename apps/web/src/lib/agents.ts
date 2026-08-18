@@ -46,6 +46,7 @@ export function parseAgentSummaries(value: unknown): AgentSummary[] | null {
 export function displayAgentName(name: string): string {
   return name
     .replace(/\bGeneral Agent\b/gi, "通用助手")
+    .replace(/\bGeneral\b/gi, "通用助手")
     .replace(/\bAgent\b/gi, "助手")
     .trim();
 }

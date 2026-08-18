@@ -1582,7 +1582,7 @@ export function ChatPanel({
       ? "等待确认"
       : isStreaming
         ? "正在处理"
-        : "助手已就绪";
+        : "";
 
   return (
     <section
@@ -1595,10 +1595,12 @@ export function ChatPanel({
           <p className="agentos-thread-kicker">通用助手</p>
           <div className="agentos-thread-title-row">
             <h1 className="agentos-chat-heading">{threadId === null ? "新建会话" : "当前会话"}</h1>
-            <p aria-live="polite" className="agentos-chat-status">
-              <span aria-hidden="true" />
-              {statusLabel}
-            </p>
+            {statusLabel ? (
+              <p aria-live="polite" className="agentos-chat-status">
+                <span aria-hidden="true" />
+                {statusLabel}
+              </p>
+            ) : null}
           </div>
           <p className="agentos-chat-subheading">
             {threadId === null ? "准备开始新的任务" : "已恢复这个会话"}

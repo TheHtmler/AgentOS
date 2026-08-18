@@ -119,10 +119,8 @@ function SourcePanel({ onClose }: { onClose: () => void }) {
 
       <section className="demo-context-section demo-runtime-section">
         <div className="demo-section-label">
-          <span>助手状态</span>
-          <span className="demo-live-label">
-            <i /> 已就绪
-          </span>
+          <span>本轮信息</span>
+          <span>3 项</span>
         </div>
         <dl className="demo-runtime-list">
           <div>
@@ -227,7 +225,7 @@ export default function DesignDemoPage() {
             <div className="demo-brand-mark">A</div>
             <div>
               <strong>AgentOS</strong>
-              <span>personal workspace</span>
+              <span>助手工作台</span>
             </div>
             <IconButton label="关闭会话导航" onClick={() => setShowMobileNav(false)}>
               ×
