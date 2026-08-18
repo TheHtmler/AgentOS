@@ -82,3 +82,28 @@ async def test_p0_retrieval_evaluation(database_session: AsyncSession) -> None:
     assert all(hit["document_slug"] != withdrawn.slug for hit in withdrawn_hits)
     withdrawn.review_status = "curated"
     await database_session.commit()
+
+
+@pytest.mark.anyio
+async def test_p0_retrieval_precision_rejects_unrelated_query(
+    database_session: AsyncSession,
+) -> None:
+    """Recall isn't useful without precision: an out-of-domain query must return nothing.
+
+    Removing the disease_tags SQL hard-filter (a tag typo must not zero the
+    candidate set) only helps recall if the keyword/vector threshold in
+    ``search_knowledge_chunks`` still rejects queries that share no real
+    signal with any curated chunk.
+    """
+
+    await upsert_mma_pa_knowledge(database_session)
+    await database_session.commit()
+
+    hits = await search_knowledge_chunks(
+        database_session,
+        query="汽车轮胎更换步骤和工具",
+        disease_tags=[],
+        max_results=8,
+        knowledge_base_slug="mma-pa",
+    )
+    assert hits == []

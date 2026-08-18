@@ -133,6 +133,36 @@ async def test_vector_score_skipped_for_mismatched_embedding_model(
 
 
 @pytest.mark.anyio
+async def test_misspelled_disease_tag_does_not_zero_candidates(
+    database_session: AsyncSession,
+) -> None:
+    """A tag typo must not collapse the candidate set — it's a scoring signal, not a filter."""
+
+    await upsert_mma_pa_knowledge(database_session)
+    await database_session.commit()
+
+    hits_with_correct_tag = await search_knowledge_chunks(
+        database_session,
+        query="急性失代偿 发热",
+        disease_tags=["isolated_mma"],
+        max_results=3,
+        knowledge_base_slug="mma-pa",
+    )
+    hits_with_typo_tag = await search_knowledge_chunks(
+        database_session,
+        query="急性失代偿 发热",
+        disease_tags=["mma"],  # not a real tag — real tag is "isolated_mma"
+        max_results=3,
+        knowledge_base_slug="mma-pa",
+    )
+    assert hits_with_typo_tag
+    # The typo tag loses its scoring boost (a marginal 3rd-place result may
+    # shift), but the query's real keyword signal must still surface the same
+    # top hit — a misspelled tag must not zero the candidate set outright.
+    assert hits_with_typo_tag[0]["chunk_id"] == hits_with_correct_tag[0]["chunk_id"]
+
+
+@pytest.mark.anyio
 async def test_run_knowledge_search_json(database_session: AsyncSession) -> None:
     await upsert_mma_pa_knowledge(database_session)
     await database_session.commit()

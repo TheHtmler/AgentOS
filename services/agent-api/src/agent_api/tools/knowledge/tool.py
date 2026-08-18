@@ -128,6 +128,14 @@ async def search_knowledge_chunks(
 ) -> list[dict[str, Any]]:
     """Hybrid keyword + optional embedding search over published knowledge chunks.
 
+    ``disease_tags`` is a Python-side scoring signal only (see
+    ``_score_components``'s tag-overlap boost), not a SQL filter — a small
+    model misspelling a tag (``mma`` instead of ``isolated_mma``) must not
+    zero out the candidate set. The knowledge base is small enough (well
+    under the 200-row candidate cap below) that skipping a tag WHERE clause
+    costs nothing and only the Python-level keyword/vector threshold decides
+    what survives.
+
     ``current_embedding_model`` gates vector scoring to chunks embedded by
     that same model — left ``None`` (unit tests that don't model this
     dimension), the gate is skipped and all embeddings are used as before.
@@ -148,8 +156,6 @@ async def search_knowledge_chunks(
     )
     if knowledge_base_slug:
         stmt = stmt.where(KnowledgeBase.slug == knowledge_base_slug)
-    if disease_tags:
-        stmt = stmt.where(KnowledgeChunk.tags.overlap(disease_tags))
 
     # Embeddings or explicit tags can rescue synonym queries beyond ILIKE hits.
     use_vector = query_embedding is not None

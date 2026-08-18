@@ -61,6 +61,18 @@
       "query": "知识库能不能直接给孩子算蛋白克数和药物剂量",
       "disease_tags": ["safety", "evidence"],
       "expected_title_terms": ["安全边界", "证据和限制"]
+    },
+    {
+      "id": "vomit-no-jargon",
+      "query": "孩子一直呕吐还没什么精神要不要紧",
+      "disease_tags": [],
+      "expected_title_terms": ["急性失代偿"]
+    },
+    {
+      "id": "typo-tag-regression",
+      "query": "丙酸血症宝宝日常饮食蛋白要怎么控制",
+      "disease_tags": ["proprionic_acidemia_TYPO", "does_not_exist"],
+      "expected_title_terms": ["饮食原则", "饮食管理"]
     }
   ]
 }
