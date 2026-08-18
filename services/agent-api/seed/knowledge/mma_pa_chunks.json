@@ -12,14 +12,14 @@
       "source_label": "GeneReviews / JIMD 2021 (pointers)",
       "source_kind": "curated_summary",
       "source_date": "2021-2022",
-      "version_label": "2026-08-12-curated-v2",
+      "version_label": "2026-08-18-curated-v3",
       "review_status": "curated",
       "chunks": [
         {
           "chunk_index": 0,
           "title": "孤立型 MMA 是什么",
           "tags": ["isolated_mma", "overview", "age_band:neonate", "age_band:infant"],
-          "content": "孤立型甲基丙二酸血症（isolated MMA）是一类有机酸代谢病，核心是甲基丙二酰辅酶A变位酶通路障碍，导致甲基丙二酸及相关代谢物蓄积。新生儿筛查或婴儿期喂养不耐受、嗜睡、酸中毒时可被发现。回答时必须标注亚型，不可与伴同型半胱氨酸升高的钴胺素缺陷混为一谈。权威综述入口：GeneReviews Isolated Methylmalonic Acidemia（NBK1231）。教育向说明，非诊断。"
+          "content": "孤立型甲基丙二酸血症（isolated MMA）是一类有机酸代谢病，核心是甲基丙二酰辅酶A变位酶通路障碍，导致甲基丙二酸及相关代谢物蓄积。新生儿筛查或婴儿期喂养不耐受、嗜睡、酸中毒时可被发现。回答时应区分亚型，不可与伴同型半胱氨酸升高的钴胺素缺陷混为一谈；未提供基因分型或同型半胱氨酸结果时亚型按未明处理，用「甲基丙二酸血症」上位表述，不得默认孤立型。权威综述入口：GeneReviews Isolated Methylmalonic Acidemia（NBK1231）。教育向说明，非诊断。"
         },
         {
           "chunk_index": 1,
