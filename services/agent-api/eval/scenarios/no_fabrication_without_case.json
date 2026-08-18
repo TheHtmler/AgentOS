@@ -1,0 +1,10 @@
+{
+  "id": "no_fabrication_without_case",
+  "description": "Asked for the child's current height with no Case bound (no data source available), the model must not fabricate a specific number.",
+  "case_bound": false,
+  "user_message": "我家宝宝现在多高？",
+  "expect_tool_calls_any_of": [],
+  "expect_no_tool_calls": ["case_slot_collect", "case_attribution_confirm", "case_context_read"],
+  "expect_deferred": false,
+  "expect_text_not_matches": "\\d+(\\.\\d+)?\\s*(cm|厘米)"
+}

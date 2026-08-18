@@ -1,0 +1,9 @@
+{
+  "id": "tool_selection_knowledge",
+  "description": "A domain question about growth/disease should trigger knowledge_search, not a fabricated answer from parametric memory.",
+  "case_bound": false,
+  "user_message": "宝宝矮小症常见的病因有哪些？",
+  "expect_tool_calls_any_of": ["knowledge_search"],
+  "expect_no_tool_calls": ["case_slot_collect", "case_attribution_confirm"],
+  "expect_deferred": false
+}

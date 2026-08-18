@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Fast pre-commit gate — lint/format/typecheck scoped to staged files only.
+#
+# Deliberately scoped (not whole-project): ruff/pyright/prettier all have
+# pre-existing findings elsewhere in the repo, and gating on those would
+# block unrelated commits. pytest is NOT run here (needs local Postgres,
+# too slow for every commit) — see the pre-push hook for that.
+#
+# Installed by scripts/install-git-hooks.sh.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+py_files=()
+web_touched=0
+ops_touched=0
+format_files=()
+
+# macOS ships bash 3.2 (no mapfile); a read loop over process substitution
+# works on both 3.2 and modern bash.
+while IFS= read -r f; do
+  [[ -z "$f" ]] && continue
+  case "$f" in
+    services/agent-api/*.py) py_files+=("${f#services/agent-api/}") ;;
+    apps/web/*) web_touched=1 ;;
+    apps/ops/*) ops_touched=1 ;;
+  esac
+  case "$f" in
+    *.md | *.ts | *.tsx | *.js | *.jsx | *.json | *.css | *.mjs) format_files+=("$f") ;;
+  esac
+done < <(git diff --cached --name-only --diff-filter=ACMR)
+
+fail=0
+
+if [[ ${#py_files[@]} -gt 0 ]]; then
+  echo "==> ruff check (${#py_files[@]} staged file(s))"
+  (cd services/agent-api && uv run ruff check "${py_files[@]}") || fail=1
+
+  echo "==> ruff format --check (${#py_files[@]} staged file(s))"
+  (cd services/agent-api && uv run ruff format --check "${py_files[@]}") || fail=1
+
+  echo "==> pyright (${#py_files[@]} staged file(s))"
+  (cd services/agent-api && uv run pyright "${py_files[@]}") || fail=1
+fi
+
+if [[ ${#format_files[@]} -gt 0 ]]; then
+  echo "==> prettier --check (${#format_files[@]} staged file(s))"
+  pnpm exec prettier --check "${format_files[@]}" || fail=1
+fi
+
+if [[ "$web_touched" -eq 1 ]]; then
+  echo "==> eslint (apps/web)"
+  pnpm lint:web || fail=1
+fi
+
+if [[ "$ops_touched" -eq 1 ]]; then
+  echo "==> eslint (apps/ops)"
+  pnpm lint:ops || fail=1
+fi
+
+if [[ "$fail" -ne 0 ]]; then
+  echo ""
+  echo "pre-commit checks failed — fix the issues above."
+  echo "(escape hatch: git commit --no-verify — do not use for real regressions)"
+  exit 1
+fi
+
+exit 0

@@ -51,4 +51,6 @@ pnpm format                      # Prettier(md/ts/tsx 都要过)
 
 - Conventional Commits，英文 subject(`fix(agent): ...`)；仓库历史直接在 `main` 上迭代。
 - 提交前必须过：相关 pytest、`ruff check`、`ruff format --check`、`pyright`、前端改动加 `pnpm lint:web` 与 `pnpm format`。
+- 首次协作跑一次 `./scripts/install-git-hooks.sh`：装好后 `git commit` 自动跑 ruff/format/pyright/eslint（只扫本次改动的文件，不阻塞在无关历史债务上）,`git push` 自动跑全量 `pytest`(需要本地 Postgres 已启动)。真遇到需要绕过的场景用 `--no-verify`，不要把它当日常操作。
+- 改动 `agent.py`/工具描述/`SYSTEM_INSTRUCTIONS` 等影响模型行为的内容前后，跑一次 `uv run python scripts/eval_agent_scenarios.py`（需要本地 Ollama 已启动），确认场景仍全部 PASS。
 - 跨服务行为、部署方式、数据模型变化时，先更新 `docs/` 对应文档（索引见 `docs/README.md` 的「何时更新」列）。

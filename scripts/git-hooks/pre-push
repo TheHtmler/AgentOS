@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Slower pre-push gate: full backend pytest (needs local PostgreSQL).
+#
+# Installed by scripts/install-git-hooks.sh. Intentionally not in
+# pre-commit — pytest needs a running local Postgres and is too slow to
+# gate every commit.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT/services/agent-api"
+
+echo "==> pytest (services/agent-api)"
+if ! uv run pytest -q; then
+  echo ""
+  echo "pytest failed — if this is ConnectionRefused noise, start the local dev"
+  echo "Postgres first: cd infra/postgres && docker compose --env-file .env -f compose.yaml up -d"
+  echo "(escape hatch: git push --no-verify — do not use for real regressions)"
+  exit 1
+fi
+
+exit 0
