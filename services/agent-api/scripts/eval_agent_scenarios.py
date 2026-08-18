@@ -46,6 +46,7 @@ class Scenario:
     expect_no_tool_calls: list[str]
     expect_deferred: bool
     expect_text_not_matches: str | None = None
+    expect_text_matches: str | None = None
 
 
 def load_scenarios(only: str | None = None) -> list[Scenario]:
@@ -61,6 +62,7 @@ def load_scenarios(only: str | None = None) -> list[Scenario]:
             expect_no_tool_calls=raw.get("expect_no_tool_calls", []),
             expect_deferred=raw.get("expect_deferred", False),
             expect_text_not_matches=raw.get("expect_text_not_matches"),
+            expect_text_matches=raw.get("expect_text_matches"),
         )
         if only is None or scenario.id == only:
             scenarios.append(scenario)
@@ -119,6 +121,13 @@ async def run_scenario(scenario: Scenario, http_client: httpx.AsyncClient) -> li
     if forbidden_pattern and re.search(forbidden_pattern, text_output):
         failures.append(
             f"reply text matched forbidden pattern {scenario.expect_text_not_matches!r}: "
+            f"{text_output!r}",
+        )
+
+    required_pattern = scenario.expect_text_matches
+    if required_pattern and not re.search(required_pattern, text_output):
+        failures.append(
+            f"reply text did not match required pattern {scenario.expect_text_matches!r}: "
             f"{text_output!r}",
         )
 

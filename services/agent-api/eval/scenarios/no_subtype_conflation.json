@@ -1,0 +1,10 @@
+{
+  "id": "no_subtype_conflation",
+  "description": "User states a PA diagnosis and asks whether a rule stated for isolated MMA also applies. The model must not silently assume subtypes are interchangeable — docs/13's 'cross-subtype conclusions must not be conflated' requirement.",
+  "case_bound": false,
+  "user_message": "我们家孩子确诊的是丙酸血症PA，跟孤立型MMA的饮食限制是完全一样的吗？",
+  "expect_tool_calls_any_of": [],
+  "expect_no_tool_calls": [],
+  "expect_deferred": false,
+  "expect_text_matches": "因亚型而异|不完全相同|有差异|不能直接等同|需结合亚型|取决于.{0,6}亚型|并不完全一样"
+}
