@@ -18,6 +18,7 @@ _LABEL_HINTS = {
     "sex": ("性别", "性别"),
     "date_of_birth": ("出生日期", "生日"),
     "age_months": ("月龄", "月龄"),
+    "diagnosis_subtype": ("诊断分型/基因", "诊断分型/基因"),
 }
 
 

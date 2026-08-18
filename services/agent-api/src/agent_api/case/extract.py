@@ -39,6 +39,23 @@ _WEIGHT_RE = re.compile(
 _HEIGHT_UNIT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:cm|厘米)", re.IGNORECASE)
 _WEIGHT_UNIT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:kg|公斤)", re.IGNORECASE)
 _SEX_RE = re.compile(r"男宝|女宝|小男孩|小女孩|男孩|女孩|儿子|女儿")
+# MMA/PA diagnosis subtype + gene mentions — deliberately full clinical terms only
+# (not bare "MMA"/"PA" abbreviations, which are too short/common to regex-match safely
+# as a diagnosis signal); the LLM extractor path is the primary catcher for abbreviations
+# stated with clear context, this regex is the deterministic safety net.
+_DIAGNOSIS_SUBTYPE_RE = re.compile(
+    r"孤立型\s*甲基丙二酸血症|甲基丙二酸血症|丙酸血症|钴胺素\s*(?:代谢)?\s*(?:缺陷|障碍)|cbl[a-f]",
+    re.IGNORECASE,
+)
+# \b relies on \w, and Chinese characters count as \w under Python's default
+# Unicode matching — "是MMUT突变" has no \w/\W transition before "M", so a
+# \b-anchored pattern would silently fail on the common case of a gene name
+# glued directly to Chinese text with no space. Anchor on "not ASCII alnum"
+# instead so it still rejects partial matches inside a longer ASCII token.
+_GENE_RE = re.compile(
+    r"(?<![A-Za-z0-9])(MMUT|MMAA|MMAB|MMADHC|PCCA|PCCB)(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
 _DOB_CONTEXT_RE = re.compile(r"出生|生日")
 _DOB_CN_RE = re.compile(r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?")
 _DOB_ISO_RE = re.compile(r"(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})")
@@ -90,6 +107,23 @@ def infer_case_fact_key(content: str, tags: list[str]) -> str | None:
         return "date_of_birth"
     if any(token in haystack for token in ("月龄", "个月", "age_months")):
         return "age_months"
+    if any(
+        token in haystack
+        for token in (
+            "孤立型",
+            "甲基丙二酸血症",
+            "丙酸血症",
+            "钴胺素",
+            "mmut",
+            "mmaa",
+            "mmab",
+            "mmadhc",
+            "pcca",
+            "pccb",
+            "diagnosis_subtype",
+        )
+    ):
+        return "diagnosis_subtype"
     return None
 
 
@@ -131,6 +165,26 @@ def _age_months_hint(text: str) -> CaseFactUpdate | None:
         key="age_months",
         content=f"月龄 {total} 个月",
         tags=["月龄"],
+    )
+
+
+def _diagnosis_subtype_hint(text: str) -> CaseFactUpdate | None:
+    """MMA/PA subtype or gene mention — feeds Case so knowledge answers can cite it."""
+
+    subtype_match = _DIAGNOSIS_SUBTYPE_RE.search(text)
+    gene_match = _GENE_RE.search(text)
+    if subtype_match is None and gene_match is None:
+        return None
+    raw_parts: list[str] = []
+    if subtype_match is not None:
+        raw_parts.append(subtype_match.group(0))
+    if gene_match is not None:
+        raw_parts.append(gene_match.group(0).upper())
+    parts = list(dict.fromkeys(raw_parts))
+    return CaseFactUpdate(
+        key="diagnosis_subtype",
+        content=f"诊断分型/基因 {'、'.join(parts)}",
+        tags=["诊断分型"],
     )
 
 
@@ -180,6 +234,9 @@ def slot_hints_from_user_message(user_message: str) -> list[CaseFactUpdate]:
     age = _age_months_hint(text)
     if age is not None:
         hints.append(age)
+    diagnosis = _diagnosis_subtype_hint(text)
+    if diagnosis is not None:
+        hints.append(diagnosis)
     return hints
 
 
@@ -284,7 +341,11 @@ async def extract_case_via_ollama(
         "}\n"
         "Rules:\n"
         "- Prefer stable keys when applicable: height_cm, weight_kg, sex, "
-        "date_of_birth, age_months (one update object per key).\n"
+        "date_of_birth, age_months, diagnosis_subtype (one update object per key).\n"
+        "- diagnosis_subtype: capture confirmed MMA/PA subtype (isolated MMA, cobalamin "
+        "disorder, PA) or a gene name (MMUT/MMAA/MMAB/PCCA/PCCB/etc.) when the user "
+        "states it as their child's own diagnosis — this is required context for citing "
+        "subtype-specific knowledge later; do not infer it from a general question.\n"
         "- If the user states BOTH height and weight in this turn, you MUST emit "
         "two updates (height_cm and weight_kg).\n"
         "- Only include keys the user (or clearly confirmed assistant recap) stated "

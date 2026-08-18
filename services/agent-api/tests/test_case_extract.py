@@ -105,6 +105,27 @@ def test_slot_hints_ignore_non_age_months_and_contextless_dates() -> None:
     assert all(item.key != "date_of_birth" for item in hints)
 
 
+def test_slot_hints_capture_diagnosis_subtype_and_gene() -> None:
+    subtype = {
+        item.key: item.content
+        for item in slot_hints_from_user_message("宝宝确诊了孤立型甲基丙二酸血症")
+    }
+    assert subtype["diagnosis_subtype"] == "诊断分型/基因 孤立型甲基丙二酸血症"
+
+    gene = {
+        item.key: item.content for item in slot_hints_from_user_message("基因检测结果是MMUT突变")
+    }
+    assert gene["diagnosis_subtype"] == "诊断分型/基因 MMUT"
+
+    both = {
+        item.key: item.content for item in slot_hints_from_user_message("确诊丙酸血症，基因是PCCA")
+    }
+    assert both["diagnosis_subtype"] == "诊断分型/基因 丙酸血症、PCCA"
+
+    assert infer_case_fact_key("孤立型甲基丙二酸血症", []) == "diagnosis_subtype"
+    assert infer_case_fact_key("普通话题没有诊断信息", []) is None
+
+
 def test_self_context_upgrades_model_updates_without_regex_hints() -> None:
     payload = ExtractedCasePayload(
         attribution="unknown",

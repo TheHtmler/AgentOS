@@ -118,7 +118,14 @@ async def list_keyed_fact_history(
     session: AsyncSession,
     *,
     case_id: UUID,
-    keys: tuple[str, ...] = ("height_cm", "weight_kg", "sex", "date_of_birth", "age_months"),
+    keys: tuple[str, ...] = (
+        "height_cm",
+        "weight_kg",
+        "sex",
+        "date_of_birth",
+        "age_months",
+        "diagnosis_subtype",
+    ),
     limit: int = 24,
 ) -> list[CaseFact]:
     """Return recent confirmed+archived rows for keyed slots (timeline answers)."""

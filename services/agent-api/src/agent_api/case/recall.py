@@ -17,7 +17,14 @@ from agent_api.db.models import CaseFact
 
 CASE_HEADER = "## Case profile (confirmed)"
 
-_HISTORY_KEYS = ("height_cm", "weight_kg", "sex", "date_of_birth", "age_months")
+_HISTORY_KEYS = (
+    "height_cm",
+    "weight_kg",
+    "sex",
+    "date_of_birth",
+    "age_months",
+    "diagnosis_subtype",
+)
 
 
 def format_recorded_at(
@@ -96,7 +103,10 @@ def format_case_block(
         lines.append("- (none)")
     for fact in current:
         label = fact.key or (", ".join(fact.tags) if fact.tags else "fact")
-        recorded = format_recorded_at(fact.updated_at or fact.created_at, timezone_name=timezone_name)
+        recorded = format_recorded_at(
+            fact.updated_at or fact.created_at,
+            timezone_name=timezone_name,
+        )
         lines.append(f"- [{label}] {fact.content} (recorded_at: {recorded})")
 
     lines.append("### History (prior values only; newest first; empty = no earlier records)")

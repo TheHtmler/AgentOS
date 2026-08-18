@@ -139,6 +139,11 @@ Prefer it over web_search for the numeric comparison. Default standard is WHO 20
 use standard=nhc or nhc-wst-423-2022 when the China NHC standard is requested or implied.
 Explain with the tool source_url; if a required Case slot is missing, call case_slot_collect
 instead of a long text ask.
+If the result is notably abnormal (|z_score| > 2 for any indicator) or the Case has a
+known MMA/PA diagnosis_subtype/gene, also call knowledge_search (query "生长随访",
+disease_tags from the Case's known subtype/gene when available) and fold the monitoring
+guidance into the same answer — growth tracking is one of this program's routine MMA/PA
+follow-up parameters, not an isolated number to report on its own.
 """
 
 UTIL_INSTRUCTIONS = """\
@@ -224,6 +229,10 @@ and bound automatically — the user does not manage Cases in the UI.
 - Missing critical Case slots for the task → call case_slot_collect with fields_json
   (array of {key,label,unit?,reason?}); wait for the HITL form. Never invent values and
   never replace the form with a multi-paragraph ask.
+- diagnosis_subtype (MMA/PA subtype or gene, e.g. isolated MMA / cobalamin disorder / PA /
+  MMUT / PCCA / PCCB) is a Case slot with the same priority as anthropometrics — knowledge
+  answers are required to name a subtype before generalizing, so collect it via
+  case_slot_collect when relevant and missing, same as height/weight.
 - Values the user already stated this turn (anthropometrics, sex, DOB, age, diagnosis)
   are known: use them directly and never re-ask the same values via case_slot_collect;
   clear-ownership facts are archived automatically after the turn.
