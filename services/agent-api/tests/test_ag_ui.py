@@ -290,3 +290,181 @@ async def test_ag_ui_existing_thread_ignores_malformed_agent_header(
             thread = await session.get(Thread, thread_id)
             if thread is not None:
                 await session.delete(thread)
+
+
+@pytest.mark.anyio
+async def test_ag_ui_usage_limit_stops_a_runaway_tool_loop(
+    authenticated_api_user: UUID,
+) -> None:
+    """A model stuck calling the same tool forever must be stopped, not run forever."""
+
+    from pydantic_ai.models.function import DeltaToolCall
+
+    call_count = 0
+
+    async def echo_tool() -> str:
+        nonlocal call_count
+        call_count += 1
+        return f"result {call_count}"
+
+    async def stream_function(
+        messages: list[ModelMessage],
+        _: AgentInfo,
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
+        yield {
+            0: DeltaToolCall(
+                name="echo_tool",
+                json_args="{}",
+                tool_call_id=f"call-{len(messages)}",
+            ),
+        }
+
+    agent = Agent(FunctionModel(stream_function=stream_function))
+    agent.tool_plain(echo_tool)
+
+    app.state.runtime = AgentRuntime(
+        agent=agent,
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+    thread_id: UUID | None = None
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.post(
+                "/v1/ag-ui/runs",
+                json={
+                    "threadId": "new",
+                    "runId": "browser-run-loop",
+                    "state": {},
+                    "messages": [
+                        {"id": "browser-message-1", "role": "user", "content": "触发工具死循环"},
+                    ],
+                    "tools": [],
+                    "context": [],
+                    "forwardedProps": {},
+                },
+            )
+
+        assert response.status_code == 200
+        assert '"type":"RUN_ERROR"' in response.text
+        assert "步数过多" in response.text
+        thread_id = UUID(response.headers["x-agentos-thread-id"])
+
+        async with session_factory() as session:
+            run = await session.scalar(select(Run).where(Run.thread_id == thread_id))
+        assert run is not None
+        assert run.status == "failed"
+        assert run.error_message is not None
+        assert "UsageLimitExceeded" in run.error_message
+    finally:
+        if thread_id is not None:
+            async with session_factory() as session, session.begin():
+                thread = await session.get(Thread, thread_id)
+                if thread is not None:
+                    await session.delete(thread)
+
+
+@pytest.mark.anyio
+async def test_ag_ui_forces_emergency_notice_regardless_of_model_output(
+    authenticated_api_user: UUID,
+) -> None:
+    """A red-flag user message must get the escalation notice even if the model ignores it."""
+
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel(custom_output_text="孩子应该没什么大事，多喝水就行。")),
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+    thread_id: UUID | None = None
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.post(
+                "/v1/ag-ui/runs",
+                json={
+                    "threadId": "new",
+                    "runId": "browser-run-emergency",
+                    "state": {},
+                    "messages": [
+                        {
+                            "id": "browser-message-1",
+                            "role": "user",
+                            "content": "孩子突然抽搐了，一直叫不醒怎么办",
+                        },
+                    ],
+                    "tools": [],
+                    "context": [],
+                    "forwardedProps": {},
+                },
+            )
+
+        assert response.status_code == 200
+        body = response.text
+        assert "检测到您描述的情况包含可能的紧急信号" in body
+        # The forced notice must be the FIRST assistant text in the stream, not
+        # tacked on after — and must not corrupt run framing.
+        run_started_index = body.index('"type":"RUN_STARTED"')
+        notice_index = body.index("检测到您描述的情况包含可能的紧急信号")
+        model_text_index = body.index("多喝水就行")
+        assert run_started_index < notice_index < model_text_index
+        assert body.count('"type":"RUN_FINISHED"') == 1
+
+        thread_id = UUID(response.headers["x-agentos-thread-id"])
+        async with session_factory() as session:
+            messages = list(
+                (
+                    await session.scalars(
+                        select(Message).where(Message.thread_id == thread_id).order_by(Message.seq),
+                    )
+                ).all()
+            )
+        assistant_messages = [m for m in messages if m.role == "assistant"]
+        assert len(assistant_messages) == 1
+        assert assistant_messages[0].content.startswith("检测到您描述的情况包含可能的紧急信号")
+        assert "多喝水就行" in assistant_messages[0].content
+    finally:
+        if thread_id is not None:
+            async with session_factory() as session, session.begin():
+                thread = await session.get(Thread, thread_id)
+                if thread is not None:
+                    await session.delete(thread)
+
+
+@pytest.mark.anyio
+async def test_ag_ui_no_emergency_notice_for_routine_message(
+    authenticated_api_user: UUID,
+) -> None:
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel(custom_output_text="好的，记录下来了。")),
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+    thread_id: UUID | None = None
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.post(
+                "/v1/ag-ui/runs",
+                json={
+                    "threadId": "new",
+                    "runId": "browser-run-routine",
+                    "state": {},
+                    "messages": [
+                        {"id": "browser-message-1", "role": "user", "content": "孩子有点咳嗽"},
+                    ],
+                    "tools": [],
+                    "context": [],
+                    "forwardedProps": {},
+                },
+            )
+
+        assert response.status_code == 200
+        assert "检测到您描述的情况包含可能的紧急信号" not in response.text
+        thread_id = UUID(response.headers["x-agentos-thread-id"])
+    finally:
+        if thread_id is not None:
+            async with session_factory() as session, session.begin():
+                thread = await session.get(Thread, thread_id)
+                if thread is not None:
+                    await session.delete(thread)

@@ -3,9 +3,18 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from ag_ui.core import BaseEvent, CustomEvent, RunAgentInput, UserMessage
+from ag_ui.core import (
+    BaseEvent,
+    CustomEvent,
+    RunAgentInput,
+    RunStartedEvent,
+    TextMessageContentEvent,
+    TextMessageEndEvent,
+    TextMessageStartEvent,
+    UserMessage,
+)
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import ValidationError
 from pydantic_ai import ModelMessagesTypeAdapter
@@ -20,6 +29,7 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.ui import NativeEvent
 from pydantic_ai.ui.ag_ui import AGUIAdapter
+from pydantic_ai.usage import UsageLimits
 
 from agent_api.agent import AgentOutput, build_context_snapshot, inject_context_snapshot
 from agent_api.api.auth import get_current_user
@@ -52,6 +62,7 @@ from agent_api.db.case_store import CaseNotFoundError
 from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_run
 from agent_api.db.models import Thread, User
 from agent_api.db.session import session_factory
+from agent_api.emergency import EMERGENCY_NOTICE, detect_emergency_signal
 from agent_api.hitl_pause import persist_deferred_approvals
 from agent_api.memory.extract import schedule_memory_extract
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
@@ -155,6 +166,12 @@ async def stream_ag_ui_run(
 
     user_message, prompt = current_user_message(client_input)
     thread_id = requested_thread_id(client_input.thread_id)
+    # Code-level, model-independent: a keyword hit forces the escalation notice
+    # into both the live stream and the persisted transcript regardless of
+    # what the model itself goes on to say.
+    emergency_category = detect_emergency_signal(prompt)
+    if emergency_category is not None:
+        logger.warning("emergency signal detected in user message: %s", emergency_category)
 
     try:
         async with session_factory() as session, session.begin():
@@ -333,6 +350,7 @@ async def stream_ag_ui_run(
                 message_history=message_history,
                 conversation_id=str(started.thread_id),
                 run_id=str(started.run_id),
+                usage_limits=UsageLimits(request_limit=settings.agent_max_requests_per_run),
                 deps=AgentDeps(
                     search_router=runtime.search_router,
                     fetch_router=runtime.fetch_router,
@@ -396,6 +414,10 @@ async def stream_ag_ui_run(
                 result.output,
                 new_messages,
             )
+            if emergency_category is not None:
+                # Keep the persisted transcript consistent with what the live
+                # stream showed — reloading history must show the same notice.
+                assistant_content = f"{EMERGENCY_NOTICE}\n\n{assistant_content}"
             await persist_completed_run(
                 run_id=started.run_id,
                 assistant_content=assistant_content,
@@ -460,6 +482,24 @@ async def stream_ag_ui_run(
             ):
                 if not client_disconnected.is_set():
                     await event_queue.put(event)
+                if emergency_category is not None and isinstance(event, RunStartedEvent):
+                    # Emitted as a separate assistant message right after RUN_STARTED
+                    # (never before it — a client expects that to open the stream) and
+                    # before the model's own message. This only appends a new AG-UI
+                    # text message; it never touches the adapter's own part-index
+                    # bookkeeping for the model's stream, so it can't corrupt it.
+                    notice_message_id = f"emergency-notice-{uuid4()}"
+                    if not client_disconnected.is_set():
+                        await event_queue.put(
+                            TextMessageStartEvent(message_id=notice_message_id),
+                        )
+                        await event_queue.put(
+                            TextMessageContentEvent(
+                                message_id=notice_message_id,
+                                delta=EMERGENCY_NOTICE,
+                            ),
+                        )
+                        await event_queue.put(TextMessageEndEvent(message_id=notice_message_id))
         except asyncio.CancelledError:
             raise
         except Exception as error:

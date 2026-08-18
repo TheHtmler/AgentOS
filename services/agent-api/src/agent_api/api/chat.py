@@ -4,6 +4,7 @@ from typing import cast
 from uuid import UUID
 
 from pydantic_ai import ModelMessagesTypeAdapter
+from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -214,6 +215,8 @@ def user_facing_run_error_message(error: BaseException) -> str:
             "当前内容超出了模型上下文窗口（16k tokens)。"
             "建议一次分析一份报告，或另起一段对话后重试。"
         )
+    if isinstance(error, UsageLimitExceeded):
+        return "本轮操作步数过多，已自动停止。请重新提问或换个更具体的说法再试。"
     return "模型服务暂时不可用，请稍后重试。"
 
 

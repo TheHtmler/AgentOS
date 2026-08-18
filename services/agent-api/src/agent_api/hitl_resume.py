@@ -15,6 +15,7 @@ from pydantic_ai.tools import (
     ToolApproved,
     ToolDenied,
 )
+from pydantic_ai.usage import UsageLimits
 
 from agent_api.agent import AgentOutput, build_context_snapshot, inject_context_snapshot
 from agent_api.api.chat import (
@@ -179,6 +180,7 @@ async def continue_run_after_approval(
                     message_history=history,
                     deferred_tool_results=deferred,
                     conversation_id=str(run.thread_id),
+                    usage_limits=UsageLimits(request_limit=settings.agent_max_requests_per_run),
                     deps=AgentDeps(
                         search_router=runtime.search_router,
                         fetch_router=runtime.fetch_router,

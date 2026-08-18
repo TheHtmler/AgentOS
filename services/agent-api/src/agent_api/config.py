@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # How many model streams may execute at once across threads in one API process.
     # Keep the 16 GB Mac mini within the Qwen3-VL model and KV-cache budget.
     model_max_concurrent_runs: int = 1
+    # Hard stop on model requests within a single run's tool loop. A small local model
+    # is more prone to non-convergent "call tool, dislike result, call again" loops than
+    # a frontier model; the 180s per-request httpx timeout bounds a single call but not
+    # the loop itself. Current tool set needs 2-4 calls for a normal turn.
+    agent_max_requests_per_run: int = 15
     history_max_runs: int = 4  # max runs in next context
     auth_session_ttl_days: int = 30
     auth_invite_ttl_minutes: int = 1_440
@@ -124,11 +129,11 @@ class Settings(BaseSettings):
 
         return value
 
-    @field_validator("history_max_runs")
+    @field_validator("history_max_runs", "agent_max_requests_per_run")
     @classmethod
     def history_max_runs_must_be_positive(cls, value: int) -> int:
         if value < 1:
-            raise ValueError("history_max_runs must be at least 1")
+            raise ValueError("history_max_runs / agent_max_requests_per_run must be at least 1")
 
         return value
 
