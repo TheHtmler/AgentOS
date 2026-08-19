@@ -123,36 +123,43 @@ async def test_ops_agent_publish_new_version(
     await database_session.commit()
     prior_version = 1
 
-    token = await _ops_cookie(monkeypatch)
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        client.cookies.set("ops_session", token)
+    try:
+        token = await _ops_cookie(monkeypatch)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            client.cookies.set("ops_session", token)
 
-        missing = await client.get("/v1/ops/agents/00000000-0000-0000-0000-000000000000")
-        assert missing.status_code == 404
+            missing = await client.get("/v1/ops/agents/00000000-0000-0000-0000-000000000000")
+            assert missing.status_code == 404
 
-        detail = await client.get(f"/v1/ops/agents/{agent.id}")
-        assert detail.status_code == 200
-        assert detail.json()["id"] == str(agent.id)
+            detail = await client.get(f"/v1/ops/agents/{agent.id}")
+            assert detail.status_code == 200
+            assert detail.json()["id"] == str(agent.id)
 
-        published = await client.post(
-            f"/v1/ops/agents/{agent.id}/versions",
-            json={
-                "system_prompt_overlay": "ops-test-overlay",
-                "memory_enabled": True,
-                "case_enabled": False,
-                "tool_policy_overrides": {"web_search": "ask"},
-                "knowledge_base_slugs": ["mma-pa"],
-            },
-        )
-        assert published.status_code == 200
-        body = published.json()
-        assert body["published_version"]["system_prompt_overlay"] == "ops-test-overlay"
-        assert body["published_version"]["memory_enabled"] is True
-        assert body["published_version"]["version"] == prior_version + 1
-        assert body["published_version"]["tool_policy_overrides"] == {"web_search": "ask"}
-        # Republishing a version must not silently reset scope back to
-        # unrestricted just because the field is easy to omit from a payload.
-        assert body["published_version"]["knowledge_base_slugs"] == ["mma-pa"]
-        published_flags = [row["is_published"] for row in body["versions"]]
-        assert published_flags.count(True) == 1
+            published = await client.post(
+                f"/v1/ops/agents/{agent.id}/versions",
+                json={
+                    "system_prompt_overlay": "ops-test-overlay",
+                    "memory_enabled": True,
+                    "case_enabled": False,
+                    "tool_policy_overrides": {"web_search": "ask"},
+                    "knowledge_base_slugs": ["mma-pa"],
+                },
+            )
+            assert published.status_code == 200
+            body = published.json()
+            assert body["published_version"]["system_prompt_overlay"] == "ops-test-overlay"
+            assert body["published_version"]["memory_enabled"] is True
+            assert body["published_version"]["version"] == prior_version + 1
+            assert body["published_version"]["tool_policy_overrides"] == {"web_search": "ask"}
+            # Republishing a version must not silently reset scope back to
+            # unrestricted just because the field is easy to omit from a payload.
+            assert body["published_version"]["knowledge_base_slugs"] == ["mma-pa"]
+            published_flags = [row["is_published"] for row in body["versions"]]
+            assert published_flags.count(True) == 1
+    finally:
+        await database_session.rollback()
+        persisted = await database_session.get(Agent, agent.id)
+        if persisted is not None:
+            await database_session.delete(persisted)
+            await database_session.commit()
