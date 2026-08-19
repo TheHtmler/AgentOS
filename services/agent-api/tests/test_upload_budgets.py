@@ -46,3 +46,14 @@ def test_generic_error_keeps_generic_message() -> None:
     assert user_facing_run_error_message(RuntimeError("boom")) == (
         "模型服务暂时不可用，请稍后重试。"
     )
+
+
+def test_timeout_error_maps_to_provider_diagnosis() -> None:
+    assert "响应超时" in user_facing_run_error_message(TimeoutError("timed out"))
+
+
+def test_overload_error_maps_to_retry_message() -> None:
+    assert (
+        user_facing_run_error_message(RuntimeError("Our servers are currently overloaded"))
+        == "上游模型当前过载，请稍后重试。"
+    )

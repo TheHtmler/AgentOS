@@ -44,8 +44,9 @@
 
 核心文件：`db/provider_store.py`（解析）、`api/ops_providers.py`（Ops 管理）、`agent.py::create_agent`（按档案构造模型）。
 
-- `model_providers` 表描述一个 OpenAI-compatible chat 端点：base_url、api_key、默认模型、`api_mode`(`chat_completions` 常规端点；`responses` 给只服务 `/responses` 的 Codex 类订阅网关）、`context_window`、`max_output_tokens`、temperature、`max_concurrent_runs`、`supports_vision`。内置 `local` 行是 env(Ollama）配置的镜像，每次启动从 settings 重同步，Ops 里只读；远程行（DeepSeek、代理网关等）完全在 Ops 增删改。
+- `model_providers` 表描述一个 OpenAI-compatible chat 端点：base_url、api_key、默认模型、`api_mode`(`chat_completions` 常规端点；`responses` 给只服务 `/responses` 的 Codex 类订阅网关）、`context_window`、`max_output_tokens`、temperature、可选的 `reasoning_summary`（Responses 的 `auto`/`concise`/`detailed`）、`max_concurrent_runs`、`supports_vision`。内置 `local` 行是 env(Ollama）配置的镜像，每次启动从 settings 重同步，Ops 里只读；远程行（DeepSeek、代理网关等）完全在 Ops 增删改。
 - responses 模式的 provider 留空 temperature 时不发送该参数（Codex 类推理模型会拒绝）；其余情况沿用平台默认值。
+- `reasoning_summary` 只有明确配置时才发送给 Responses 端点；未配置时仍可收到 `REASONING_ENCRYPTED_VALUE`，它是供应商用于多轮连续性的 opaque 签名，不是可解密的明文 Thinking。
 - `agent_versions.model_provider_id` 在发布时绑定 provider(`NULL` = 内置本地）：模型选择和 overlay 一样是不可变版本配置，可回滚可追溯；`runs.model_name` 记录实际执行的模型。
 - 每个 Agent 只能有一个 `is_published=true` 的版本（PostgreSQL 部分唯一索引强制）。部署 seed 只创建首个内置版本；已有的旧基线版本不得在部署时重新发布，避免覆盖 Ops 发布的 Provider 绑定。
 - 解析失败（provider 被删/禁用）直接 409，**不静默换模型**。预算护栏（run 前裁剪 / step 压力检查 / 视觉截顶）与并发信号量全部按解析出的档案取值：本地恒 1(16GB 显存约束不变），远程各按自己行的 `max_concurrent_runs` 独立计数，不被本地的 1 并发阻塞。
@@ -70,7 +71,7 @@
 
 - 事实源：PostgreSQL。`threads`/`messages`/`runs`/`run_events`（有序 append-only)/`run_message_histories`(pydantic-ai 原始消息快照，续聊与 HITL 续跑的检查点）/`interrupts`/`artifacts`/`agents`/`agent_versions`/`user_memories`（含向量）/`cases`/`case_facts`/`knowledge_*`。
 - 每个 run 记录 `input_tokens`/`output_tokens`/`model_request_count`；预算裁剪动作记服务端日志。与 harness「模型可见即已记录」的差距：我们的快照/裁剪视图不落库，可由输入确定性重推，但没有逐 step 的事件级回放。
-- Web 过程时间线对 Thinking 与工具调用显示本轮/单工具耗时；工具历史 API 从 `run_events.tool_result.duration_ms` 回放该字段。若模型通过 AG-UI 返回可读 reasoning，Web 仅在当前 SSE 回合临时展示（最多 12000 字符）；加密 reasoning 会明确标注不可读；原始 reasoning 永不写入持久化历史。
+- Web 过程时间线对 Thinking 与工具调用显示本轮/单工具耗时；工具历史 API 从 `run_events.tool_result.duration_ms` 回放该字段。若模型通过 AG-UI 返回可读 reasoning，Web 仅在当前 SSE 回合临时展示（最多 12000 字符）；加密 reasoning 会明确标注不可读。原始 reasoning、摘要和 provider raw 内容永不写入持久化历史；为保证 Responses 续聊，服务端只保留 `id`/`signature`/`provider_name` 这组 opaque 连续性元数据。
 - HITL:`DeferredToolRequests` 输出 → interrupt 落库 → AG-UI 审批卡 → 携带 DeferredToolResults 从检查点续跑；超时（默认 30 分钟）自动拒绝。同一 thread 同时只允许一个 running run。
 
 ## 与 deepseek-harness / 主流设计的取舍

@@ -52,7 +52,12 @@ def parse_model_messages_json(raw_messages: bytes) -> list[dict[str, object]]:
 def strip_thinking_parts(
     model_messages: list[dict[str, object]],
 ) -> list[dict[str, object]]:
-    """Keep private reasoning out of durable model history and future prompts."""
+    """Keep raw reasoning private while preserving Responses turn continuity.
+
+    OpenAI Responses providers may require the opaque ``id``/``signature`` pair
+    on the next request. It is safe to retain that metadata without retaining
+    readable summaries or provider-specific raw reasoning.
+    """
 
     sanitized_messages: list[dict[str, object]] = []
 
@@ -66,6 +71,24 @@ def strip_thinking_parts(
                 if isinstance(part, dict):
                     part_dict = cast(dict[str, object], part)
                     if part_dict.get("part_kind") == "thinking":
+                        part_id = part_dict.get("id")
+                        signature = part_dict.get("signature")
+                        if (
+                            isinstance(part_id, str)
+                            and part_id
+                            and isinstance(signature, str)
+                            and signature
+                        ):
+                            continuation_part: dict[str, object] = {
+                                "part_kind": "thinking",
+                                "content": "",
+                                "id": part_id,
+                                "signature": signature,
+                            }
+                            provider_name = part_dict.get("provider_name")
+                            if isinstance(provider_name, str) and provider_name:
+                                continuation_part["provider_name"] = provider_name
+                            sanitized_parts.append(continuation_part)
                         continue
                     sanitized_parts.append(part_dict)
                     continue
@@ -207,6 +230,39 @@ def format_run_failure_message(error: BaseException, *, limit: int = 500) -> str
     return text[:limit]
 
 
+def _error_chain(error: BaseException) -> list[BaseException]:
+    """Walk chained provider errors without looping on malformed exception links."""
+
+    chain: list[BaseException] = []
+    current: BaseException | None = error
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    return chain
+
+
+def _is_model_timeout(error: BaseException) -> bool:
+    timeout_names = {
+        "APITimeoutError",
+        "ConnectTimeout",
+        "PoolTimeout",
+        "ReadTimeout",
+        "TimeoutError",
+        "TimeoutException",
+        "WriteTimeout",
+    }
+    return any(
+        isinstance(item, TimeoutError) or type(item).__name__ in timeout_names
+        for item in _error_chain(error)
+    )
+
+
+def _is_model_overloaded(error: BaseException) -> bool:
+    return any("overloaded" in str(item).lower() for item in _error_chain(error))
+
+
 def user_facing_run_error_message(error: BaseException) -> str:
     """Map provider failures to actionable user-facing text instead of a generic 500."""
 
@@ -217,6 +273,10 @@ def user_facing_run_error_message(error: BaseException) -> str:
         )
     if isinstance(error, UsageLimitExceeded):
         return "本轮操作步数过多，已自动停止。请重新提问或换个更具体的说法再试。"
+    if _is_model_timeout(error):
+        return "上游模型响应超时，请稍后重试；如果连续出现，请检查 Provider 地址或端点状态。"
+    if _is_model_overloaded(error):
+        return "上游模型当前过载，请稍后重试。"
     return "模型服务暂时不可用，请稍后重试。"
 
 

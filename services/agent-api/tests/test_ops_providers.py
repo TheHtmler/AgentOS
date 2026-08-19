@@ -88,13 +88,15 @@ async def test_create_list_and_key_masking(
         try:
             created = await client.post(
                 "/v1/ops/model-providers",
-                json=_create_payload(slug) | {"api_mode": "responses"},
+                json=_create_payload(slug)
+                | {"api_mode": "responses", "reasoning_summary": "concise"},
             )
             assert created.status_code == 201
             body = created.json()
             provider_id = body["id"]
             assert body["slug"] == slug
             assert body["api_mode"] == "responses"
+            assert body["reasoning_summary"] == "concise"
             # Trailing slash is normalized away.
             assert body["base_url"] == "https://api.deepseek.com/v1"
             assert body["kind"] == "remote"
@@ -143,6 +145,7 @@ async def test_patch_key_rotation_and_clear(
                     "supports_vision": True,
                     "enabled": False,
                     "api_mode": "responses",
+                    "reasoning_summary": "detailed",
                 },
             )
             assert patched.status_code == 200
@@ -150,6 +153,7 @@ async def test_patch_key_rotation_and_clear(
             assert patched.json()["supports_vision"] is True
             assert patched.json()["enabled"] is False
             assert patched.json()["api_mode"] == "responses"
+            assert patched.json()["reasoning_summary"] == "detailed"
             # A patch that omits api_key keeps the stored key.
             assert patched.json()["api_key_preview"] == "sk-...cdef"
 

@@ -1,12 +1,17 @@
 import logging
 from datetime import datetime
+from typing import cast
 
 import httpx
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 from pydantic_ai.models.ollama import OllamaModel
-from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
+from pydantic_ai.models.openai import (
+    OpenAIChatModel,
+    OpenAIResponsesModel,
+    OpenAIResponsesModelSettings,
+)
 from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
@@ -480,6 +485,10 @@ def create_agent(
     model_settings: ModelSettings = {"max_tokens": profile.max_output_tokens}
     if temperature is not None:
         model_settings["temperature"] = temperature
+    if profile.api_mode == "responses" and profile.reasoning_summary is not None:
+        cast(OpenAIResponsesModelSettings, model_settings)["openai_reasoning_summary"] = (
+            profile.reasoning_summary
+        )
 
     return Agent[AgentDeps, AgentOutput](
         model,

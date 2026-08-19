@@ -17,6 +17,7 @@ type ModelProvider = {
   base_url: string;
   default_model: string;
   api_mode: string;
+  reasoning_summary: string | null;
   context_window: number;
   max_output_tokens: number;
   temperature: number | null;
@@ -37,6 +38,7 @@ type ProviderFormState = {
   apiKey: string;
   defaultModel: string;
   apiMode: string;
+  reasoningSummary: string;
   contextWindow: string;
   maxOutputTokens: string;
   temperature: string;
@@ -52,6 +54,7 @@ const EMPTY_FORM: ProviderFormState = {
   apiKey: "",
   defaultModel: "",
   apiMode: "chat_completions",
+  reasoningSummary: "",
   contextWindow: "",
   maxOutputTokens: "",
   temperature: "",
@@ -68,6 +71,7 @@ function formFromProvider(provider: ModelProvider): ProviderFormState {
     apiKey: "",
     defaultModel: provider.default_model,
     apiMode: provider.api_mode,
+    reasoningSummary: provider.reasoning_summary ?? "",
     contextWindow: String(provider.context_window),
     maxOutputTokens: String(provider.max_output_tokens),
     temperature: provider.temperature === null ? "" : String(provider.temperature),
@@ -166,6 +170,8 @@ export default function ProvidersPage() {
         base_url: form.baseUrl.trim(),
         default_model: form.defaultModel.trim(),
         api_mode: form.apiMode,
+        reasoning_summary:
+          form.apiMode === "responses" && form.reasoningSummary ? form.reasoningSummary : null,
         context_window: parsePositiveInt(form.contextWindow, "上下文窗口"),
         max_output_tokens: parsePositiveInt(form.maxOutputTokens, "最大输出 tokens"),
         max_concurrent_runs: parsePositiveInt(form.maxConcurrentRuns, "并发上限"),
@@ -338,6 +344,22 @@ export default function ProvidersPage() {
                 <option value="responses">Responses（Codex 类订阅网关）</option>
               </select>
             </label>
+            <label>
+              Reasoning 摘要（Responses）
+              <select
+                value={form.reasoningSummary}
+                disabled={form.apiMode !== "responses"}
+                onChange={(event) => patchForm({ reasoningSummary: event.target.value })}
+              >
+                <option value="">不请求摘要</option>
+                <option value="concise">简短</option>
+                <option value="detailed">详细</option>
+                <option value="auto">自动</option>
+              </select>
+              <span className="field-hint">
+                仅 Responses 模式生效；不影响原始 reasoning 的持久化策略。
+              </span>
+            </label>
           </div>
           <div className="form-grid cols-2">
             <label>
@@ -464,6 +486,7 @@ export default function ProvidersPage() {
                   <span>{labelOf(PROVIDER_API_MODE_LABELS, provider.api_mode)}</span>
                   <span>{provider.base_url}</span>
                   <span>模型 {provider.default_model}</span>
+                  <span>摘要 {provider.reasoning_summary ?? "未设置"}</span>
                   <span>上下文 {provider.context_window}</span>
                   <span>视觉 {boolZh(provider.supports_vision)}</span>
                   <span>Key {provider.api_key_preview ?? "未设置"}</span>

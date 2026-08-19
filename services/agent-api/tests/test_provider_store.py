@@ -35,6 +35,7 @@ _REMOTE_PROFILE = ResolvedModelProfile(
     context_window=128_000,
     max_output_tokens=8_192,
     temperature=None,
+    reasoning_summary=None,
     max_concurrent_runs=4,
     supports_vision=False,
     is_local=False,
@@ -67,6 +68,7 @@ def _remote_row(*, enabled: bool = True, api_mode: str = "chat_completions") -> 
         context_window=128_000,
         max_output_tokens=8_192,
         temperature=0.7,
+        reasoning_summary=None,
         max_concurrent_runs=4,
         supports_vision=False,
         enabled=enabled,
@@ -171,9 +173,14 @@ async def test_create_agent_dispatches_on_api_mode() -> None:
 
         responses_agent = create_agent(
             http_client,
-            model_profile=dataclasses.replace(_REMOTE_PROFILE, api_mode="responses"),
+            model_profile=dataclasses.replace(
+                _REMOTE_PROFILE,
+                api_mode="responses",
+                reasoning_summary="concise",
+            ),
         )
         assert isinstance(responses_agent.model, OpenAIResponsesModel)
+        assert responses_agent.model_settings["openai_reasoning_summary"] == "concise"
     finally:
         await http_client.aclose()
 

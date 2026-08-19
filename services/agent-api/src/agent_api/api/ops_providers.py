@@ -8,7 +8,7 @@ a masked preview (``api_key_preview``) plus ``has_api_key``. The built-in
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 
 from agent_api.api.ops_auth import get_ops_subject
 from agent_api.db.models import AgentVersion, ModelProvider
-from agent_api.db.provider_store import BUILTIN_LOCAL_PROVIDER_SLUG
+from agent_api.db.provider_store import BUILTIN_LOCAL_PROVIDER_SLUG, ReasoningSummary
 from agent_api.db.session import session_factory
 
 router = APIRouter(prefix="/v1/ops/model-providers", tags=["ops-model-providers"])
@@ -35,6 +35,7 @@ class OpsModelProviderOut(BaseModel):
     base_url: str
     default_model: str
     api_mode: str
+    reasoning_summary: ReasoningSummary | None
     context_window: int
     max_output_tokens: int
     temperature: float | None
@@ -57,6 +58,7 @@ class _ProviderFields(BaseModel):
     default_model: str = Field(min_length=1, max_length=128)
     # chat_completions = 常规 OpenAI 兼容端点;responses = Codex 类订阅网关。
     api_mode: ApiMode = "chat_completions"
+    reasoning_summary: ReasoningSummary | None = None
     context_window: int = Field(gt=0)
     max_output_tokens: int = Field(gt=0)
     temperature: float | None = Field(default=None, ge=0, le=2)
@@ -92,6 +94,7 @@ class PatchOpsModelProviderRequest(BaseModel):
     base_url: str | None = Field(default=None, min_length=1, max_length=512)
     default_model: str | None = Field(default=None, min_length=1, max_length=128)
     api_mode: ApiMode | None = None
+    reasoning_summary: ReasoningSummary | None = None
     context_window: int | None = Field(default=None, gt=0)
     max_output_tokens: int | None = Field(default=None, gt=0)
     temperature: float | None = Field(default=None, ge=0, le=2)
@@ -131,6 +134,7 @@ def _to_out(provider: ModelProvider) -> OpsModelProviderOut:
         base_url=provider.base_url,
         default_model=provider.default_model,
         api_mode=provider.api_mode,
+        reasoning_summary=cast(ReasoningSummary | None, provider.reasoning_summary),
         context_window=provider.context_window,
         max_output_tokens=provider.max_output_tokens,
         temperature=provider.temperature,
@@ -193,6 +197,7 @@ async def create_ops_model_provider(
             api_key=payload.api_key or None,
             default_model=payload.default_model,
             api_mode=payload.api_mode,
+            reasoning_summary=payload.reasoning_summary,
             context_window=payload.context_window,
             max_output_tokens=payload.max_output_tokens,
             temperature=payload.temperature,
@@ -240,6 +245,7 @@ async def patch_ops_model_provider(
             "base_url",
             "default_model",
             "api_mode",
+            "reasoning_summary",
             "context_window",
             "max_output_tokens",
             "temperature",

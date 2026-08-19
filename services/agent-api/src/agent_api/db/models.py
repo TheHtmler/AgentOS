@@ -227,6 +227,10 @@ class ModelProvider(Base):
             "api_mode IN ('chat_completions', 'responses')",
             name="ck_model_providers_api_mode",
         ),
+        CheckConstraint(
+            "reasoning_summary IS NULL OR reasoning_summary IN ('auto', 'concise', 'detailed')",
+            name="ck_model_providers_reasoning_summary",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -244,6 +248,8 @@ class ModelProvider(Base):
         server_default=text("'chat_completions'"),
         nullable=False,
     )
+    # Responses-only readable reasoning summary; NULL keeps opaque reasoning.
+    reasoning_summary: Mapped[str | None] = mapped_column(String(16))
     # Drives input budgeting; must match the endpoint model's real window.
     context_window: Mapped[int] = mapped_column(Integer, nullable=False)
     max_output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)

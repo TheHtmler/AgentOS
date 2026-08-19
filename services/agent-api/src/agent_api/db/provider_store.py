@@ -7,6 +7,7 @@ re-synced on every startup. Agent versions pin a provider via
 """
 
 from dataclasses import dataclass
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,13 @@ from agent_api.db.models import AgentVersion, ModelProvider
 # Keep in sync with migrations/versions/b3c4d5e6f7a8_add_model_providers.py.
 BUILTIN_LOCAL_PROVIDER_ID = UUID("00000000-0000-0000-0000-000000000010")
 BUILTIN_LOCAL_PROVIDER_SLUG = "local"
+ReasoningSummary = Literal["auto", "concise", "detailed"]
+
+
+def _coerce_reasoning_summary(value: str | None) -> ReasoningSummary | None:
+    if value in ("auto", "concise", "detailed"):
+        return value
+    return None
 
 
 class ModelProviderUnavailableError(LookupError):
@@ -38,6 +46,8 @@ class ResolvedModelProfile:
     max_output_tokens: int
     # None → fall back to settings.model_temperature at agent construction.
     temperature: float | None
+    # Responses-only; None means do not request a readable reasoning summary.
+    reasoning_summary: ReasoningSummary | None
     max_concurrent_runs: int
     supports_vision: bool
     is_local: bool
@@ -56,6 +66,7 @@ def local_profile_from_settings(settings: Settings) -> ResolvedModelProfile:
         context_window=settings.model_context_window,
         max_output_tokens=settings.model_max_output_tokens,
         temperature=None,
+        reasoning_summary=None,
         max_concurrent_runs=settings.model_max_concurrent_runs,
         # The local deployment is a vision model (qwen3-vl); upload_vision_enabled
         # remains the platform-level switch on top of this capability.
@@ -75,6 +86,7 @@ def _profile_from_row(row: ModelProvider) -> ResolvedModelProfile:
         context_window=row.context_window,
         max_output_tokens=row.max_output_tokens,
         temperature=row.temperature,
+        reasoning_summary=_coerce_reasoning_summary(row.reasoning_summary),
         max_concurrent_runs=row.max_concurrent_runs,
         supports_vision=row.supports_vision,
         is_local=row.kind == "local",
@@ -122,6 +134,7 @@ async def sync_builtin_local_provider(session: AsyncSession, settings: Settings)
                 context_window=profile.context_window,
                 max_output_tokens=profile.max_output_tokens,
                 temperature=None,
+                reasoning_summary=None,
                 max_concurrent_runs=profile.max_concurrent_runs,
                 supports_vision=profile.supports_vision,
                 enabled=True,
@@ -135,6 +148,7 @@ async def sync_builtin_local_provider(session: AsyncSession, settings: Settings)
     row.default_model = profile.model_name
     row.context_window = profile.context_window
     row.max_output_tokens = profile.max_output_tokens
+    row.reasoning_summary = None
     row.max_concurrent_runs = profile.max_concurrent_runs
     row.supports_vision = profile.supports_vision
     row.is_builtin = True
