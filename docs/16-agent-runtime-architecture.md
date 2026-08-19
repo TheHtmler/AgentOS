@@ -44,7 +44,8 @@
 
 核心文件：`db/provider_store.py`（解析）、`api/ops_providers.py`（Ops 管理）、`agent.py::create_agent`（按档案构造模型）。
 
-- `model_providers` 表描述一个 OpenAI-compatible chat 端点：base_url、api_key、默认模型、`context_window`、`max_output_tokens`、temperature、`max_concurrent_runs`、`supports_vision`。内置 `local` 行是 env(Ollama）配置的镜像，每次启动从 settings 重同步，Ops 里只读；远程行（DeepSeek、代理网关等）完全在 Ops 增删改。
+- `model_providers` 表描述一个 OpenAI-compatible chat 端点：base_url、api_key、默认模型、`api_mode`(`chat_completions` 常规端点；`responses` 给只服务 `/responses` 的 Codex 类订阅网关）、`context_window`、`max_output_tokens`、temperature、`max_concurrent_runs`、`supports_vision`。内置 `local` 行是 env(Ollama）配置的镜像，每次启动从 settings 重同步，Ops 里只读；远程行（DeepSeek、代理网关等）完全在 Ops 增删改。
+- responses 模式的 provider 留空 temperature 时不发送该参数（Codex 类推理模型会拒绝）；其余情况沿用平台默认值。
 - `agent_versions.model_provider_id` 在发布时绑定 provider(`NULL` = 内置本地）：模型选择和 overlay 一样是不可变版本配置，可回滚可追溯；`runs.model_name` 记录实际执行的模型。
 - 解析失败（provider 被删/禁用）直接 409，**不静默换模型**。预算护栏（run 前裁剪 / step 压力检查 / 视觉截顶）与并发信号量全部按解析出的档案取值：本地恒 1(16GB 显存约束不变），远程各按自己行的 `max_concurrent_runs` 独立计数，不被本地的 1 并发阻塞。
 - api_key 写进读出掩码（响应只有 `sk-...xxxx` 预览）;provider 管理只在 Ops 后台，产品端 API 不暴露。

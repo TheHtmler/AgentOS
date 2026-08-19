@@ -8,7 +8,7 @@ a masked preview (``api_key_preview``) plus ``has_api_key``. The built-in
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -24,6 +24,8 @@ router = APIRouter(prefix="/v1/ops/model-providers", tags=["ops-model-providers"
 
 _SLUG_PATTERN = r"^[a-z0-9][a-z0-9-]*$"
 
+ApiMode = Literal["chat_completions", "responses"]
+
 
 class OpsModelProviderOut(BaseModel):
     id: UUID
@@ -32,6 +34,7 @@ class OpsModelProviderOut(BaseModel):
     kind: str
     base_url: str
     default_model: str
+    api_mode: str
     context_window: int
     max_output_tokens: int
     temperature: float | None
@@ -52,6 +55,8 @@ class OpsModelProviderListResponse(BaseModel):
 class _ProviderFields(BaseModel):
     base_url: str = Field(min_length=1, max_length=512)
     default_model: str = Field(min_length=1, max_length=128)
+    # chat_completions = 常规 OpenAI 兼容端点;responses = Codex 类订阅网关。
+    api_mode: ApiMode = "chat_completions"
     context_window: int = Field(gt=0)
     max_output_tokens: int = Field(gt=0)
     temperature: float | None = Field(default=None, ge=0, le=2)
@@ -86,6 +91,7 @@ class PatchOpsModelProviderRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     base_url: str | None = Field(default=None, min_length=1, max_length=512)
     default_model: str | None = Field(default=None, min_length=1, max_length=128)
+    api_mode: ApiMode | None = None
     context_window: int | None = Field(default=None, gt=0)
     max_output_tokens: int | None = Field(default=None, gt=0)
     temperature: float | None = Field(default=None, ge=0, le=2)
@@ -124,6 +130,7 @@ def _to_out(provider: ModelProvider) -> OpsModelProviderOut:
         kind=provider.kind,
         base_url=provider.base_url,
         default_model=provider.default_model,
+        api_mode=provider.api_mode,
         context_window=provider.context_window,
         max_output_tokens=provider.max_output_tokens,
         temperature=provider.temperature,
@@ -185,6 +192,7 @@ async def create_ops_model_provider(
             base_url=payload.base_url,
             api_key=payload.api_key or None,
             default_model=payload.default_model,
+            api_mode=payload.api_mode,
             context_window=payload.context_window,
             max_output_tokens=payload.max_output_tokens,
             temperature=payload.temperature,
@@ -231,6 +239,7 @@ async def patch_ops_model_provider(
             "name",
             "base_url",
             "default_model",
+            "api_mode",
             "context_window",
             "max_output_tokens",
             "temperature",

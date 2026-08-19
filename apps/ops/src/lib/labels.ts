@@ -33,6 +33,11 @@ export const PROVIDER_KIND_LABELS: Record<string, string> = {
   remote: "远程",
 };
 
+export const PROVIDER_API_MODE_LABELS: Record<string, string> = {
+  chat_completions: "Chat Completions",
+  responses: "Responses",
+};
+
 export function labelOf(map: Record<string, string>, value: string | null | undefined): string {
   if (!value) return "—";
   return map[value] ?? value;

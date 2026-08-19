@@ -4,11 +4,15 @@ import asyncio
 import dataclasses
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from pydantic_ai import Agent
+from pydantic_ai.models.ollama import OllamaModel
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
 from pydantic_ai.models.test import TestModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent_api.agent import create_agent
 from agent_api.config import get_settings
 from agent_api.db.models import AgentVersion, ModelProvider
 from agent_api.db.provider_store import (
@@ -27,6 +31,7 @@ _REMOTE_PROFILE = ResolvedModelProfile(
     model_name="deepseek-chat",
     base_url="https://api.deepseek.com/v1",
     api_key="sk-test",
+    api_mode="chat_completions",
     context_window=128_000,
     max_output_tokens=8_192,
     temperature=None,
@@ -50,7 +55,7 @@ def _version(provider_id: UUID | None = None) -> AgentVersion:
     )
 
 
-def _remote_row(*, enabled: bool = True) -> ModelProvider:
+def _remote_row(*, enabled: bool = True, api_mode: str = "chat_completions") -> ModelProvider:
     return ModelProvider(
         slug=f"remote-{uuid4().hex[:8]}",
         name="Remote fixture",
@@ -58,6 +63,7 @@ def _remote_row(*, enabled: bool = True) -> ModelProvider:
         base_url="https://api.example.com/v1",
         api_key="sk-fixture-key",
         default_model="fixture-chat",
+        api_mode=api_mode,
         context_window=128_000,
         max_output_tokens=8_192,
         temperature=0.7,
@@ -101,6 +107,18 @@ async def test_resolve_remote_provider(database_session: AsyncSession) -> None:
     assert profile.is_local is False
     assert profile.provider_id == row.id
     assert profile.model_name == "fixture-chat"
+    assert profile.api_mode == "chat_completions"
+
+    responses_row = _remote_row(api_mode="responses")
+    database_session.add(responses_row)
+    await database_session.flush()
+
+    responses_profile = await resolve_model_profile(
+        database_session,
+        _version(responses_row.id),
+        get_settings(),
+    )
+    assert responses_profile.api_mode == "responses"
     assert profile.base_url == "https://api.example.com/v1"
     assert profile.api_key == "sk-fixture-key"
     assert profile.context_window == 128_000
@@ -139,6 +157,25 @@ async def test_sync_builtin_local_provider_is_idempotent(database_session: Async
     assert row.base_url == settings.ollama_base_url
     assert row.default_model == settings.ollama_model
     assert row.context_window == settings.model_context_window
+
+
+@pytest.mark.anyio
+async def test_create_agent_dispatches_on_api_mode() -> None:
+    http_client = httpx.AsyncClient()
+    try:
+        local_agent = create_agent(http_client)
+        assert isinstance(local_agent.model, OllamaModel)
+
+        chat_agent = create_agent(http_client, model_profile=_REMOTE_PROFILE)
+        assert isinstance(chat_agent.model, OpenAIChatModel)
+
+        responses_agent = create_agent(
+            http_client,
+            model_profile=dataclasses.replace(_REMOTE_PROFILE, api_mode="responses"),
+        )
+        assert isinstance(responses_agent.model, OpenAIResponsesModel)
+    finally:
+        await http_client.aclose()
 
 
 @pytest.mark.anyio

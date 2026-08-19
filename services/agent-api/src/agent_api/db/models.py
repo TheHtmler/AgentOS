@@ -214,6 +214,10 @@ class ModelProvider(Base):
     __tablename__ = "model_providers"
     __table_args__ = (
         CheckConstraint("kind IN ('local', 'remote')", name="ck_model_providers_kind"),
+        CheckConstraint(
+            "api_mode IN ('chat_completions', 'responses')",
+            name="ck_model_providers_api_mode",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -224,6 +228,13 @@ class ModelProvider(Base):
     base_url: Mapped[str] = mapped_column(String(512), nullable=False)
     api_key: Mapped[str | None] = mapped_column(Text)
     default_model: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Wire API shape: 'chat_completions' (default) or 'responses' (Codex-class
+    # subscription gateways that only serve /responses).
+    api_mode: Mapped[str] = mapped_column(
+        String(24),
+        server_default=text("'chat_completions'"),
+        nullable=False,
+    )
     # Drives input budgeting; must match the endpoint model's real window.
     context_window: Mapped[int] = mapped_column(Integer, nullable=False)
     max_output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)

@@ -6,9 +6,10 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 from pydantic_ai.models.ollama import OllamaModel
-from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
 from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.toolsets import AbstractToolset
 
@@ -450,6 +451,16 @@ def create_agent(
                 http_client=http_client,
             ),
         )
+    elif profile.api_mode == "responses":
+        # Codex-class subscription gateways only serve the Responses API.
+        model = OpenAIResponsesModel(
+            profile.model_name,
+            provider=OpenAIProvider(
+                base_url=profile.base_url,
+                api_key=profile.api_key,
+                http_client=http_client,
+            ),
+        )
     else:
         model = OpenAIChatModel(
             profile.model_name,
@@ -459,6 +470,16 @@ def create_agent(
                 http_client=http_client,
             ),
         )
+
+    # Responses-mode reasoning models (codex class) reject a temperature param;
+    # only send it when the provider explicitly configures one. Other providers
+    # fall back to the platform default as before.
+    temperature = profile.temperature
+    if temperature is None and profile.api_mode != "responses":
+        temperature = settings.model_temperature
+    model_settings: ModelSettings = {"max_tokens": profile.max_output_tokens}
+    if temperature is not None:
+        model_settings["temperature"] = temperature
 
     return Agent[AgentDeps, AgentOutput](
         model,
@@ -479,13 +500,5 @@ def create_agent(
                 )
             )
         ],
-        model_settings={
-            "max_tokens": profile.max_output_tokens,
-            # Lower variance makes local-model reasoning and follow-up answers more consistent.
-            "temperature": (
-                profile.temperature
-                if profile.temperature is not None
-                else settings.model_temperature
-            ),
-        },
+        model_settings=model_settings,
     )

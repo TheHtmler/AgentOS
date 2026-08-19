@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
-import { PROVIDER_KIND_LABELS, boolZh, labelOf } from "@/lib/labels";
+import { PROVIDER_API_MODE_LABELS, PROVIDER_KIND_LABELS, boolZh, labelOf } from "@/lib/labels";
 import { OpsFetchError, opsJson } from "@/lib/ops-fetch";
 
 type ModelProvider = {
@@ -16,6 +16,7 @@ type ModelProvider = {
   kind: string;
   base_url: string;
   default_model: string;
+  api_mode: string;
   context_window: number;
   max_output_tokens: number;
   temperature: number | null;
@@ -35,6 +36,7 @@ type ProviderFormState = {
   baseUrl: string;
   apiKey: string;
   defaultModel: string;
+  apiMode: string;
   contextWindow: string;
   maxOutputTokens: string;
   temperature: string;
@@ -49,6 +51,7 @@ const EMPTY_FORM: ProviderFormState = {
   baseUrl: "",
   apiKey: "",
   defaultModel: "",
+  apiMode: "chat_completions",
   contextWindow: "",
   maxOutputTokens: "",
   temperature: "",
@@ -64,6 +67,7 @@ function formFromProvider(provider: ModelProvider): ProviderFormState {
     baseUrl: provider.base_url,
     apiKey: "",
     defaultModel: provider.default_model,
+    apiMode: provider.api_mode,
     contextWindow: String(provider.context_window),
     maxOutputTokens: String(provider.max_output_tokens),
     temperature: provider.temperature === null ? "" : String(provider.temperature),
@@ -161,6 +165,7 @@ export default function ProvidersPage() {
         name: form.name.trim(),
         base_url: form.baseUrl.trim(),
         default_model: form.defaultModel.trim(),
+        api_mode: form.apiMode,
         context_window: parsePositiveInt(form.contextWindow, "上下文窗口"),
         max_output_tokens: parsePositiveInt(form.maxOutputTokens, "最大输出 tokens"),
         max_concurrent_runs: parsePositiveInt(form.maxConcurrentRuns, "并发上限"),
@@ -324,6 +329,18 @@ export default function ProvidersPage() {
               />
             </label>
             <label>
+              API 模式
+              <select
+                value={form.apiMode}
+                onChange={(event) => patchForm({ apiMode: event.target.value })}
+              >
+                <option value="chat_completions">Chat Completions（常规端点）</option>
+                <option value="responses">Responses（Codex 类订阅网关）</option>
+              </select>
+            </label>
+          </div>
+          <div className="form-grid cols-2">
+            <label>
               API Key{editing ? "（留空 = 保持不变）" : "（可选）"}
               <input
                 type="password"
@@ -444,6 +461,7 @@ export default function ProvidersPage() {
                 <div className="row__meta">
                   <span>{provider.slug}</span>
                   <span>{labelOf(PROVIDER_KIND_LABELS, provider.kind)}</span>
+                  <span>{labelOf(PROVIDER_API_MODE_LABELS, provider.api_mode)}</span>
                   <span>{provider.base_url}</span>
                   <span>模型 {provider.default_model}</span>
                   <span>上下文 {provider.context_window}</span>

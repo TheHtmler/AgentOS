@@ -32,6 +32,8 @@ class ResolvedModelProfile:
     model_name: str
     base_url: str
     api_key: str | None
+    # 'chat_completions' (default) or 'responses' (Codex-class gateways).
+    api_mode: str
     context_window: int
     max_output_tokens: int
     # None → fall back to settings.model_temperature at agent construction.
@@ -50,6 +52,7 @@ def local_profile_from_settings(settings: Settings) -> ResolvedModelProfile:
         model_name=settings.ollama_model,
         base_url=settings.ollama_base_url,
         api_key=None,
+        api_mode="chat_completions",
         context_window=settings.model_context_window,
         max_output_tokens=settings.model_max_output_tokens,
         temperature=None,
@@ -68,6 +71,7 @@ def _profile_from_row(row: ModelProvider) -> ResolvedModelProfile:
         model_name=row.default_model,
         base_url=row.base_url,
         api_key=row.api_key,
+        api_mode=row.api_mode,
         context_window=row.context_window,
         max_output_tokens=row.max_output_tokens,
         temperature=row.temperature,
