@@ -164,6 +164,15 @@ class AgentVersion(Base):
     __tablename__ = "agent_versions"
     __table_args__ = (
         UniqueConstraint("agent_id", "version", name="uq_agent_versions_agent_version"),
+        # Exactly one published revision is selectable for an Agent. Publishing is
+        # an application workflow, but this partial index protects it from seed
+        # jobs or concurrent admin writes reactivating an older revision.
+        Index(
+            "uq_agent_versions_one_published",
+            "agent_id",
+            unique=True,
+            postgresql_where=text("is_published = true"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)

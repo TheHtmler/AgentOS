@@ -183,7 +183,9 @@ async def upsert_seed_agent(session: AsyncSession, spec: SeedAgent) -> None:
         version.memory_enabled = version_spec.memory_enabled
         version.case_enabled = version_spec.case_enabled
         version.knowledge_base_slugs = version_spec.knowledge_base_slugs
-        version.is_published = True
+        # A newer revision may have been published in Ops (for example, to pin a
+        # remote provider). Seed may refresh its own baseline content but must not
+        # reactivate that older baseline and create two published revisions.
 
 
 async def disable_retired_agents(session: AsyncSession) -> list[str]:
