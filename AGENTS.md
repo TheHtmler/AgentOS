@@ -55,7 +55,7 @@ pnpm format                      # Prettier(md/ts/tsx 都要过)
 
 ## 已知坑
 
-- 本地跑 pytest 需要 PostgreSQL(`127.0.0.1:5432`，见 `services/agent-api/.env` 的 `DATABASE_URL`)；没起库时约 60 个用例报 `ConnectionRefused`，属环境噪声，不是回归。
+- 本地不做 DB 验证、不起 Docker:DB 相关验证统一在 Mac mini 部署侧做。本地跑 pytest 时约 60 个用例因无 PostgreSQL 报 `ConnectionRefused`，属环境噪声，不是回归；pre-push 钩子的全量 pytest 仅因此失败时按钩子提示用 `--no-verify`（真回归必须修，不能绕）。
 - 前端依赖安装用 `CI=1 pnpm install`（避免交互提示卡死）。
 - 部署目标是 16GB Mac mini：模型并发恒为 1，任何新增常驻服务都要先算内存账（`docs/15` 有预算表）。
 
