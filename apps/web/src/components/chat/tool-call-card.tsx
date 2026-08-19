@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { ToolIcon } from "./tool-icons";
 import { toolDisplayName, toolProgressLabel } from "./tool-labels";
 
@@ -12,6 +14,8 @@ export type ToolCallState = {
   status: ToolCallStatus;
   resultSummary?: string;
   provider?: string;
+  startedAt?: number;
+  durationMs?: number;
   expanded: boolean;
   afterMessageId: string;
 };
@@ -174,6 +178,13 @@ export function toolCallStatusLabel(status: ToolCallStatus): string {
   return "已完成";
 }
 
+export function toolCallDurationLabel(durationMs: number | undefined): string | null {
+  if (durationMs === undefined || !Number.isFinite(durationMs) || durationMs < 0) {
+    return null;
+  }
+  return durationMs < 1000 ? `${Math.round(durationMs)}ms` : `${(durationMs / 1000).toFixed(1)}s`;
+}
+
 /** @deprecated Prefer toolCallKeyParam + toolName; kept for any external imports. */
 export function toolCallHeadline(toolCall: ToolCallState): string {
   const param = toolCallKeyParam(toolCall);
@@ -196,6 +207,23 @@ export function ToolCallCard({
     toolCall.status === "awaiting_approval"
       ? toolCallStatusLabel(toolCall.status)
       : toolProgressLabel(toolCall.toolName, toolCall.status);
+  const [now, setNow] = useState<number | null>(null);
+  const running = toolCall.status === "running";
+
+  useEffect(() => {
+    if (!running || toolCall.durationMs !== undefined || toolCall.startedAt === undefined) {
+      return;
+    }
+    const update = () => setNow(Date.now());
+    update();
+    const timer = window.setInterval(update, 250);
+    return () => window.clearInterval(timer);
+  }, [running, toolCall.durationMs, toolCall.startedAt]);
+
+  const durationLabel = toolCallDurationLabel(
+    toolCall.durationMs ??
+      (toolCall.startedAt === undefined || now === null ? undefined : now - toolCall.startedAt),
+  );
   const displayName = toolDisplayName(toolCall.toolName);
   const title = keyParam ? `${displayName} ${keyParam}` : displayName;
 
@@ -221,7 +249,10 @@ export function ToolCallCard({
               <span className="agentos-tool-call-name">{displayName}</span>
               {keyParam ? <span className="agentos-tool-call-param">{keyParam}</span> : null}
             </span>
-            <span className="agentos-tool-call-status">{statusLabel}</span>
+            <span className="agentos-tool-call-status">
+              {statusLabel}
+              {durationLabel ? ` · ${durationLabel}` : null}
+            </span>
           </span>
         </span>
         <span className="agentos-tool-call-state" aria-hidden="true">

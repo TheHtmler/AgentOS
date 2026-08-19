@@ -76,6 +76,7 @@ class ThreadToolCallResponse(BaseModel):
     status: str
     provider: str | None
     summary: str
+    duration_ms: int | None
     after_message_id: UUID
 
 
@@ -278,6 +279,7 @@ async def get_thread_messages(
                 status=tool_call.status,
                 provider=tool_call.provider,
                 summary=tool_call.summary,
+                duration_ms=tool_call.duration_ms,
                 after_message_id=tool_call.after_message_id,
             )
             for tool_call in tool_calls

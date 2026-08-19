@@ -69,6 +69,7 @@ class ThreadToolCallItem:
     status: str
     provider: str | None
     summary: str
+    duration_ms: int | None
     after_message_id: UUID
 
 
@@ -331,6 +332,8 @@ async def list_thread_tool_calls(
             provider = provider_value if isinstance(provider_value, str) else None
             summary_value = result_payload.get("summary")
             summary = summary_value if isinstance(summary_value, str) else ""
+            duration_value = result_payload.get("duration_ms")
+            duration_ms = duration_value if isinstance(duration_value, int) else None
 
             items.append(
                 ThreadToolCallItem(
@@ -340,6 +343,7 @@ async def list_thread_tool_calls(
                     status="done" if ok is True else "error",
                     provider=provider,
                     summary=summary[:500],
+                    duration_ms=duration_ms,
                     after_message_id=after_message_id,
                 )
             )

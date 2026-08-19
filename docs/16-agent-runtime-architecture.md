@@ -60,13 +60,17 @@
 - 外部能力走 provider 路由：`web_search`(Tavily→DuckDuckGo)、`fetch_url`(Firecrawl→local)，降级对内透明。
 - 超长结果外溢：`fetch_url`/上传文本持久化为 Artifact，模型只见预览 + 用 `read_artifact` 分页（等价 harness 的 spill 模式）。
 - Case 写入一律经 HITL(`case_slot_collect` 表单 / `case_attribution_confirm`)，禁止静默覆盖档案。`case/extract.py::apply_attribution_policy` 的 `already_approved` 参数是这条约束的强制点：只有真正走过 HITL 审批的调用（`case_attribution_confirm`）才能传 `already_approved=True` 写 `confirmed`；后台无监督抽取（`schedule_case_extract`，每轮对话后自动调度）即使判定 `attribution=="self"` 也只写 `proposed`，不能绕过审批。
-- MCP(stdio）默认关闭，开启后按 allowlist + `mcp_` 前缀挂载。
+- MCP(stdio）默认关闭，开启后按 allowlist + `mcp_` 前缀挂载；调用通过
+  `MCPToolset.process_tool_call` 写入既有 `run_events` 的 `tool_call` / `tool_result` 摘要，
+  包含来源与耗时，供 Web 历史回放和 Ops 会话审计使用。当前仍是单 stdio 服务器，
+  服务器命令与 allowlist 来自服务配置，不是 Ops 动态安装。
 - `knowledge_search` 的知识库范围按 Agent 分类可见，不按挂载与否区分：`agent_versions.knowledge_base_slugs`（`NULL` = 不限制，能查全部激活的 `KnowledgeBase`；非空列表只限定到那几个 slug)从 `AgentVersion` 经 `AgentDeps` 传入，`search_knowledge_chunks` 强制过滤——不是模型可传的参数，垂类 agent 不能被话术引导去读别的垂类内容。General（`kind="general"`)默认不限制；`imd`（遗传代谢）限定到 `mma-pa`。
 
 ## 持久化、回放与 HITL
 
 - 事实源：PostgreSQL。`threads`/`messages`/`runs`/`run_events`（有序 append-only)/`run_message_histories`(pydantic-ai 原始消息快照，续聊与 HITL 续跑的检查点）/`interrupts`/`artifacts`/`agents`/`agent_versions`/`user_memories`（含向量）/`cases`/`case_facts`/`knowledge_*`。
 - 每个 run 记录 `input_tokens`/`output_tokens`/`model_request_count`；预算裁剪动作记服务端日志。与 harness「模型可见即已记录」的差距：我们的快照/裁剪视图不落库，可由输入确定性重推，但没有逐 step 的事件级回放。
+- Web 过程时间线对 Thinking 与工具调用显示本轮/单工具耗时；工具历史 API 从 `run_events.tool_result.duration_ms` 回放该字段。Thinking 只展示阶段状态和耗时，不把模型原始 reasoning 作为可持久化内容。
 - HITL:`DeferredToolRequests` 输出 → interrupt 落库 → AG-UI 审批卡 → 携带 DeferredToolResults 从检查点续跑；超时（默认 30 分钟）自动拒绝。同一 thread 同时只允许一个 running run。
 
 ## 与 deepseek-harness / 主流设计的取舍
@@ -86,6 +90,8 @@
 ## 演进触发条件
 
 - `step budget trim` / `dropped oldest run` 日志高频 → 先升 `num_ctx` 24576(16GB 需 `iogpu.wired_limit_mb=12288`，步骤见 [15-model-upgrade-qwen3-vl.md](15-model-upgrade-qwen3-vl.md))，再考虑摘要压缩。
+- Skills 需求 → 先落地可审核、版本化的指令模块（挂到 AgentVersion），不把 GitHub/本地 Skill 当作任意可执行插件；需要执行权限时另立安全评审与沙箱边界。
+- MCP 需求 → 先完成多服务器注册、连接探测、allowlist 与 AgentVersion 绑定，再开放 Ops 写配置；当前单 stdio + 环境配置保持只读外部能力边界。
 - 语音输入 → ASR 旁路服务（whisper.cpp / FunASR)，复用 PaddleOCR 的 sidecar 模式，不换模型。
 - prompt/模型改动验收 →（已落地)`scripts/eval_agent_scenarios.py` + `eval/scenarios/*.json`：跑真实 Ollama 模型验证工具选择/HITL 触发/不虚构三类场景，改 `agent.py`/工具描述/`SYSTEM_INSTRUCTIONS` 前后手动跑一次（见 AGENTS.md）；不进 pytest/门禁（依赖真实模型，非确定性）。`eval/runner.py` 仍是纯函数级 golden suite（仅覆盖 `calculate`/`time_diff`），两者不是同一层。
 - 观测加深 →（部分落地)`run_events` 新增 `tool_result.duration_ms`（六个工具模块统一打点）与 `model_step`（整个 run 的墙钟耗时 + token 用量，`api/chat.py::persist_model_step_event`，best-effort 不影响主流程）；Ops `GET /v1/ops/sessions/{thread_id}/runs/{run_id}/events` + 会话详情页「查看事件」可读时间线。是整轮粗粒度，不是 tool-loop 内逐次模型请求的 per-step trace——AG-UI adapter（`pydantic_ai.ui.ag_ui.AGUIAdapter`）目前不暴露那个边界；仍未引入 OpenTelemetry（单机单进程，无 collector）。

@@ -939,6 +939,12 @@ body {
   font-weight: 600;
 }
 
+.agentos-reasoning-duration {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
 .agentos-reasoning-indicator {
   width: 0.4rem;
   height: 0.4rem;

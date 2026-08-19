@@ -278,6 +278,9 @@ function parseHistoryToolCalls(value: unknown): ToolCallState[] | null {
       (item.status !== "done" && item.status !== "error") ||
       typeof item.summary !== "string" ||
       typeof item.after_message_id !== "string" ||
+      (item.duration_ms !== undefined &&
+        item.duration_ms !== null &&
+        (typeof item.duration_ms !== "number" || !Number.isFinite(item.duration_ms))) ||
       (item.provider !== undefined && item.provider !== null && typeof item.provider !== "string")
     ) {
       return null;
@@ -290,6 +293,7 @@ function parseHistoryToolCalls(value: unknown): ToolCallState[] | null {
       status: item.status,
       resultSummary: item.summary,
       provider: typeof item.provider === "string" ? item.provider : undefined,
+      durationMs: typeof item.duration_ms === "number" ? item.duration_ms : undefined,
       expanded: false,
       afterMessageId: item.after_message_id,
     });
@@ -480,6 +484,8 @@ function toolStatesFromTimeline(steps: TimelineStep[]): ToolCallState[] {
       status: step.status,
       resultSummary: step.resultSummary,
       provider: step.provider,
+      startedAt: step.startedAt,
+      durationMs: step.durationMs,
       expanded: false,
       afterMessageId: step.afterMessageId,
     }));
@@ -1239,6 +1245,7 @@ export function ChatPanel({
               id: event.messageId,
               content: "正在理解问题与相关上下文",
               status: "running",
+              startedAt: Date.now(),
               expanded: false,
               afterMessageId: userMessageId,
             }),
@@ -1277,6 +1284,7 @@ export function ChatPanel({
                     ...step,
                     status: "done",
                     content: step.content || "已完成这一步处理",
+                    durationMs: Math.max(0, Date.now() - step.startedAt),
                     expanded: false,
                   }
                 : step,
@@ -1313,6 +1321,8 @@ export function ChatPanel({
               status: existing?.status ?? "running",
               resultSummary: existing?.resultSummary,
               provider: existing?.provider,
+              startedAt: existing?.startedAt ?? Date.now(),
+              durationMs: existing?.durationMs,
               expanded: existing?.expanded ?? false,
               afterMessageId: existing?.afterMessageId ?? userMessageId,
             });
@@ -1332,6 +1342,8 @@ export function ChatPanel({
               status: existing?.status ?? "running",
               resultSummary: existing?.resultSummary,
               provider: existing?.provider,
+              startedAt: existing?.startedAt ?? Date.now(),
+              durationMs: existing?.durationMs,
               expanded: existing?.expanded ?? false,
               afterMessageId: existing?.afterMessageId ?? userMessageId,
             });
@@ -1352,6 +1364,10 @@ export function ChatPanel({
               status: summarized.status,
               resultSummary: summarized.summary,
               provider: summarized.provider ?? existing?.provider,
+              startedAt: existing?.startedAt ?? Date.now(),
+              durationMs:
+                existing?.durationMs ??
+                (existing?.startedAt === undefined ? undefined : Date.now() - existing.startedAt),
               expanded: false,
               afterMessageId: existing?.afterMessageId ?? userMessageId,
             });
