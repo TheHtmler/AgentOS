@@ -37,6 +37,16 @@ type ToolTimelineStep = ToolCallState & { kind: "tool" };
 
 type TimelineStep = ThinkingStepState | ToolTimelineStep;
 
+const MAX_VISIBLE_REASONING_CHARS = 12_000;
+
+function visibleReasoningContent(buffer: string): string {
+  if (buffer.length <= MAX_VISIBLE_REASONING_CHARS) {
+    return buffer;
+  }
+
+  return `…${buffer.slice(-MAX_VISIBLE_REASONING_CHARS)}`;
+}
+
 type ThreadLatestRun = {
   id: string;
   status: string;
@@ -1243,7 +1253,9 @@ export function ChatPanel({
             upsertTimelineStep(current, {
               kind: "thinking",
               id: event.messageId,
-              content: "正在理解问题与相关上下文",
+              content: "",
+              phase: "正在理解问题与相关上下文",
+              contentMode: "none",
               status: "running",
               startedAt: Date.now(),
               expanded: false,
@@ -1254,7 +1266,7 @@ export function ChatPanel({
         onReasoningMessageStartEvent: () => {
           setTimelineSteps((current) =>
             updateLatestThinkingStep(current, userMessageId, {
-              content: "正在拆解任务目标",
+              phase: "正在拆解任务目标",
             }),
           );
         },
@@ -1265,14 +1277,28 @@ export function ChatPanel({
 
           setTimelineSteps((current) =>
             updateLatestThinkingStep(current, userMessageId, {
-              content: "正在整理分析结果",
+              content: visibleReasoningContent(reasoningMessageBuffer),
+              phase: "正在分析",
+              contentMode: "text",
             }),
           );
         },
         onReasoningMessageEndEvent: () => {
           setTimelineSteps((current) =>
             updateLatestThinkingStep(current, userMessageId, {
-              content: "分析完成，正在准备下一步",
+              phase: "分析完成，正在准备下一步",
+            }),
+          );
+        },
+        onReasoningEncryptedValueEvent: ({ event }) => {
+          if (event.subtype !== "message") {
+            return;
+          }
+
+          setTimelineSteps((current) =>
+            updateLatestThinkingStep(current, userMessageId, {
+              phase: "模型返回了加密 reasoning",
+              contentMode: "encrypted",
             }),
           );
         },
@@ -1283,7 +1309,7 @@ export function ChatPanel({
                 ? {
                     ...step,
                     status: "done",
-                    content: step.content || "已完成这一步处理",
+                    phase: "思考完成",
                     durationMs: Math.max(0, Date.now() - step.startedAt),
                     expanded: false,
                   }
@@ -1294,7 +1320,7 @@ export function ChatPanel({
         onToolCallStartEvent: ({ event }) => {
           setTimelineSteps((current) => {
             const next = updateLatestThinkingStep(current, userMessageId, {
-              content: "正在调用相关能力",
+              phase: "正在调用相关能力",
             });
             return upsertTimelineStep(next, {
               kind: "tool",

@@ -4,6 +4,8 @@ export type ThinkingStepState = {
   kind: "thinking";
   id: string;
   content: string;
+  phase: string;
+  contentMode: "none" | "text" | "encrypted";
   status: "running" | "done";
   startedAt: number;
   durationMs?: number;
@@ -13,7 +15,7 @@ export type ThinkingStepState = {
 
 export function ThinkingStepCard({ step }: { step: ThinkingStepState }) {
   const running = step.status === "running";
-  const label = running ? "正在处理" : "已完成处理";
+  const label = running ? step.phase : "思考完成";
   const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
@@ -49,7 +51,13 @@ export function ThinkingStepCard({ step }: { step: ThinkingStepState }) {
           ) : null}
         </span>
       </div>
-      {step.content ? <p className="agentos-reasoning-content">{step.content}</p> : null}
+      {step.content ? (
+        <pre className="agentos-reasoning-content">{step.content}</pre>
+      ) : step.contentMode === "encrypted" ? (
+        <p className="agentos-reasoning-content">模型返回了加密 reasoning，当前无法展示文本</p>
+      ) : !running ? (
+        <p className="agentos-reasoning-content">该模型未返回可展示的 reasoning 内容</p>
+      ) : null}
     </section>
   );
 }

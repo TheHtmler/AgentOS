@@ -70,7 +70,7 @@
 
 - 事实源：PostgreSQL。`threads`/`messages`/`runs`/`run_events`（有序 append-only)/`run_message_histories`(pydantic-ai 原始消息快照，续聊与 HITL 续跑的检查点）/`interrupts`/`artifacts`/`agents`/`agent_versions`/`user_memories`（含向量）/`cases`/`case_facts`/`knowledge_*`。
 - 每个 run 记录 `input_tokens`/`output_tokens`/`model_request_count`；预算裁剪动作记服务端日志。与 harness「模型可见即已记录」的差距：我们的快照/裁剪视图不落库，可由输入确定性重推，但没有逐 step 的事件级回放。
-- Web 过程时间线对 Thinking 与工具调用显示本轮/单工具耗时；工具历史 API 从 `run_events.tool_result.duration_ms` 回放该字段。Thinking 只展示阶段状态和耗时，不把模型原始 reasoning 作为可持久化内容。
+- Web 过程时间线对 Thinking 与工具调用显示本轮/单工具耗时；工具历史 API 从 `run_events.tool_result.duration_ms` 回放该字段。若模型通过 AG-UI 返回可读 reasoning，Web 仅在当前 SSE 回合临时展示（最多 12000 字符）；加密 reasoning 会明确标注不可读；原始 reasoning 永不写入持久化历史。
 - HITL:`DeferredToolRequests` 输出 → interrupt 落库 → AG-UI 审批卡 → 携带 DeferredToolResults 从检查点续跑；超时（默认 30 分钟）自动拒绝。同一 thread 同时只允许一个 running run。
 
 ## 与 deepseek-harness / 主流设计的取舍

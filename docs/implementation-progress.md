@@ -74,7 +74,7 @@
 - HITL 闭环：`waiting_approval` Run 状态、`interrupts` 表、checkpoint 历史、`POST /v1/runs/{id}/resume`（幂等）、取消 waiting、超时自动 deny 续跑（`HITL_APPROVAL_TIMEOUT_SECONDS`，默认 1800）；前端审批卡 + 侧栏「待审批」。
 - 自动会话标题：首轮 Run 成功后后台用模型生成短标题；仅 `title IS NULL` 时写入；`AUTO_THREAD_TITLE_*` 配置；侧栏靠既有 run finalize 刷新拉取。
 - 聊天过程组 UI（Codex 风格）：Thinking + 工具收入「处理中 / 已处理」可折叠组；紧凑工具行；邀请弹窗移动端自适应；深色次要文字对比抬高。
-- Thinking UI 实时显示简短阶段进度并自动跟随消息区滚动；不展示模型内部 reasoning 原文。
+- Thinking UI 实时显示阶段进度并自动跟随消息区滚动；模型返回可读 reasoning 时仅在当前回合临时展示，未返回或仅返回加密 reasoning 时明确标注，不写入历史。
 - 多 Agent 数据模型：`agents`、`agent_versions`、`user_memories` 表；`threads.agent_id` 创建后不可变；迁移 `d8e9f0a1b2c3` 种子后经 `seed_agents.py` 收敛为 `general`（默认、记忆关）与 `imd` /「遗传代谢」（垂类、记忆开；合并原 parenting + mma-pa）。
 - `GET /v1/agents` 与 Web BFF `/api/agents`：返回可选 Agent 列表及 published 版本的 `memory_enabled`。
 - Thread 绑定与过滤：新建 Thread 经 `start_run` + `X-AgentOS-Agent-Id` 绑定当前 Agent（非 `POST /v1/threads`）；`GET /v1/threads?agent_id=` 按 Agent 过滤；既有 Thread 忽略客户端 agent 头。

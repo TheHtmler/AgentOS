@@ -925,10 +925,14 @@ body {
 }
 
 .agentos-reasoning-content {
+  max-height: 18rem;
   margin: 0 0.5rem 0.55rem;
+  overflow: auto;
   color: var(--muted);
   font-size: 0.74rem;
   line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .agentos-reasoning-title {
