@@ -3,6 +3,7 @@
 import {
   Children,
   isValidElement,
+  memo,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -158,7 +159,11 @@ function CodeBlock({ children }: { children: ReactNode }) {
   );
 }
 
-export function AssistantMarkdown({ content }: { content: string }) {
+// A streaming reply calls setState on every token; react-markdown re-parses
+// the whole (ever-growing) string each time it re-renders. memo() skips that
+// re-parse for every OTHER message in the list whose content string hasn't
+// changed since the last render — only the actively-streaming bubble re-runs.
+export const AssistantMarkdown = memo(function AssistantMarkdown({ content }: { content: string }) {
   return (
     <div className="agentos-md">
       <ReactMarkdown
@@ -183,4 +188,4 @@ export function AssistantMarkdown({ content }: { content: string }) {
       </ReactMarkdown>
     </div>
   );
-}
+});

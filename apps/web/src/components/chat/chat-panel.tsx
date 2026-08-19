@@ -392,6 +392,14 @@ function toDisplayMessages(
 
     const prior = previousById.get(message.id);
 
+    // Reuse the prior object when nothing changed so React.memo'd children
+    // (e.g. AssistantMarkdown) can bail out instead of re-rendering every
+    // historical message on each streamed token of the live one.
+    if (prior !== undefined && prior.role === message.role && prior.content === message.content) {
+      displayMessages.push(prior);
+      continue;
+    }
+
     displayMessages.push({
       id: message.id,
       role: message.role,
@@ -402,6 +410,34 @@ function toDisplayMessages(
   }
 
   return displayMessages;
+}
+
+type TurnMeta = { precedingUserId: string | undefined; isPrimaryAssistantForTurn: boolean };
+
+// Process steps are keyed to the user message that started the run; render them
+// inside the first following assistant bubble only (later assistant messages in
+// the same turn, if any, get no timeline attached).
+function computeTurnMeta(messages: readonly ChatMessage[]): TurnMeta[] {
+  const result: TurnMeta[] = [];
+  let currentUserId: string | undefined;
+  let assignedForCurrentUser = false;
+
+  for (const message of messages) {
+    if (message.role === "user") {
+      currentUserId = message.id;
+      assignedForCurrentUser = false;
+      result.push({ precedingUserId: undefined, isPrimaryAssistantForTurn: false });
+      continue;
+    }
+    if (currentUserId !== undefined && !assignedForCurrentUser) {
+      assignedForCurrentUser = true;
+      result.push({ precedingUserId: currentUserId, isPrimaryAssistantForTurn: true });
+      continue;
+    }
+    result.push({ precedingUserId: currentUserId, isPrimaryAssistantForTurn: false });
+  }
+
+  return result;
 }
 
 function upsertTimelineStep(current: TimelineStep[], next: TimelineStep): TimelineStep[] {
@@ -584,6 +620,11 @@ export function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // SSE delivers one onMessagesChanged per streamed token; coalescing to one
+  // setState per animation frame keeps re-render (and the scroll-follow effect
+  // it triggers) at a smooth ~60fps instead of jittering on every token.
+  const pendingStreamMessagesRef = useRef<readonly Message[] | null>(null);
+  const streamFlushHandleRef = useRef<number | null>(null);
 
   isActiveRef.current = isActive;
 
@@ -703,6 +744,9 @@ export function ChatPanel({
   useEffect(() => {
     return () => {
       agentRef.current?.abortRun();
+      if (streamFlushHandleRef.current !== null) {
+        window.cancelAnimationFrame(streamFlushHandleRef.current);
+      }
     };
   }, []);
 
@@ -958,6 +1002,22 @@ export function ChatPanel({
     threadId,
   ]);
 
+  function scheduleMessagesFlush(nextMessages: readonly Message[]) {
+    pendingStreamMessagesRef.current = nextMessages;
+    if (streamFlushHandleRef.current !== null) {
+      return;
+    }
+    streamFlushHandleRef.current = window.requestAnimationFrame(() => {
+      streamFlushHandleRef.current = null;
+      const latest = pendingStreamMessagesRef.current;
+      pendingStreamMessagesRef.current = null;
+      if (latest === null) {
+        return;
+      }
+      setMessages((previous) => toDisplayMessages(latest, previous));
+    });
+  }
+
   function scrollMessagesToBottom(behavior: ScrollBehavior = "auto") {
     const viewport = messagesViewportRef.current;
 
@@ -1144,7 +1204,7 @@ export function ChatPanel({
     try {
       await agent.runAgent(undefined, {
         onMessagesChanged: ({ messages: nextMessages }) => {
-          setMessages((previous) => toDisplayMessages(nextMessages, previous));
+          scheduleMessagesFlush(nextMessages);
         },
         onRunStartedEvent: ({ event, agent: runningAgent }) => {
           if (isUuid(event.runId)) {
@@ -1567,6 +1627,11 @@ export function ChatPanel({
     );
   }
 
+  // One O(N) pass instead of an O(N) backward scan + O(N) findIndex per assistant
+  // row (was O(N^2) over the whole list on every render, including every streamed
+  // token of the live reply).
+  const turnMetaByIndex = computeTurnMeta(messages);
+
   const latestUserMessageIndex = messages.reduce(
     (latestIndex, message, index) => (message.role === "user" ? index : latestIndex),
     -1,
@@ -1664,27 +1729,10 @@ export function ChatPanel({
             </div>
           ) : (
             messages.map((message, index) => {
-              // Process steps are keyed to the user message that started the run; render
-              // them inside the first following assistant bubble only.
-              const precedingUserIndex =
-                message.role === "assistant"
-                  ? (() => {
-                      for (let i = index - 1; i >= 0; i -= 1) {
-                        if (messages[i]?.role === "user") {
-                          return i;
-                        }
-                      }
-                      return -1;
-                    })()
-                  : -1;
-              const precedingUserId =
-                precedingUserIndex >= 0 ? messages[precedingUserIndex]?.id : undefined;
-              const isPrimaryAssistantForTurn =
-                message.role === "assistant" &&
-                precedingUserIndex >= 0 &&
-                messages.findIndex(
-                  (item, itemIndex) => itemIndex > precedingUserIndex && item.role === "assistant",
-                ) === index;
+              const { precedingUserId, isPrimaryAssistantForTurn } = turnMetaByIndex[index] ?? {
+                precedingUserId: undefined,
+                isPrimaryAssistantForTurn: false,
+              };
 
               const liveSteps =
                 isPrimaryAssistantForTurn &&
@@ -1756,18 +1804,6 @@ export function ChatPanel({
                             }`
                       }`}
                     >
-                      {message.role === "assistant" && message.content ? (
-                        <div className="agentos-message-toolbar">
-                          <button
-                            type="button"
-                            onClick={() => void copyAssistantMessage(message)}
-                            className="agentos-copy-button"
-                          >
-                            {copiedMessageId === message.id ? "已复制" : "复制"}
-                          </button>
-                        </div>
-                      ) : null}
-
                       {processChildren.length > 0 ? (
                         <div className="agentos-message-process">{processChildren}</div>
                       ) : null}
@@ -1833,6 +1869,18 @@ export function ChatPanel({
                         </p>
                       ) : null}
                     </article>
+
+                    {message.role === "assistant" && message.content ? (
+                      <div className="agentos-message-toolbar">
+                        <button
+                          type="button"
+                          onClick={() => void copyAssistantMessage(message)}
+                          className="agentos-copy-button"
+                        >
+                          {copiedMessageId === message.id ? "已复制" : "复制"}
+                        </button>
+                      </div>
+                    ) : null}
 
                     {message.createdAt || message.durationLabel ? (
                       <div

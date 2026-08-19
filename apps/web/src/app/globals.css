@@ -2624,8 +2624,8 @@ body {
 }
 
 .agentos-message-toolbar {
-  justify-content: flex-end;
-  margin-bottom: 0.25rem;
+  justify-content: flex-start;
+  margin-top: 0.15rem;
 }
 
 .agentos-message-time {
