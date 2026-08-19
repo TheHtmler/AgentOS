@@ -182,6 +182,9 @@ class AgentVersion(Base):
         server_default=text("false"),
         nullable=False,
     )
+    # NULL = unrestricted (search every active KnowledgeBase, e.g. General);
+    # a non-empty list scopes knowledge_search to just those slugs (verticals).
+    knowledge_base_slugs: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     is_published: Mapped[bool] = mapped_column(
         server_default=text("false"),
         nullable=False,

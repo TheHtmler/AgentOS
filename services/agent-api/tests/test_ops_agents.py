@@ -142,6 +142,7 @@ async def test_ops_agent_publish_new_version(
                 "memory_enabled": True,
                 "case_enabled": False,
                 "tool_policy_overrides": {"web_search": "ask"},
+                "knowledge_base_slugs": ["mma-pa"],
             },
         )
         assert published.status_code == 200
@@ -150,5 +151,8 @@ async def test_ops_agent_publish_new_version(
         assert body["published_version"]["memory_enabled"] is True
         assert body["published_version"]["version"] == prior_version + 1
         assert body["published_version"]["tool_policy_overrides"] == {"web_search": "ask"}
+        # Republishing a version must not silently reset scope back to
+        # unrestricted just because the field is easy to omit from a payload.
+        assert body["published_version"]["knowledge_base_slugs"] == ["mma-pa"]
         published_flags = [row["is_published"] for row in body["versions"]]
         assert published_flags.count(True) == 1

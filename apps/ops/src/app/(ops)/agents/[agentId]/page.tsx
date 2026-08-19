@@ -16,6 +16,7 @@ type OpsAgentVersion = {
   tool_policy_overrides: Record<string, string> | null;
   memory_enabled: boolean;
   case_enabled: boolean;
+  knowledge_base_slugs: string[] | null;
   is_published: boolean;
   created_at: string;
 };
@@ -42,6 +43,7 @@ export default function AgentDetailPage() {
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [caseEnabled, setCaseEnabled] = useState(false);
   const [policyText, setPolicyText] = useState("");
+  const [knowledgeBaseSlugsText, setKnowledgeBaseSlugsText] = useState("");
 
   const applyVersion = useCallback((version: OpsAgentVersion | null) => {
     setOverlay(version?.system_prompt_overlay ?? "");
@@ -50,6 +52,7 @@ export default function AgentDetailPage() {
     setPolicyText(
       version?.tool_policy_overrides ? JSON.stringify(version.tool_policy_overrides, null, 2) : "",
     );
+    setKnowledgeBaseSlugsText(version?.knowledge_base_slugs?.join(", ") ?? "");
   }, []);
 
   const load = useCallback(async () => {
@@ -83,6 +86,12 @@ export default function AgentDetailPage() {
         }
         tool_policy_overrides = parsed as Record<string, "allow" | "ask" | "deny">;
       }
+      const knowledge_base_slugs = knowledgeBaseSlugsText.trim()
+        ? knowledgeBaseSlugsText
+            .split(",")
+            .map((slug) => slug.trim())
+            .filter(Boolean)
+        : null;
       const updated = await opsJson<OpsAgentDetail>(`/api/ops/agents/${params.agentId}/versions`, {
         method: "POST",
         body: JSON.stringify({
@@ -90,6 +99,7 @@ export default function AgentDetailPage() {
           memory_enabled: memoryEnabled,
           case_enabled: caseEnabled,
           tool_policy_overrides,
+          knowledge_base_slugs,
         }),
       });
       setAgent(updated);
@@ -171,6 +181,16 @@ export default function AgentDetailPage() {
                 onChange={(event) => setPolicyText(event.target.value)}
               />
             </label>
+            <label>
+              知识库范围（可选，逗号分隔 slug；留空 = 不限制，能查全部知识库）
+              <input
+                type="text"
+                value={knowledgeBaseSlugsText}
+                spellCheck={false}
+                placeholder="mma-pa"
+                onChange={(event) => setKnowledgeBaseSlugsText(event.target.value)}
+              />
+            </label>
             <button type="submit" disabled={saving}>
               {saving ? "发布中…" : "发布新版本"}
             </button>
@@ -188,6 +208,7 @@ export default function AgentDetailPage() {
                 <div className="doc-card__meta">
                   <span>记忆 {boolZh(version.memory_enabled)}</span>
                   <span>档案 {boolZh(version.case_enabled)}</span>
+                  <span>知识库 {version.knowledge_base_slugs?.join(", ") ?? "不限制"}</span>
                   <span>{formatTime(version.created_at)}</span>
                 </div>
                 <button type="button" className="secondary" onClick={() => applyVersion(version)}>

@@ -57,7 +57,7 @@ async def test_p0_retrieval_evaluation(database_session: AsyncSession) -> None:
             query=case["query"],
             disease_tags=case["disease_tags"],
             max_results=8,
-            knowledge_base_slug="mma-pa",
+            knowledge_base_slugs=["mma-pa"],
         )
         assert hits, case["id"]
         expected_terms = case["expected_title_terms"]
@@ -77,7 +77,7 @@ async def test_p0_retrieval_evaluation(database_session: AsyncSession) -> None:
         query="孤立型 MMA 亚型 基因",
         disease_tags=["isolated_mma"],
         max_results=8,
-        knowledge_base_slug="mma-pa",
+        knowledge_base_slugs=["mma-pa"],
     )
     assert all(hit["document_slug"] != withdrawn.slug for hit in withdrawn_hits)
     withdrawn.review_status = "curated"
@@ -104,6 +104,6 @@ async def test_p0_retrieval_precision_rejects_unrelated_query(
         query="汽车轮胎更换步骤和工具",
         disease_tags=[],
         max_results=8,
-        knowledge_base_slug="mma-pa",
+        knowledge_base_slugs=["mma-pa"],
     )
     assert hits == []

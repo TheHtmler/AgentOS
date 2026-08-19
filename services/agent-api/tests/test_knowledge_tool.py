@@ -41,7 +41,7 @@ async def test_long_cjk_phrase_matches_via_bigrams(database_session: AsyncSessio
         query="甲基丙二酸血症患儿的急性期管理方案",
         disease_tags=[],
         max_results=3,
-        knowledge_base_slug="mma-pa",
+        knowledge_base_slugs=["mma-pa"],
     )
     assert hits
 
@@ -57,7 +57,7 @@ async def test_seed_and_search_knowledge_chunks(database_session: AsyncSession) 
         query="急性失代偿 发热",
         disease_tags=["isolated_mma"],
         max_results=3,
-        knowledge_base_slug="mma-pa",
+        knowledge_base_slugs=["mma-pa"],
     )
     assert hits
     assert any("失代偿" in hit["title"] or "失代偿" in hit["content"] for hit in hits)
@@ -73,7 +73,7 @@ async def test_seed_and_search_knowledge_chunks(database_session: AsyncSession) 
         query="B12 反应型 非反应型",
         disease_tags=["cobalamin_disorder", "isolated_mma"],
         max_results=3,
-        knowledge_base_slug="mma-pa",
+        knowledge_base_slugs=["mma-pa"],
     )
     assert b12_hits
     assert any("B12" in hit["title"] or "反应型" in hit["content"] for hit in b12_hits)
@@ -121,7 +121,7 @@ async def test_vector_score_skipped_for_mismatched_embedding_model(
             query="汽车轮胎更换方法",
             disease_tags=[],
             max_results=5,
-            knowledge_base_slug=base.slug,
+            knowledge_base_slugs=[base.slug],
             query_embedding=[0.95, 0.05, 0.0],
             current_embedding_model="nomic-embed-text",
         )
@@ -146,20 +146,78 @@ async def test_misspelled_disease_tag_does_not_zero_candidates(
         query="急性失代偿 发热",
         disease_tags=["isolated_mma"],
         max_results=3,
-        knowledge_base_slug="mma-pa",
+        knowledge_base_slugs=["mma-pa"],
     )
     hits_with_typo_tag = await search_knowledge_chunks(
         database_session,
         query="急性失代偿 发热",
         disease_tags=["mma"],  # not a real tag — real tag is "isolated_mma"
         max_results=3,
-        knowledge_base_slug="mma-pa",
+        knowledge_base_slugs=["mma-pa"],
     )
     assert hits_with_typo_tag
     # The typo tag loses its scoring boost (a marginal 3rd-place result may
     # shift), but the query's real keyword signal must still surface the same
     # top hit — a misspelled tag must not zero the candidate set outright.
     assert hits_with_typo_tag[0]["chunk_id"] == hits_with_correct_tag[0]["chunk_id"]
+
+
+@pytest.mark.anyio
+async def test_knowledge_base_scope_isolates_verticals(database_session: AsyncSession) -> None:
+    """A second KnowledgeBase (a hypothetical other vertical / general-purpose base):
+
+    unrestricted (General-like) search sees it; a vertical scoped to just
+    ``mma-pa`` (IMD-like) must not.
+    """
+
+    await upsert_mma_pa_knowledge(database_session)
+    await database_session.commit()
+
+    kb_slug = f"kb-{uuid4().hex}"
+    base = KnowledgeBase(id=uuid4(), slug=kb_slug, name="Other vertical KB", status="active")
+    document = KnowledgeDocument(
+        id=uuid4(),
+        knowledge_base_id=base.id,
+        slug=f"doc-{uuid4().hex}",
+        title="咖啡因摄入与睡眠质量",
+        source_kind="curated_summary",
+        review_status="curated",
+    )
+    chunk = KnowledgeChunk(
+        id=uuid4(),
+        document_id=document.id,
+        chunk_index=0,
+        title="咖啡因摄入与睡眠质量",
+        content="咖啡因摄入时间与睡眠质量的一般性关系，教育性说明。",
+        tags=[],
+    )
+    try:
+        database_session.add_all([base, document])
+        await database_session.flush()
+        database_session.add(chunk)
+        await database_session.commit()
+
+        unrestricted_hits = await search_knowledge_chunks(
+            database_session,
+            query="咖啡因摄入与睡眠质量",
+            disease_tags=[],
+            max_results=5,
+            knowledge_base_slugs=None,
+        )
+        assert any(hit["chunk_id"] == str(chunk.id) for hit in unrestricted_hits)
+
+        scoped_hits = await search_knowledge_chunks(
+            database_session,
+            query="咖啡因摄入与睡眠质量",
+            disease_tags=[],
+            max_results=5,
+            knowledge_base_slugs=["mma-pa"],
+        )
+        assert not any(hit["chunk_id"] == str(chunk.id) for hit in scoped_hits)
+    finally:
+        # ON DELETE CASCADE ripples base -> document -> chunk.
+        await database_session.delete(base)
+        await database_session.commit()
 
 
 @pytest.mark.anyio

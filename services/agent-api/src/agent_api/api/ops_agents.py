@@ -40,6 +40,7 @@ class OpsAgentVersionOut(BaseModel):
     tool_policy_overrides: dict[str, Any] | None
     memory_enabled: bool
     case_enabled: bool
+    knowledge_base_slugs: list[str] | None
     is_published: bool
     created_at: datetime
 
@@ -65,6 +66,8 @@ class PublishOpsAgentVersionRequest(BaseModel):
     memory_enabled: bool = False
     case_enabled: bool = False
     tool_policy_overrides: dict[str, PolicyOverride] | None = None
+    # None = unrestricted (knowledge_search sees every active KnowledgeBase).
+    knowledge_base_slugs: list[str] | None = None
 
 
 def _to_out(agent: Agent, version: AgentVersion | None) -> OpsAgentOut:
@@ -91,6 +94,7 @@ def _version_out(version: AgentVersion) -> OpsAgentVersionOut:
         tool_policy_overrides=None if overrides is None else dict(overrides),
         memory_enabled=version.memory_enabled,
         case_enabled=version.case_enabled,
+        knowledge_base_slugs=version.knowledge_base_slugs,
         is_published=version.is_published,
         created_at=version.created_at,
     )
@@ -230,6 +234,7 @@ async def publish_ops_agent_version(
                 tool_policy_overrides=overrides,
                 memory_enabled=payload.memory_enabled,
                 case_enabled=payload.case_enabled,
+                knowledge_base_slugs=payload.knowledge_base_slugs,
                 is_published=True,
             ),
         )

@@ -155,17 +155,14 @@ totals, rates, or multi-step formulas when a tool result is available.
 
 KNOWLEDGE_INSTRUCTIONS = """\
 ## Capability: knowledge_search
-For MMA/PA / C3 NBS education, acute decompensation family guidance, diet/monitoring
-education, call knowledge_search first (optional disease_tags: isolated_mma, pa,
-cobalamin_disorder, gene:…). The base also holds report-analysis references
-(血尿串联质谱 / 血常规 / 血气 / 饮食蛋白) — search them when interpreting lab reports.
-Build query from short medical keywords (disease name, analyte, report type, e.g.
-"血尿串联质谱 酰基肉碱 C3"), never a full question sentence; put subtypes and gene
-tags in disease_tags instead. Cite source_url values. Fall back to web_search only when
-the curated base is insufficient or the user needs a newer external page.
-When citing a curated hit, include its source_label and version_label when available.
-Treat curated summaries as educational evidence, not individualized prescriptions; if
-the retrieved evidence does not answer the question, say so instead of filling the gap.
+Call knowledge_search first for questions the curated knowledge base(s) you're scoped to
+may cover — prefer it over web_search when it applies. Build query from short keywords
+(topic, analyte/report type, etc.), never a full question sentence; put category/subtype
+tags in disease_tags instead when the base uses them. Cite source_url values, and include
+source_label / version_label when a hit has them. Fall back to web_search only when the
+curated base is insufficient or the user needs a newer external page. Treat curated
+summaries as educational evidence, not individualized prescriptions; if the retrieved
+evidence does not answer the question, say so instead of filling the gap.
 """
 
 MEMORY_HEADER = "## Known user facts (for this agent only; use when relevant)"

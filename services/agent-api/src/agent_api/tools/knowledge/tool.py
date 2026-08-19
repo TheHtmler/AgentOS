@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import Sequence
 from typing import Any, cast
 from uuid import UUID
 
@@ -122,11 +123,18 @@ async def search_knowledge_chunks(
     query: str,
     disease_tags: list[str],
     max_results: int,
-    knowledge_base_slug: str | None = None,
+    knowledge_base_slugs: Sequence[str] | None = None,
     query_embedding: list[float] | None = None,
     current_embedding_model: str | None = None,
 ) -> list[dict[str, Any]]:
     """Hybrid keyword + optional embedding search over published knowledge chunks.
+
+    ``knowledge_base_slugs`` scopes which KnowledgeBase rows are searchable —
+    ``None``/empty means unrestricted (every active base, e.g. a general-purpose
+    agent); a non-empty sequence restricts to just those slugs (a vertical
+    agent scoped to its own knowledge base(s)). This is enforced here from
+    ``AgentDeps``, not a model-supplied argument, so a vertical agent cannot
+    be talked into reading another vertical's content.
 
     ``disease_tags`` is a Python-side scoring signal only (see
     ``_score_components``'s tag-overlap boost), not a SQL filter — a small
@@ -154,8 +162,8 @@ async def search_knowledge_chunks(
             KnowledgeDocument.review_status != "withdrawn",
         )
     )
-    if knowledge_base_slug:
-        stmt = stmt.where(KnowledgeBase.slug == knowledge_base_slug)
+    if knowledge_base_slugs:
+        stmt = stmt.where(KnowledgeBase.slug.in_(knowledge_base_slugs))
 
     # Embeddings or explicit tags can rescue synonym queries beyond ILIKE hits.
     use_vector = query_embedding is not None
@@ -250,9 +258,13 @@ async def run_knowledge_search(
     query: str,
     disease_tags: str | None = None,
     max_results: int | None = None,
-    knowledge_base_slug: str | None = "mma-pa",
 ) -> str:
-    """Execute knowledge search for unit tests and the tool wrapper."""
+    """Execute knowledge search for unit tests and the tool wrapper.
+
+    Knowledge base scope comes from ``deps.knowledge_base_slugs`` (set per Agent
+    version from the published configuration), never from a caller-supplied
+    argument — see ``search_knowledge_chunks`` for why.
+    """
 
     from agent_api.tools.policy import gate_or_none
 
@@ -271,7 +283,7 @@ async def run_knowledge_search(
         "query": normalized[:200],
         "disease_tags": tags,
         "max_results": limit,
-        "knowledge_base_slug": knowledge_base_slug,
+        "knowledge_base_slugs": deps.knowledge_base_slugs,
     }
 
     started_at = time.monotonic()
@@ -294,7 +306,7 @@ async def run_knowledge_search(
                 query=normalized,
                 disease_tags=tags,
                 max_results=limit,
-                knowledge_base_slug=knowledge_base_slug,
+                knowledge_base_slugs=deps.knowledge_base_slugs,
                 query_embedding=query_embedding,
                 current_embedding_model=settings.memory_embedding_model,
             )
@@ -343,10 +355,11 @@ async def knowledge_search(
     disease_tags: str | None = None,
     max_results: int = 5,
 ) -> str:
-    """Search curated MMA/PA knowledge chunks by keywords and optional disease tags.
+    """Search this Agent's curated knowledge base(s) by keywords and optional tags.
 
-    Prefer this for methylmalonic/propionic acidemia education before generic web_search.
-    disease_tags: comma-separated, e.g. isolated_mma,pa,cobalamin_disorder,gene:MMUT
+    Prefer this over generic web_search for topics the curated base covers.
+    disease_tags: optional comma-separated tag filter, e.g. isolated_mma,pa,gene:MMUT
+    (only meaningful when the knowledge base you're scoped to uses those tags).
     """
 
     return await run_knowledge_search(

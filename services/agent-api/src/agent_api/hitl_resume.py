@@ -189,6 +189,7 @@ async def continue_run_after_approval(
                         user_id=user_id,
                         thread_id=run.thread_id,
                         http_client=runtime.ollama_http_client,
+                        knowledge_base_slugs=version.knowledge_base_slugs,
                     ),
                 )
 

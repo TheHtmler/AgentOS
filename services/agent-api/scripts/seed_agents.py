@@ -74,6 +74,9 @@ class SeedAgentVersion:
     system_prompt_overlay: str
     memory_enabled: bool
     case_enabled: bool = False
+    # None = unrestricted (search every active KnowledgeBase); a non-empty
+    # list scopes knowledge_search to just those slugs (vertical agents).
+    knowledge_base_slugs: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -116,6 +119,7 @@ SEED_AGENTS: tuple[SeedAgent, ...] = (
             system_prompt_overlay=IMD_OVERLAY,
             memory_enabled=True,
             case_enabled=True,
+            knowledge_base_slugs=["mma-pa"],
         ),
     ),
 )
@@ -170,6 +174,7 @@ async def upsert_seed_agent(session: AsyncSession, spec: SeedAgent) -> None:
             system_prompt_overlay=version_spec.system_prompt_overlay,
             memory_enabled=version_spec.memory_enabled,
             case_enabled=version_spec.case_enabled,
+            knowledge_base_slugs=version_spec.knowledge_base_slugs,
             is_published=True,
         )
         session.add(version)
@@ -177,6 +182,7 @@ async def upsert_seed_agent(session: AsyncSession, spec: SeedAgent) -> None:
         version.system_prompt_overlay = version_spec.system_prompt_overlay
         version.memory_enabled = version_spec.memory_enabled
         version.case_enabled = version_spec.case_enabled
+        version.knowledge_base_slugs = version_spec.knowledge_base_slugs
         version.is_published = True
 
 
