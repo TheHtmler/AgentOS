@@ -179,6 +179,8 @@ type ChatPanelProps = {
   selectedThreadId: string | null | undefined;
   agentId: string | null;
   agentLoadError: string | null;
+  /** False when the selected agent's model cannot take image input; upload stays disabled. */
+  supportsVision?: boolean;
   /** When false, this panel stays mounted for background runs but must not own the URL/inspector. */
   isActive?: boolean;
   onRetryAgentLoad: () => void;
@@ -574,6 +576,7 @@ export function ChatPanel({
   selectedThreadId,
   agentId,
   agentLoadError,
+  supportsVision = true,
   isActive = true,
   onRetryAgentLoad,
   onNewConversation,
@@ -2056,7 +2059,11 @@ export function ChatPanel({
                 uploadedArtifacts.length >= MAX_UPLOAD_FILES
               }
               className="agentos-upload-button disabled:cursor-not-allowed disabled:opacity-40"
-              title="上传 PDF 或图片（新建会话会自动创建）"
+              title={
+                supportsVision
+                  ? "上传 PDF 或图片（新建会话会自动创建）"
+                  : "当前模型以文本方式读取附件（不看图），结论以 OCR 文本为准"
+              }
             >
               <svg
                 aria-hidden="true"

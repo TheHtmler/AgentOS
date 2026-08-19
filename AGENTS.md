@@ -15,10 +15,11 @@
 ## 仓库结构
 
 - `apps/web`(Next.js,:3000)：产品前端，AG-UI 聊天界面；`app/api/*` 是同域 BFF 代理。
-- `apps/ops`(Next.js,:3001)：运营后台（知识库、Agent 配置）。
+- `apps/ops`(Next.js,:3001)：运营后台（知识库、Agent 配置、模型 Provider)。
 - `services/agent-api`(Python 3.13 / FastAPI / pydantic-ai)：Agent 运行时与全部业务 API。
-  - `src/agent_api/agent.py` — 稳定指令组装(`build_instructions`)+ 动态上下文快照(`build_context_snapshot` / `inject_context_snapshot`)。
+  - `src/agent_api/agent.py` — 稳定指令组装(`build_instructions`)+ 动态上下文快照(`build_context_snapshot` / `inject_context_snapshot`);`create_agent` 按模型档案构造本地 Ollama 或远程 OpenAI-compatible 模型。
   - `src/agent_api/context_budget.py` — 输入预算护栏(run 前裁剪 + 每 step 压力检查 + 视觉截顶）。
+  - `src/agent_api/db/provider_store.py` — 模型 Provider 解析（按 Agent 版本选端点，内置 `local` 为 env 镜像）;`api/ops_providers.py` — Ops 的 provider CRUD(api_key 写进读出掩码）。
   - `src/agent_api/api/ag_ui.py`(产品唯一运行链路)/ `hitl_resume.py`(HITL 续跑）;`api/chat.py` 是共享 helper 模块（历史加载、持久化、错误映射，无路由）。
   - `src/agent_api/db/` — SQLAlchemy 模型与 repository;`migrations/` — Alembic。
 - `infra/` — Ollama Modelfile、launchd plist、frp/nginx 配置。
@@ -47,8 +48,9 @@ pnpm format                      # Prettier(md/ts/tsx 都要过)
 - **上下文快照不落库**:`build_context_snapshot` 的产出当轮注入、当轮丢弃；持久化历史只来自 `result.new_messages()`。
 - **Case 写入必须过 HITL**:`case_slot_collect` / `case_attribution_confirm`，禁止静默写 `case_facts`。
 - **跨主体访问一律返回不存在**:Case/Artifact/上传按 owner + case 作用域过滤，不靠前端隐藏。
-- **`MODEL_CONTEXT_WINDOW` 必须与 Ollama Modelfile 的 `num_ctx` 一致**；改任一个必须同步另一个。
-- **不引入插件框架/事件总线/摘要压缩**——`docs/16` 的取舍表是当前共识，改动前先读它。
+- **`MODEL_CONTEXT_WINDOW` 必须与 Ollama Modelfile 的 `num_ctx` 一致**；改任一个必须同步另一个。远程 provider 的 `context_window` 同理必须配成端点模型的真实窗口——预算护栏按各 provider 取值，配错即裁剪错。
+- **provider 的 api_key 写进读出掩码**：不进入任何 API 响应（只回 `sk-...xxxx` 预览），也不进 git；后台任务（自动标题/记忆/Case 抽取）与 embedding 固定走本地模型，不随 Agent 的 provider 变化。
+- **不引入插件框架/事件总线/摘要压缩/通用模型路由**——`docs/16` 的取舍表是当前共识，改动前先读它；provider 是发布级静态绑定，禁止做静默 fallback 换模型。
 - **`.env` 不进 git**；新增配置项同步 `.env.example` + `config.py` 默认值 + 对应测试断言。
 
 ## 已知坑

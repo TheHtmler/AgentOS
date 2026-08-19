@@ -144,6 +144,7 @@ launchctl kickstart -k gui/$(id -u)/com.local.agentos-api
 - `HISTORY_MAX_RUNS=4` 保持：若验收时 `runs.input_tokens` 频繁逼近 12k，先把它降到 3。
 - `num_ctx` 是唯一真正的扩容杠杆：内存验证有余量后可重建为 24576(`ollama create` 改 Modelfile 即可）,KV 约增至 3.7GB，需先 `sudo sysctl iogpu.wired_limit_mb=12288`。
 - Mac mini 上建议给 Ollama 服务设 `OLLAMA_NUM_PARALLEL=1`，与应用层 `MODEL_MAX_CONCURRENT_RUNS=1` 对齐，防止并发请求翻倍占 KV。
+- 远程模型 Provider(Ops 可配，见 [16-agent-runtime-architecture.md](16-agent-runtime-architecture.md)「模型 Provider」节）不占用本机内存：权重与 KV 都在端点侧，本地只付 HTTP 连接成本，因此远程 provider 的 `max_concurrent_runs` 不受 16GB 预算约束（默认 4)。内存账不变的部分：内置本地模型恒 1 并发，后台任务（自动标题/记忆/Case 抽取）与 embedding 也固定走本地。
 
 ## 上下文工程改造（2026-08-15，参考 deepseek-harness)
 

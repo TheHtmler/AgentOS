@@ -6,12 +6,15 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 from pydantic_ai.models.ollama import OllamaModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.ollama import OllamaProvider
+from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.toolsets import AbstractToolset
 
 from agent_api.config import Settings, get_settings
 from agent_api.context_budget import make_step_history_processor
+from agent_api.db.provider_store import ResolvedModelProfile, local_profile_from_settings
 from agent_api.runtime_context import format_runtime_context_pack
 from agent_api.tools.fetch.router import FetchRouter
 from agent_api.tools.policy import PolicyAction
@@ -381,6 +384,7 @@ async def warm_up_ollama_model(
 def create_agent(
     http_client: httpx.AsyncClient,
     *,
+    model_profile: ResolvedModelProfile | None = None,
     search_router: SearchRouter | None = None,
     search_enabled: bool | None = None,
     fetch_router: FetchRouter | None = None,
@@ -435,13 +439,26 @@ def create_agent(
         case_bound=case_bound,
     )
 
-    model = OllamaModel(
-        settings.ollama_model,
-        provider=OllamaProvider(
-            base_url=settings.ollama_base_url,
-            http_client=http_client,
-        ),
-    )
+    # Default (None) keeps tests and background helpers on the env-configured
+    # local model; request paths pass the version's resolved provider profile.
+    profile = model_profile or local_profile_from_settings(settings)
+    if profile.is_local:
+        model = OllamaModel(
+            profile.model_name,
+            provider=OllamaProvider(
+                base_url=profile.base_url,
+                http_client=http_client,
+            ),
+        )
+    else:
+        model = OpenAIChatModel(
+            profile.model_name,
+            provider=OpenAIProvider(
+                base_url=profile.base_url,
+                api_key=profile.api_key,
+                http_client=http_client,
+            ),
+        )
 
     return Agent[AgentDeps, AgentOutput](
         model,
@@ -457,14 +474,18 @@ def create_agent(
         capabilities=[
             ProcessHistory(
                 make_step_history_processor(
-                    context_window=settings.model_context_window,
-                    output_reserve=settings.model_max_output_tokens,
+                    context_window=profile.context_window,
+                    output_reserve=profile.max_output_tokens,
                 )
             )
         ],
         model_settings={
-            "max_tokens": settings.model_max_output_tokens,
+            "max_tokens": profile.max_output_tokens,
             # Lower variance makes local-model reasoning and follow-up answers more consistent.
-            "temperature": settings.model_temperature,
+            "temperature": (
+                profile.temperature
+                if profile.temperature is not None
+                else settings.model_temperature
+            ),
         },
     )

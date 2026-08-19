@@ -17,6 +17,7 @@ from agent_api.agent import (
     warm_up_ollama_model,
 )
 from agent_api.config import get_settings
+from agent_api.db.provider_store import ResolvedModelProfile, sync_builtin_local_provider
 from agent_api.db.session import close_database
 from agent_api.tools.fetch.router import FetchRouter, build_fetch_router
 from agent_api.tools.mcp.client import build_mcp_toolsets
@@ -47,6 +48,30 @@ class AgentRuntime:
         self.ollama_http_client = ollama_http_client
         self.mcp_toolsets = mcp_toolsets or []
         self._run_tasks: dict[UUID, asyncio.Task[None]] = {}
+        # Remote providers get their own concurrency budget; the local semaphore
+        # stays at 1 to protect the Mac mini's model/KV-cache memory.
+        self._provider_semaphores: dict[UUID, tuple[int, asyncio.Semaphore]] = {}
+
+    def semaphore_for_profile(self, profile: ResolvedModelProfile) -> asyncio.Semaphore:
+        """Return the concurrency gate for one run's model provider.
+
+        ``model_semaphore`` remains the single gate for the local model (memory
+        budget) and for background jobs; remote providers each get a lazily
+        created semaphore sized by their ops-configured limit. A limit edit in
+        Ops replaces the semaphore — in-flight runs keep the one they entered.
+        """
+
+        if profile.is_local:
+            return self.model_semaphore
+        cached = self._provider_semaphores.get(profile.provider_id)
+        if cached is not None and cached[0] == profile.max_concurrent_runs:
+            return cached[1]
+        semaphore = asyncio.Semaphore(profile.max_concurrent_runs)
+        self._provider_semaphores[profile.provider_id] = (
+            profile.max_concurrent_runs,
+            semaphore,
+        )
+        return semaphore
 
     def start_background_run(
         self,
@@ -80,6 +105,7 @@ class AgentRuntime:
         system_prompt_overlay: str | None,
         tool_policy_overrides: dict[str, object] | None,
         case_bound: bool = False,
+        model_profile: ResolvedModelProfile | None = None,
     ) -> Agent[Any, AgentOutput]:
         """Build a fresh agent with the published configuration for one run."""
 
@@ -98,6 +124,7 @@ class AgentRuntime:
         )
         return create_agent(
             self.ollama_http_client,
+            model_profile=model_profile,
             search_router=self.search_router,
             fetch_router=self.fetch_router,
             system_prompt_overlay=system_prompt_overlay,
@@ -191,6 +218,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     except Exception:
         logger.exception("failed to sweep orphaned runs on startup")
 
+    try:
+        async with session_factory() as session, session.begin():
+            await sync_builtin_local_provider(session, settings)
+    except Exception:
+        logger.exception("failed to sync the built-in local model provider on startup")
+
     stop_hitl_timeout = asyncio.Event()
     hitl_timeout_task = asyncio.create_task(
         hitl_timeout_loop(runtime, stop_event=stop_hitl_timeout),
@@ -209,9 +242,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 hitl_timeout_task.cancel()
                 if not warmup_task.done():
                     warmup_task.cancel()
-                await asyncio.gather(
-                    hitl_timeout_task, warmup_task, return_exceptions=True
-                )
+                await asyncio.gather(hitl_timeout_task, warmup_task, return_exceptions=True)
                 await runtime.stop_background_runs()
     finally:
         try:

@@ -17,8 +17,17 @@ type OpsAgentVersion = {
   memory_enabled: boolean;
   case_enabled: boolean;
   knowledge_base_slugs: string[] | null;
+  model_provider_id: string | null;
   is_published: boolean;
   created_at: string;
+};
+
+type ModelProviderOption = {
+  id: string;
+  name: string;
+  default_model: string;
+  enabled: boolean;
+  is_builtin: boolean;
 };
 
 type OpsAgentDetail = {
@@ -44,6 +53,8 @@ export default function AgentDetailPage() {
   const [caseEnabled, setCaseEnabled] = useState(false);
   const [policyText, setPolicyText] = useState("");
   const [knowledgeBaseSlugsText, setKnowledgeBaseSlugsText] = useState("");
+  const [providers, setProviders] = useState<ModelProviderOption[]>([]);
+  const [modelProviderId, setModelProviderId] = useState("");
 
   const applyVersion = useCallback((version: OpsAgentVersion | null) => {
     setOverlay(version?.system_prompt_overlay ?? "");
@@ -53,6 +64,7 @@ export default function AgentDetailPage() {
       version?.tool_policy_overrides ? JSON.stringify(version.tool_policy_overrides, null, 2) : "",
     );
     setKnowledgeBaseSlugsText(version?.knowledge_base_slugs?.join(", ") ?? "");
+    setModelProviderId(version?.model_provider_id ?? "");
   }, []);
 
   const load = useCallback(async () => {
@@ -63,6 +75,12 @@ export default function AgentDetailPage() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载失败");
+    }
+    try {
+      const body = await opsJson<{ providers: ModelProviderOption[] }>("/api/ops/model-providers");
+      setProviders(body.providers);
+    } catch {
+      setProviders([]);
     }
   }, [applyVersion, params.agentId]);
 
@@ -100,6 +118,7 @@ export default function AgentDetailPage() {
           case_enabled: caseEnabled,
           tool_policy_overrides,
           knowledge_base_slugs,
+          model_provider_id: modelProviderId === "" ? null : modelProviderId,
         }),
       });
       setAgent(updated);
@@ -118,6 +137,15 @@ export default function AgentDetailPage() {
 
   if (!agent && !error) {
     return <p className="muted">加载中…</p>;
+  }
+
+  const selectableProviders = providers.filter(
+    (provider) => !provider.is_builtin && (provider.enabled || provider.id === modelProviderId),
+  );
+
+  function providerLabel(providerId: string | null): string {
+    if (providerId === null) return "本地（默认）";
+    return providers.find((provider) => provider.id === providerId)?.name ?? "已删除的 Provider";
   }
 
   return (
@@ -191,6 +219,21 @@ export default function AgentDetailPage() {
                 onChange={(event) => setKnowledgeBaseSlugsText(event.target.value)}
               />
             </label>
+            <label>
+              模型 Provider
+              <select
+                value={modelProviderId}
+                onChange={(event) => setModelProviderId(event.target.value)}
+              >
+                <option value="">本地（默认）</option>
+                {selectableProviders.map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}（{provider.default_model}）
+                    {provider.enabled ? "" : "（已禁用）"}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button type="submit" disabled={saving}>
               {saving ? "发布中…" : "发布新版本"}
             </button>
@@ -209,6 +252,7 @@ export default function AgentDetailPage() {
                   <span>记忆 {boolZh(version.memory_enabled)}</span>
                   <span>档案 {boolZh(version.case_enabled)}</span>
                   <span>知识库 {version.knowledge_base_slugs?.join(", ") ?? "不限制"}</span>
+                  <span>模型 {providerLabel(version.model_provider_id)}</span>
                   <span>{formatTime(version.created_at)}</span>
                 </div>
                 <button type="button" className="secondary" onClick={() => applyVersion(version)}>

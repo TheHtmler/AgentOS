@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
-type NavIconName = "grid" | "book" | "bot" | "chat" | "spark" | "plug";
+type NavIconName = "grid" | "book" | "bot" | "chat" | "spark" | "plug" | "chip";
 
 type NavItem = {
   href: string;
@@ -22,6 +22,7 @@ const NAV_GROUPS: { label: string; items: readonly NavItem[] }[] = [
     items: [
       { href: "/knowledge", label: "知识库", icon: "book" },
       { href: "/agents", label: "智能体", icon: "bot" },
+      { href: "/providers", label: "模型", icon: "chip" },
     ],
   },
   {
@@ -86,6 +87,14 @@ function NavIcon({ name }: { name: NavIconName }) {
     return (
       <svg {...common} aria-hidden>
         <path d="M8 2.5 9 6l3.5 1L9 8l-1 3.5L7 8 3.5 7 7 6l1-3.5Z" />
+      </svg>
+    );
+  }
+  if (name === "chip") {
+    return (
+      <svg {...common} aria-hidden>
+        <rect x="4" y="4" width="8" height="8" rx="1.5" />
+        <path d="M6 1.5v1.5M10 1.5v1.5M6 13v1.5M10 13v1.5M1.5 6H3M1.5 10H3M13 6h1.5M13 10h1.5" />
       </svg>
     );
   }

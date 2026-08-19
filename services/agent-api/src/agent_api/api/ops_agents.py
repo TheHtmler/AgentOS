@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select, update
 
 from agent_api.api.ops_auth import get_ops_subject
-from agent_api.db.models import Agent, AgentVersion
+from agent_api.db.models import Agent, AgentVersion, ModelProvider
 from agent_api.db.session import session_factory
 
 router = APIRouter(prefix="/v1/ops/agents", tags=["ops-agents"])
@@ -41,6 +41,8 @@ class OpsAgentVersionOut(BaseModel):
     memory_enabled: bool
     case_enabled: bool
     knowledge_base_slugs: list[str] | None
+    # NULL = built-in local provider.
+    model_provider_id: UUID | None
     is_published: bool
     created_at: datetime
 
@@ -68,6 +70,9 @@ class PublishOpsAgentVersionRequest(BaseModel):
     tool_policy_overrides: dict[str, PolicyOverride] | None = None
     # None = unrestricted (knowledge_search sees every active KnowledgeBase).
     knowledge_base_slugs: list[str] | None = None
+    # None = built-in local provider; a value pins this revision to one
+    # ops-managed remote provider.
+    model_provider_id: UUID | None = None
 
 
 def _to_out(agent: Agent, version: AgentVersion | None) -> OpsAgentOut:
@@ -95,6 +100,7 @@ def _version_out(version: AgentVersion) -> OpsAgentVersionOut:
         memory_enabled=version.memory_enabled,
         case_enabled=version.case_enabled,
         knowledge_base_slugs=version.knowledge_base_slugs,
+        model_provider_id=version.model_provider_id,
         is_published=version.is_published,
         created_at=version.created_at,
     )
@@ -214,6 +220,14 @@ async def publish_ops_agent_version(
         if agent is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
+        if payload.model_provider_id is not None:
+            provider = await session.get(ModelProvider, payload.model_provider_id)
+            if provider is None or not provider.enabled:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Model provider does not exist or is disabled",
+                )
+
         current_max = await session.scalar(
             select(func.max(AgentVersion.version)).where(AgentVersion.agent_id == agent.id),
         )
@@ -235,6 +249,7 @@ async def publish_ops_agent_version(
                 memory_enabled=payload.memory_enabled,
                 case_enabled=payload.case_enabled,
                 knowledge_base_slugs=payload.knowledge_base_slugs,
+                model_provider_id=payload.model_provider_id,
                 is_published=True,
             ),
         )

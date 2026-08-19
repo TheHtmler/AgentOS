@@ -567,6 +567,24 @@ async def start_run(
     return StartedRun(thread_id=thread.id, run_id=run.id)
 
 
+async def update_run_model_name(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    model_name: str,
+) -> None:
+    """Correct a run's model_name once the version's provider profile is resolved.
+
+    ``start_run`` records a placeholder before the Thread's published version
+    (and therefore its model provider) is known; the run row should reflect the
+    model that actually executes.
+    """
+
+    run = await session.get(Run, run_id)
+    if run is not None:
+        run.model_name = model_name
+
+
 async def append_run_event(
     session: AsyncSession,
     *,

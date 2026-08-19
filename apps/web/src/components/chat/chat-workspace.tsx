@@ -470,6 +470,10 @@ export function ChatWorkspace({
                       selectedThreadId={slot.threadId}
                       agentId={selectedAgentId}
                       agentLoadError={agentLoadError}
+                      supportsVision={
+                        agents.find((agent) => agent.id === selectedAgentId)?.supports_vision ??
+                        true
+                      }
                       isActive={isActive}
                       onRetryAgentLoad={retryAgentLoad}
                       onNewConversation={handleNewConversation}

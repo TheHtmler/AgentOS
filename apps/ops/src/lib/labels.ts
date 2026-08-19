@@ -28,6 +28,11 @@ export const AGENT_KIND_LABELS: Record<string, string> = {
   vertical: "垂类",
 };
 
+export const PROVIDER_KIND_LABELS: Record<string, string> = {
+  local: "本地",
+  remote: "远程",
+};
+
 export function labelOf(map: Record<string, string>, value: string | null | undefined): string {
   if (!value) return "—";
   return map[value] ?? value;

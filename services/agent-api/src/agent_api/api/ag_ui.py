@@ -59,8 +59,14 @@ from agent_api.db.agent_store import (
     get_published_version,
 )
 from agent_api.db.case_store import CaseNotFoundError
-from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError, start_run
+from agent_api.db.chat_store import (
+    ThreadBusyError,
+    ThreadNotFoundError,
+    start_run,
+    update_run_model_name,
+)
 from agent_api.db.models import Thread, User
+from agent_api.db.provider_store import ModelProviderUnavailableError, resolve_model_profile
 from agent_api.db.session import session_factory
 from agent_api.emergency import EMERGENCY_NOTICE, detect_emergency_signal
 from agent_api.hitl_pause import persist_deferred_approvals
@@ -212,6 +218,7 @@ async def stream_ag_ui_run(
             case_id = thread.case_id
             runtime = get_runtime(request)
             settings = get_settings()
+            profile = await resolve_model_profile(session, version, settings)
             if version.case_enabled and case_id is not None:
                 try:
                     case_block, case_keys = await load_case_injection(
@@ -245,18 +252,27 @@ async def stream_ag_ui_run(
                 )
             except Exception:
                 logger.exception("upload context failed; continuing without artifact preview")
-            try:
-                vision_parts = await load_upload_vision_parts(
-                    session,
-                    owner_user_id=user.id,
-                    case_id=case_id,
-                    user_text=prompt,
-                    settings=settings,
-                )
-            except Exception:
-                logger.exception("upload vision failed; continuing without image parts")
-                vision_parts = []
+            # Text-only providers skip image/PDF renders entirely; the OCR/text
+            # preview block above still carries the upload's content.
+            if profile.supports_vision:
+                try:
+                    vision_parts = await load_upload_vision_parts(
+                        session,
+                        owner_user_id=user.id,
+                        case_id=case_id,
+                        user_text=prompt,
+                        settings=settings,
+                    )
+                except Exception:
+                    logger.exception("upload vision failed; continuing without image parts")
+                    vision_parts = []
 
+        async with session_factory() as session, session.begin():
+            await update_run_model_name(
+                session,
+                run_id=started.run_id,
+                model_name=profile.model_name,
+            )
         snapshot = build_context_snapshot(
             memory_block=memory_block,
             case_block=case_block,
@@ -268,8 +284,8 @@ async def stream_ag_ui_run(
             snapshot_text=snapshot,
             user_text=prompt,
             vision_count=len(vision_parts),
-            context_window=settings.model_context_window,
-            output_reserve=settings.model_max_output_tokens,
+            context_window=profile.context_window,
+            output_reserve=profile.max_output_tokens,
         )
         if allowed_vision < len(vision_parts):
             logger.warning(
@@ -287,8 +303,8 @@ async def stream_ag_ui_run(
 
         history, budget_report = apply_context_budget(
             history,
-            context_window=settings.model_context_window,
-            output_reserve=settings.model_max_output_tokens,
+            context_window=profile.context_window,
+            output_reserve=profile.max_output_tokens,
             snapshot_text=snapshot,
             user_text=prompt,
             vision_count=len(vision_parts),
@@ -299,7 +315,15 @@ async def stream_ag_ui_run(
             system_prompt_overlay=version.system_prompt_overlay,
             tool_policy_overrides=version.tool_policy_overrides,
             case_bound=case_id is not None,
+            model_profile=profile,
         )
+    except ModelProviderUnavailableError as error:
+        logger.exception("Model provider unavailable for run %s", started.run_id)
+        await persist_failed_run(started.run_id)
+        raise HTTPException(
+            status_code=409,
+            detail="The configured model provider is unavailable",
+        ) from error
     except PublishedAgentVersionNotFoundError as error:
         logger.exception("Agent version unavailable for run %s", started.run_id)
         await persist_failed_run(started.run_id)
@@ -367,7 +391,7 @@ async def stream_ag_ui_run(
         try:
             # The model task is independent from the HTTP response. A mobile browser may
             # suspend its page and close SSE while the server should still finish the Run.
-            async with runtime.model_semaphore:
+            async with runtime.semaphore_for_profile(profile):
                 async for event in aiter_with_overflow_retry(
                     start_stream,
                     history,

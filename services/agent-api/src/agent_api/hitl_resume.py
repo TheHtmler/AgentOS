@@ -35,6 +35,7 @@ from agent_api.context_budget import (
 from agent_api.db.agent_store import get_published_version
 from agent_api.db.chat_store import get_run, get_run_message_history, list_thread_messages
 from agent_api.db.models import Interrupt, Thread
+from agent_api.db.provider_store import ModelProviderUnavailableError, resolve_model_profile
 from agent_api.db.session import session_factory
 from agent_api.hitl_pause import persist_deferred_approvals
 from agent_api.memory.extract import schedule_memory_extract
@@ -86,6 +87,12 @@ async def continue_run_after_approval(
         case_keys: set[str] = set()
         case_id = thread.case_id if thread is not None else None
         settings = get_settings()
+        profile = None
+        if version is not None:
+            try:
+                profile = await resolve_model_profile(session, version, settings)
+            except ModelProviderUnavailableError:
+                logger.exception("model provider unavailable for resume run_id=%s", run_id)
         if thread is not None and version is not None:
             messages = await list_thread_messages(
                 session,
@@ -130,7 +137,7 @@ async def continue_run_after_approval(
             except Exception:
                 logger.exception("upload context failed; continuing without artifact preview")
 
-    if thread is None or version is None:
+    if thread is None or version is None or profile is None:
         logger.error("Missing thread for resume run_id=%s", run_id)
         await persist_failed_run(run_id)
         return
@@ -157,8 +164,8 @@ async def continue_run_after_approval(
     )
     message_history, budget_report = apply_context_budget(
         message_history,
-        context_window=settings.model_context_window,
-        output_reserve=settings.model_max_output_tokens,
+        context_window=profile.context_window,
+        output_reserve=profile.max_output_tokens,
         snapshot_text=snapshot,
         user_text=prompt,
     )
@@ -169,10 +176,11 @@ async def continue_run_after_approval(
         system_prompt_overlay=version.system_prompt_overlay,
         tool_policy_overrides=version.tool_policy_overrides,
         case_bound=case_id is not None,
+        model_profile=profile,
     )
 
     try:
-        async with runtime.model_semaphore:
+        async with runtime.semaphore_for_profile(profile):
             # Omit pydantic-ai run_id: the checkpoint already contains the interrupted
             # attempt's id; reusing it raises UserError. Our DB run_id stays the same.
             async def _run(history: list[ModelMessage] | None) -> AgentRunResult[AgentOutput]:

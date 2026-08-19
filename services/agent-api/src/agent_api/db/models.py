@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -185,6 +186,12 @@ class AgentVersion(Base):
     # NULL = unrestricted (search every active KnowledgeBase, e.g. General);
     # a non-empty list scopes knowledge_search to just those slugs (verticals).
     knowledge_base_slugs: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    # NULL = built-in local provider (env-managed Ollama); a value pins this
+    # revision to one ops-managed ModelProvider row.
+    model_provider_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("model_providers.id", ondelete="RESTRICT"),
+        index=True,
+    )
     is_published: Mapped[bool] = mapped_column(
         server_default=text("false"),
         nullable=False,
@@ -192,6 +199,58 @@ class AgentVersion(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
+        nullable=False,
+    )
+
+
+class ModelProvider(Base):
+    """One OpenAI-compatible chat endpoint (local Ollama or a remote API).
+
+    ``api_key`` is write-only through the API: responses only expose a masked
+    preview. The built-in ``local`` row is synced from env settings on startup
+    and cannot be edited or deleted via Ops.
+    """
+
+    __tablename__ = "model_providers"
+    __table_args__ = (
+        CheckConstraint("kind IN ('local', 'remote')", name="ck_model_providers_kind"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    # OpenAI-compatible base URL ending in /v1.
+    base_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    api_key: Mapped[str | None] = mapped_column(Text)
+    default_model: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Drives input budgeting; must match the endpoint model's real window.
+    context_window: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    # NULL = fall back to settings.model_temperature.
+    temperature: Mapped[float | None] = mapped_column(Float)
+    max_concurrent_runs: Mapped[int] = mapped_column(Integer, nullable=False)
+    supports_vision: Mapped[bool] = mapped_column(
+        server_default=text("false"),
+        nullable=False,
+    )
+    enabled: Mapped[bool] = mapped_column(
+        server_default=text("true"),
+        nullable=False,
+    )
+    is_builtin: Mapped[bool] = mapped_column(
+        server_default=text("false"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
         nullable=False,
     )
 
