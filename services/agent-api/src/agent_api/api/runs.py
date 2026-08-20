@@ -1,8 +1,13 @@
+import asyncio
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
+from ag_ui.core import CustomEvent
+from ag_ui.encoder import EventEncoder
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from agent_api.api.auth import get_current_user
@@ -22,6 +27,10 @@ from agent_api.hitl_types import InterruptDecision
 from agent_api.runtime import get_runtime
 
 router = APIRouter(prefix="/v1/runs", tags=["runs"])
+
+# Same cadence as the AG-UI stream; keeps frp/nginx idle timeouts from
+# killing a quiet resume subscription.
+_SSE_KEEPALIVE_SECONDS = 15.0
 
 
 class PendingInterruptResponse(BaseModel):
@@ -190,3 +199,61 @@ async def resume_run_execution(
         )
 
     return run_response(run)
+
+
+@router.get("/{run_id}/stream")
+async def stream_run_events(
+    run_id: UUID,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    """Subscribe to the live AG-UI events of an in-flight resumed run.
+
+    Only resume phases publish to the broker; any other state returns 204 so
+    the client falls back to polling ``GET /v1/runs/{id}`` + history reload.
+    """
+
+    try:
+        async with session_factory() as session:
+            run = await get_run(session, run_id=run_id, user_id=user.id)
+    except RunNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Run not found") from error
+
+    queue = None
+    if run.status == "running":
+        queue = get_runtime(request).run_event_broker.subscribe(run_id)
+    if queue is None:
+        return Response(status_code=204)
+
+    encoder = EventEncoder()
+
+    async def events() -> AsyncIterator[str]:
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(
+                        queue.get(),
+                        timeout=_SSE_KEEPALIVE_SECONDS,
+                    )
+                except TimeoutError:
+                    if await request.is_disconnected():
+                        return
+                    yield encoder.encode(CustomEvent(name="agentos_keepalive", value=None))
+                    continue
+                if event is None:
+                    return
+                if await request.is_disconnected():
+                    return
+                yield encoder.encode(event)
+        finally:
+            # A browser disconnect must never disturb the background resume.
+            get_runtime(request).run_event_broker.unsubscribe(run_id, queue)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )

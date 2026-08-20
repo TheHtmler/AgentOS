@@ -19,6 +19,7 @@ from agent_api.agent import (
 from agent_api.config import get_settings
 from agent_api.db.provider_store import ResolvedModelProfile, sync_builtin_local_provider
 from agent_api.db.session import close_database
+from agent_api.run_events_broker import RunEventBroker
 from agent_api.tools.fetch.router import FetchRouter, build_fetch_router
 from agent_api.tools.mcp.client import build_mcp_toolsets
 from agent_api.tools.search.router import SearchRouter, build_search_router
@@ -48,6 +49,8 @@ class AgentRuntime:
         self.ollama_http_client = ollama_http_client
         self.mcp_toolsets = mcp_toolsets or []
         self._run_tasks: dict[UUID, asyncio.Task[None]] = {}
+        # Per-run fan-out for HITL resume event streams (see run_events_broker).
+        self.run_event_broker = RunEventBroker()
         # Remote providers get their own concurrency budget; the local semaphore
         # stays at 1 to protect the Mac mini's model/KV-cache memory.
         self._provider_semaphores: dict[UUID, tuple[int, asyncio.Semaphore]] = {}

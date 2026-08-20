@@ -52,6 +52,19 @@ type ThreadLatestRun = {
   status: string;
 };
 
+// AG-UI wire event as parsed from the HITL resume SSE stream (camelCase,
+// `exclude_none` serialization — every field except `type` may be absent).
+type ResumeStreamEvent = {
+  type?: string;
+  messageId?: string;
+  toolCallId?: string;
+  toolCallName?: string;
+  delta?: string;
+  content?: string;
+  subtype?: string;
+  message?: string;
+};
+
 type ThreadHistory = {
   thread_id: string;
   agent_id: string;
@@ -645,6 +658,10 @@ export function ChatPanel({
   // it triggers) at a smooth ~60fps instead of jittering on every token.
   const pendingStreamMessagesRef = useRef<readonly Message[] | null>(null);
   const streamFlushHandleRef = useRef<number | null>(null);
+  // Same rAF coalescing for text streamed by a resumed (post-approval) run,
+  // which bypasses HttpAgent and therefore onMessagesChanged.
+  const resumeDraftContentsRef = useRef<Map<string, string>>(new Map());
+  const resumeDraftFlushHandleRef = useRef<number | null>(null);
 
   isActiveRef.current = isActive;
 
@@ -690,6 +707,186 @@ export function ChatPanel({
     [clearApprovalState],
   );
 
+  function scheduleResumeDraftFlush() {
+    if (resumeDraftFlushHandleRef.current !== null) {
+      return;
+    }
+    resumeDraftFlushHandleRef.current = window.requestAnimationFrame(() => {
+      resumeDraftFlushHandleRef.current = null;
+      const snapshot = new Map(resumeDraftContentsRef.current);
+      if (snapshot.size === 0) {
+        return;
+      }
+      // The resumed run's text rides into the same message list as a draft
+      // assistant message; the history reload on completion replaces it with
+      // the persisted transcript.
+      setMessages((previous) => {
+        const next = [...previous];
+        let changed = false;
+        for (const [messageId, content] of snapshot) {
+          const index = next.findIndex((message) => message.id === messageId);
+          const existing = index === -1 ? undefined : next[index];
+          if (existing === undefined) {
+            next.push({ id: messageId, role: "assistant", content });
+            changed = true;
+          } else if (existing.content !== content) {
+            next[index] = { ...existing, content };
+            changed = true;
+          }
+        }
+        return changed ? next : previous;
+      });
+    });
+  }
+
+  // Stream a resumed (post-approval) run's live events into the same timeline
+  // state the initial run uses. Returns false when no stream is available (or
+  // it broke before a terminal event) so the caller can fall back to polling.
+  async function streamResumedRun(runId: string): Promise<boolean> {
+    let response: Response;
+    try {
+      response = await fetch(`/api/runs/${runId}/stream`, { cache: "no-store" });
+    } catch {
+      return false;
+    }
+    if (response.status !== 200 || response.body === null) {
+      return false;
+    }
+
+    const anchorId =
+      liveUserMessageId ??
+      [...messages].reverse().find((message) => message.role === "user")?.id ??
+      "";
+    if (anchorId !== "" && liveUserMessageId === null) {
+      // Page reloaded while waiting for approval: re-anchor the turn so live
+      // steps render in this turn's bubble instead of being dropped.
+      setLiveUserMessageId(anchorId);
+    }
+
+    const argsBuffers = new Map<string, string>();
+    const toolNames = new Map<string, string>();
+    const reasoningBuffers = new Map<string, string>();
+    let currentReasoningId: string | null = null;
+    let sawTerminal = false;
+
+    const applyEvent = (event: ResumeStreamEvent) => {
+      switch (event.type) {
+        case "TOOL_CALL_START": {
+          const toolCallId = event.toolCallId ?? "";
+          const toolCallName = event.toolCallName ?? "tool";
+          toolNames.set(toolCallId, toolCallName);
+          handleToolCallStart(anchorId, toolCallId, toolCallName);
+          break;
+        }
+        case "TOOL_CALL_ARGS": {
+          const toolCallId = event.toolCallId ?? "";
+          const buffer = (argsBuffers.get(toolCallId) ?? "") + (event.delta ?? "");
+          argsBuffers.set(toolCallId, buffer);
+          handleToolCallArgs(anchorId, toolCallId, toolNames.get(toolCallId) ?? "tool", buffer);
+          break;
+        }
+        case "TOOL_CALL_END": {
+          const toolCallId = event.toolCallId ?? "";
+          handleToolCallEnd(anchorId, toolCallId, toolNames.get(toolCallId) ?? "tool");
+          break;
+        }
+        case "TOOL_CALL_RESULT": {
+          handleToolCallResult(anchorId, event.toolCallId ?? "", event.content ?? "");
+          break;
+        }
+        case "REASONING_START": {
+          currentReasoningId = event.messageId ?? null;
+          if (currentReasoningId !== null) {
+            handleReasoningStart(anchorId, currentReasoningId);
+          }
+          break;
+        }
+        case "REASONING_MESSAGE_START": {
+          handleReasoningMessageStart(anchorId);
+          break;
+        }
+        case "REASONING_MESSAGE_CONTENT": {
+          const messageId = event.messageId ?? currentReasoningId;
+          if (messageId !== null) {
+            const buffer = (reasoningBuffers.get(messageId) ?? "") + (event.delta ?? "");
+            reasoningBuffers.set(messageId, buffer);
+            handleReasoningMessageContent(anchorId, buffer);
+          }
+          break;
+        }
+        case "REASONING_MESSAGE_END": {
+          handleReasoningMessageEnd(anchorId);
+          break;
+        }
+        case "REASONING_ENCRYPTED_VALUE": {
+          handleReasoningEncryptedValue(anchorId, event.subtype);
+          break;
+        }
+        case "REASONING_END": {
+          handleReasoningEnd(anchorId, event.messageId ?? currentReasoningId ?? "");
+          break;
+        }
+        case "TEXT_MESSAGE_START": {
+          resumeDraftContentsRef.current.set(event.messageId ?? "", "");
+          scheduleResumeDraftFlush();
+          break;
+        }
+        case "TEXT_MESSAGE_CONTENT": {
+          const messageId = event.messageId ?? "";
+          resumeDraftContentsRef.current.set(
+            messageId,
+            (resumeDraftContentsRef.current.get(messageId) ?? "") + (event.delta ?? ""),
+          );
+          scheduleResumeDraftFlush();
+          break;
+        }
+        case "RUN_ERROR": {
+          sawTerminal = true;
+          setError(event.message ?? "助手处理失败，请稍后重试。");
+          break;
+        }
+        case "RUN_FINISHED": {
+          sawTerminal = true;
+          break;
+        }
+        default:
+          break;
+      }
+    };
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let pending = "";
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        pending += decoder.decode(value, { stream: true });
+        let separator = pending.indexOf("\n\n");
+        while (separator !== -1) {
+          const frame = pending.slice(0, separator);
+          pending = pending.slice(separator + 2);
+          for (const line of frame.split("\n")) {
+            if (!line.startsWith("data:")) {
+              continue;
+            }
+            const raw = line.slice(5).trim();
+            if (raw === "") {
+              continue;
+            }
+            applyEvent(JSON.parse(raw) as ResumeStreamEvent);
+          }
+          separator = pending.indexOf("\n\n");
+        }
+      }
+    } catch {
+      return false;
+    }
+    return sawTerminal;
+  }
+
   async function handleApprovalResolved() {
     const runId = approvalRunId;
     clearApprovalState();
@@ -699,6 +896,24 @@ export function ChatPanel({
 
     setIsStreaming(true);
     setError(null);
+    resumeDraftContentsRef.current = new Map();
+    activeRunIdRef.current = runId;
+
+    // Preferred path: live stream of the resumed run (tool calls, reasoning,
+    // and text appear as they happen instead of after a polling blackout).
+    const streamed = await streamResumedRun(runId);
+    if (streamed) {
+      activeRunIdRef.current = null;
+      setIsStreaming(false);
+      setHistoryRefreshKey((current) => current + 1);
+      onRunFinalized();
+      // The resume may have paused again on a fresh approval request.
+      await applyApprovalStateFromRun(runId);
+      return;
+    }
+    activeRunIdRef.current = null;
+
+    // Fallback: poll status until terminal, then reload history in one shot.
     for (let attempt = 0; attempt < 60; attempt += 1) {
       const state = await loadRunApprovalState(runId);
       if (state === null) {
@@ -1168,6 +1383,178 @@ export function ChatPanel({
     requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
+  // Timeline event handlers shared by the live HttpAgent run and the HITL
+  // resume stream: both map AG-UI events onto the same timeline state, keyed
+  // to the user message that started the turn (anchorId).
+  function handleReasoningStart(anchorId: string, messageId: string) {
+    setTimelineSteps((current) =>
+      upsertTimelineStep(current, {
+        kind: "thinking",
+        id: messageId,
+        content: "",
+        phase: "正在理解问题与相关上下文",
+        contentMode: "none",
+        status: "running",
+        startedAt: Date.now(),
+        expanded: false,
+        afterMessageId: anchorId,
+      }),
+    );
+  }
+
+  function handleReasoningMessageStart(anchorId: string) {
+    setTimelineSteps((current) =>
+      updateLatestThinkingStep(current, anchorId, {
+        phase: "正在拆解任务目标",
+      }),
+    );
+  }
+
+  function handleReasoningMessageContent(anchorId: string, reasoningMessageBuffer: string) {
+    if (!reasoningMessageBuffer.trim()) {
+      return;
+    }
+
+    setTimelineSteps((current) =>
+      updateLatestThinkingStep(current, anchorId, {
+        content: visibleReasoningContent(reasoningMessageBuffer),
+        phase: "正在分析",
+        contentMode: "text",
+      }),
+    );
+  }
+
+  function handleReasoningMessageEnd(anchorId: string) {
+    setTimelineSteps((current) =>
+      updateLatestThinkingStep(current, anchorId, {
+        phase: "分析完成，正在准备下一步",
+      }),
+    );
+  }
+
+  function handleReasoningEncryptedValue(anchorId: string, subtype: string | undefined) {
+    if (subtype !== "message") {
+      return;
+    }
+
+    setTimelineSteps((current) =>
+      updateLatestThinkingStep(current, anchorId, {
+        phase: "模型返回了加密 reasoning",
+        contentMode: "encrypted",
+      }),
+    );
+  }
+
+  function handleReasoningEnd(anchorId: string, messageId: string) {
+    setTimelineSteps((current) =>
+      current.map((step) =>
+        step.kind === "thinking" && step.id === messageId
+          ? {
+              ...step,
+              status: "done",
+              phase: "思考完成",
+              durationMs: Math.max(0, Date.now() - step.startedAt),
+              expanded: false,
+            }
+          : step,
+      ),
+    );
+  }
+
+  function handleToolCallStart(anchorId: string, toolCallId: string, toolCallName: string) {
+    setTimelineSteps((current) => {
+      const next = updateLatestThinkingStep(current, anchorId, {
+        phase: "正在调用相关能力",
+      });
+      return upsertTimelineStep(next, {
+        kind: "tool",
+        id: toolCallId,
+        toolName: toolCallName,
+        argsText: "",
+        status: "running",
+        expanded: false,
+        afterMessageId: anchorId,
+      });
+    });
+  }
+
+  function handleToolCallArgs(
+    anchorId: string,
+    toolCallId: string,
+    toolCallName: string,
+    toolCallBuffer: string,
+  ) {
+    setTimelineSteps((current) => {
+      const existing = current.find(
+        (step): step is ToolTimelineStep => step.kind === "tool" && step.id === toolCallId,
+      );
+      return upsertTimelineStep(current, {
+        kind: "tool",
+        id: toolCallId,
+        toolName: toolCallName || existing?.toolName || "tool",
+        argsText: toolCallBuffer,
+        status: existing?.status ?? "running",
+        resultSummary: existing?.resultSummary,
+        provider: existing?.provider,
+        startedAt: existing?.startedAt ?? Date.now(),
+        durationMs: existing?.durationMs,
+        expanded: existing?.expanded ?? false,
+        afterMessageId: existing?.afterMessageId ?? anchorId,
+      });
+    });
+  }
+
+  function handleToolCallEnd(
+    anchorId: string,
+    toolCallId: string,
+    toolCallName: string,
+    toolCallArgs?: unknown,
+  ) {
+    setTimelineSteps((current) => {
+      const existing = current.find(
+        (step): step is ToolTimelineStep => step.kind === "tool" && step.id === toolCallId,
+      );
+      return upsertTimelineStep(current, {
+        kind: "tool",
+        id: toolCallId,
+        toolName: toolCallName || existing?.toolName || "tool",
+        argsText: existing?.argsText || JSON.stringify(toolCallArgs ?? {}),
+        status: existing?.status ?? "running",
+        resultSummary: existing?.resultSummary,
+        provider: existing?.provider,
+        startedAt: existing?.startedAt ?? Date.now(),
+        durationMs: existing?.durationMs,
+        expanded: existing?.expanded ?? false,
+        afterMessageId: existing?.afterMessageId ?? anchorId,
+      });
+    });
+  }
+
+  function handleToolCallResult(anchorId: string, toolCallId: string, content: string) {
+    const summarized = summarizeToolResultContent(content);
+    setTimelineSteps((current) => {
+      const existing = current.find(
+        (step): step is ToolTimelineStep => step.kind === "tool" && step.id === toolCallId,
+      );
+      return upsertTimelineStep(current, {
+        kind: "tool",
+        id: toolCallId,
+        toolName: existing?.toolName || "tool",
+        argsText: existing?.argsText || "",
+        status: summarized.status,
+        resultSummary: summarized.summary,
+        resultData: summarized.resultData ?? existing?.resultData,
+        provider: summarized.provider ?? existing?.provider,
+        startedAt: existing?.startedAt ?? Date.now(),
+        durationMs:
+          existing?.durationMs ??
+          (existing?.startedAt === undefined ? undefined : Date.now() - existing.startedAt),
+        expanded: false,
+        afterMessageId: existing?.afterMessageId ?? anchorId,
+      });
+    });
+  }
+
   async function sendMessage(contentOverride?: string) {
     const pending = uploadedArtifacts;
     const rawText = contentOverride ?? draft;
@@ -1250,156 +1637,34 @@ export function ChatPanel({
           deferredStreamErrorRef.current = event.message || "助手处理失败，请稍后重试。";
         },
         onReasoningStartEvent: ({ event }) => {
-          setTimelineSteps((current) =>
-            upsertTimelineStep(current, {
-              kind: "thinking",
-              id: event.messageId,
-              content: "",
-              phase: "正在理解问题与相关上下文",
-              contentMode: "none",
-              status: "running",
-              startedAt: Date.now(),
-              expanded: false,
-              afterMessageId: userMessageId,
-            }),
-          );
+          handleReasoningStart(userMessageId, event.messageId);
         },
         onReasoningMessageStartEvent: () => {
-          setTimelineSteps((current) =>
-            updateLatestThinkingStep(current, userMessageId, {
-              phase: "正在拆解任务目标",
-            }),
-          );
+          handleReasoningMessageStart(userMessageId);
         },
         onReasoningMessageContentEvent: ({ reasoningMessageBuffer }) => {
-          if (!reasoningMessageBuffer.trim()) {
-            return;
-          }
-
-          setTimelineSteps((current) =>
-            updateLatestThinkingStep(current, userMessageId, {
-              content: visibleReasoningContent(reasoningMessageBuffer),
-              phase: "正在分析",
-              contentMode: "text",
-            }),
-          );
+          handleReasoningMessageContent(userMessageId, reasoningMessageBuffer);
         },
         onReasoningMessageEndEvent: () => {
-          setTimelineSteps((current) =>
-            updateLatestThinkingStep(current, userMessageId, {
-              phase: "分析完成，正在准备下一步",
-            }),
-          );
+          handleReasoningMessageEnd(userMessageId);
         },
         onReasoningEncryptedValueEvent: ({ event }) => {
-          if (event.subtype !== "message") {
-            return;
-          }
-
-          setTimelineSteps((current) =>
-            updateLatestThinkingStep(current, userMessageId, {
-              phase: "模型返回了加密 reasoning",
-              contentMode: "encrypted",
-            }),
-          );
+          handleReasoningEncryptedValue(userMessageId, event.subtype);
         },
         onReasoningEndEvent: ({ event }) => {
-          setTimelineSteps((current) =>
-            current.map((step) =>
-              step.kind === "thinking" && step.id === event.messageId
-                ? {
-                    ...step,
-                    status: "done",
-                    phase: "思考完成",
-                    durationMs: Math.max(0, Date.now() - step.startedAt),
-                    expanded: false,
-                  }
-                : step,
-            ),
-          );
+          handleReasoningEnd(userMessageId, event.messageId);
         },
         onToolCallStartEvent: ({ event }) => {
-          setTimelineSteps((current) => {
-            const next = updateLatestThinkingStep(current, userMessageId, {
-              phase: "正在调用相关能力",
-            });
-            return upsertTimelineStep(next, {
-              kind: "tool",
-              id: event.toolCallId,
-              toolName: event.toolCallName,
-              argsText: "",
-              status: "running",
-              expanded: false,
-              afterMessageId: userMessageId,
-            });
-          });
+          handleToolCallStart(userMessageId, event.toolCallId, event.toolCallName);
         },
         onToolCallArgsEvent: ({ event, toolCallBuffer, toolCallName }) => {
-          setTimelineSteps((current) => {
-            const existing = current.find(
-              (step): step is ToolTimelineStep =>
-                step.kind === "tool" && step.id === event.toolCallId,
-            );
-            return upsertTimelineStep(current, {
-              kind: "tool",
-              id: event.toolCallId,
-              toolName: toolCallName || existing?.toolName || "tool",
-              argsText: toolCallBuffer,
-              status: existing?.status ?? "running",
-              resultSummary: existing?.resultSummary,
-              provider: existing?.provider,
-              startedAt: existing?.startedAt ?? Date.now(),
-              durationMs: existing?.durationMs,
-              expanded: existing?.expanded ?? false,
-              afterMessageId: existing?.afterMessageId ?? userMessageId,
-            });
-          });
+          handleToolCallArgs(userMessageId, event.toolCallId, toolCallName, toolCallBuffer);
         },
         onToolCallEndEvent: ({ event, toolCallName, toolCallArgs }) => {
-          setTimelineSteps((current) => {
-            const existing = current.find(
-              (step): step is ToolTimelineStep =>
-                step.kind === "tool" && step.id === event.toolCallId,
-            );
-            return upsertTimelineStep(current, {
-              kind: "tool",
-              id: event.toolCallId,
-              toolName: toolCallName || existing?.toolName || "tool",
-              argsText: existing?.argsText || JSON.stringify(toolCallArgs ?? {}),
-              status: existing?.status ?? "running",
-              resultSummary: existing?.resultSummary,
-              provider: existing?.provider,
-              startedAt: existing?.startedAt ?? Date.now(),
-              durationMs: existing?.durationMs,
-              expanded: existing?.expanded ?? false,
-              afterMessageId: existing?.afterMessageId ?? userMessageId,
-            });
-          });
+          handleToolCallEnd(userMessageId, event.toolCallId, toolCallName, toolCallArgs);
         },
         onToolCallResultEvent: ({ event }) => {
-          const summarized = summarizeToolResultContent(event.content);
-          setTimelineSteps((current) => {
-            const existing = current.find(
-              (step): step is ToolTimelineStep =>
-                step.kind === "tool" && step.id === event.toolCallId,
-            );
-            return upsertTimelineStep(current, {
-              kind: "tool",
-              id: event.toolCallId,
-              toolName: existing?.toolName || "tool",
-              argsText: existing?.argsText || "",
-              status: summarized.status,
-              resultSummary: summarized.summary,
-              resultData: summarized.resultData ?? existing?.resultData,
-              provider: summarized.provider ?? existing?.provider,
-              startedAt: existing?.startedAt ?? Date.now(),
-              durationMs:
-                existing?.durationMs ??
-                (existing?.startedAt === undefined ? undefined : Date.now() - existing.startedAt),
-              expanded: false,
-              afterMessageId: existing?.afterMessageId ?? userMessageId,
-            });
-          });
+          handleToolCallResult(userMessageId, event.toolCallId, event.content);
         },
       });
 

@@ -2,9 +2,11 @@
 
 import asyncio
 from collections.abc import AsyncIterator
+from typing import cast
 from uuid import UUID
 
 import pytest
+from ag_ui.core import BaseEvent
 from httpx import ASGITransport, AsyncClient
 from pydantic_ai import Agent, RunContext, Tool
 from pydantic_ai.models.test import TestModel
@@ -205,6 +207,205 @@ async def test_cancel_waiting_approval(authenticated_api_user: UUID) -> None:
                 )
                 assert row is not None
                 assert row.status == "cancelled"
+    finally:
+        if thread_id is not None:
+            async with session_factory() as session, session.begin():
+                thread = await session.get(Thread, thread_id)
+                if thread is not None:
+                    await session.delete(thread)
+
+
+def _latched_approval_agent(
+    resume_latch: asyncio.Event,
+    *,
+    resume_calls_tool_again: bool = False,
+) -> tuple[Agent[object, str | DeferredToolRequests], list[int]]:
+    """FunctionModel agent: first request triggers the approval tool; the
+    resume request waits on ``resume_latch`` so tests can subscribe before
+    the continuation emits anything."""
+
+    from pydantic_ai.messages import ModelMessage
+    from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+
+    invocations: list[int] = []
+
+    async def stream_function(
+        messages: list[ModelMessage],
+        _: AgentInfo,
+    ) -> AsyncIterator[dict[int, DeltaToolCall] | str]:
+        invocations.append(1)
+        if len(invocations) == 1:
+            yield {
+                0: DeltaToolCall(
+                    name="_need_approval",
+                    json_args='{"url": "https://example.com"}',
+                    tool_call_id="call-approval-1",
+                ),
+            }
+            return
+        await resume_latch.wait()
+        if resume_calls_tool_again:
+            yield {
+                0: DeltaToolCall(
+                    name="_need_approval",
+                    json_args='{"url": "https://example.org"}',
+                    tool_call_id="call-approval-2",
+                ),
+            }
+        else:
+            yield "已完成抓取。"
+
+    agent: Agent[object, str | DeferredToolRequests] = Agent(
+        FunctionModel(stream_function=stream_function),
+        deps_type=object,
+        tools=[Tool(_need_approval, requires_approval=True)],
+        output_type=[str, DeferredToolRequests],
+    )
+    return agent, invocations
+
+
+async def _collect_broker_events(
+    queue: asyncio.Queue[BaseEvent | None],
+) -> list[BaseEvent]:
+    events: list[BaseEvent] = []
+    while True:
+        item = await asyncio.wait_for(queue.get(), timeout=5)
+        if item is None:
+            return events
+        events.append(item)
+
+
+@pytest.mark.anyio
+async def test_resume_streams_events_to_broker_subscriber(
+    authenticated_api_user: UUID,
+) -> None:
+    from ag_ui.core import (
+        RunFinishedEvent,
+        RunStartedEvent,
+        TextMessageContentEvent,
+        ToolCallResultEvent,
+    )
+
+    resume_latch = asyncio.Event()
+    agent, _invocations = _latched_approval_agent(resume_latch)
+    runtime = AgentRuntime(agent=agent, model_semaphore=asyncio.Semaphore(1))
+    app.state.runtime = runtime
+    transport = ASGITransport(app=app)
+    thread_id: UUID | None = None
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            thread_id, run_id, tool_call_id = await _start_waiting_run(client)
+            assert tool_call_id == "call-approval-1"
+
+            resume = await client.post(
+                f"/v1/runs/{run_id}/resume",
+                json={
+                    "idempotency_key": "approve-stream",
+                    "decisions": [{"tool_call_id": tool_call_id, "decision": "approve"}],
+                },
+            )
+            assert resume.status_code == 200
+
+            queue = runtime.run_event_broker.subscribe(run_id)
+            assert queue is not None
+            resume_latch.set()
+            events = await _collect_broker_events(queue)
+
+        assert isinstance(events[0], RunStartedEvent)
+        assert events[0].run_id == str(run_id)
+
+        result_events = [event for event in events if isinstance(event, ToolCallResultEvent)]
+        assert len(result_events) == 1
+        assert result_events[0].tool_call_id == "call-approval-1"
+        assert "fetched https://example.com" in result_events[0].content
+
+        streamed_text = "".join(
+            event.delta for event in events if isinstance(event, TextMessageContentEvent)
+        )
+        assert "已完成抓取。" in streamed_text
+
+        assert isinstance(events[-1], RunFinishedEvent)
+        assert not runtime.run_event_broker.has_publisher(run_id)
+
+        final = await _wait_for_status(client, run_id, "completed", "failed")
+        assert final["status"] == "completed"
+    finally:
+        if thread_id is not None:
+            async with session_factory() as session, session.begin():
+                thread = await session.get(Thread, thread_id)
+                if thread is not None:
+                    await session.delete(thread)
+
+
+@pytest.mark.anyio
+async def test_resume_that_defers_again_streams_and_pauses(
+    authenticated_api_user: UUID,
+) -> None:
+    from ag_ui.core import RunFinishedEvent, ToolCallStartEvent
+
+    resume_latch = asyncio.Event()
+    agent, _invocations = _latched_approval_agent(resume_latch, resume_calls_tool_again=True)
+    runtime = AgentRuntime(agent=agent, model_semaphore=asyncio.Semaphore(1))
+    app.state.runtime = runtime
+    transport = ASGITransport(app=app)
+    thread_id: UUID | None = None
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            thread_id, run_id, tool_call_id = await _start_waiting_run(client)
+            resume = await client.post(
+                f"/v1/runs/{run_id}/resume",
+                json={
+                    "idempotency_key": "approve-then-defer",
+                    "decisions": [{"tool_call_id": tool_call_id, "decision": "approve"}],
+                },
+            )
+            assert resume.status_code == 200
+
+            queue = runtime.run_event_broker.subscribe(run_id)
+            assert queue is not None
+            resume_latch.set()
+            events = await _collect_broker_events(queue)
+
+            new_calls = [event for event in events if isinstance(event, ToolCallStartEvent)]
+            assert any(event.tool_call_id == "call-approval-2" for event in new_calls)
+            assert isinstance(events[-1], RunFinishedEvent)
+
+            final = await _wait_for_status(client, run_id, "waiting_approval")
+            pending = cast(list[dict[str, object]], final["pending_interrupts"])
+            assert len(pending) == 1
+            assert pending[0]["tool_call_id"] == "call-approval-2"
+    finally:
+        if thread_id is not None:
+            async with session_factory() as session, session.begin():
+                thread = await session.get(Thread, thread_id)
+                if thread is not None:
+                    await session.delete(thread)
+
+
+@pytest.mark.anyio
+async def test_stream_endpoint_204_when_not_streaming_and_404_for_unknown_run(
+    authenticated_api_user: UUID,
+) -> None:
+    app.state.runtime = AgentRuntime(
+        agent=_approval_agent(),
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+    thread_id: UUID | None = None
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            # waiting_approval runs do not publish → 204 (client falls back to polling).
+            thread_id, run_id, _tool_call_id = await _start_waiting_run(client)
+            waiting = await client.get(f"/v1/runs/{run_id}/stream")
+            assert waiting.status_code == 204
+
+            unknown = await client.get(
+                "/v1/runs/00000000-0000-0000-0000-000000000099/stream",
+            )
+            assert unknown.status_code == 404
     finally:
         if thread_id is not None:
             async with session_factory() as session, session.begin():
