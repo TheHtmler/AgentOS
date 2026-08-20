@@ -52,6 +52,7 @@
 - 解析失败（provider 被删/禁用）直接 409，**不静默换模型**。预算护栏（run 前裁剪 / step 压力检查 / 视觉截顶）与并发信号量全部按解析出的档案取值：本地恒 1(16GB 显存约束不变），远程各按自己行的 `max_concurrent_runs` 独立计数，不被本地的 1 并发阻塞。
 - api_key 写进读出掩码（响应只有 `sk-...xxxx` 预览）;provider 管理只在 Ops 后台，产品端 API 不暴露。
 - `supports_vision=false` 的 provider：运行链路跳过图片/PDF 渲染加载（OCR/文本预览块仍在），产品端 agents 列表透出 `supports_vision` 供 UI 禁用附件按钮。
+- `supports_tools`（默认 true）：端点模型是否接受原生工具调用。`false` 的 provider 被绑定后，AG-UI 链路在模型调用前直接 409、HITL 续跑直接置 failed（「失败要响」），而不是等端点在运行中炸出原始报错；Ops 表单可配，不做「自动不挂工具」的静默降级。
 - 后台任务（自动标题 / 记忆抽取 / Case 抽取）与 embedding 固定走本地模型，不随 Agent 的 provider 变化。
 - 刻意不做：通用模型路由（按请求内容动态选模型、自动 fallback 链、负载均衡）——provider 是发布级静态绑定，失败要响，不要悄悄换模型。
 
@@ -72,7 +73,7 @@
 - 事实源：PostgreSQL。`threads`/`messages`/`runs`/`run_events`（有序 append-only)/`run_message_histories`(pydantic-ai 原始消息快照，续聊与 HITL 续跑的检查点）/`interrupts`/`artifacts`/`agents`/`agent_versions`/`user_memories`（含向量）/`cases`/`case_facts`/`knowledge_*`。
 - 每个 run 记录 `input_tokens`/`output_tokens`/`model_request_count`；预算裁剪动作记服务端日志。与 harness「模型可见即已记录」的差距：我们的快照/裁剪视图不落库，可由输入确定性重推，但没有逐 step 的事件级回放。
 - Web 过程时间线对 Thinking 与工具调用显示本轮/单工具耗时；工具历史 API 从 `run_events.tool_result.duration_ms` 回放该字段。若模型通过 AG-UI 返回可读 reasoning，Web 仅在当前 SSE 回合临时展示（最多 12000 字符）；加密 reasoning 会明确标注不可读。原始 reasoning、摘要和 provider raw 内容永不写入持久化历史；为保证 Responses 续聊，服务端只保留 `id`/`signature`/`provider_name` 这组 opaque 连续性元数据。
-- HITL:`DeferredToolRequests` 输出 → interrupt 落库 → AG-UI 审批卡 → 携带 DeferredToolResults 从检查点续跑；超时（默认 30 分钟）自动拒绝。同一 thread 同时只允许一个 running run。
+- HITL:`DeferredToolRequests` 输出 → interrupt 落库 → AG-UI 审批卡 → 携带 DeferredToolResults 从检查点续跑；超时（默认 30 分钟）自动拒绝。同一 thread 同时只允许一个 running run。续跑不再是黑盒：`hitl_resume` 复用 AG-UI 流式管线（`AGUIAdapter` + 溢出重试 + 文本增量落库），事件经进程内 per-run broker(`run_events_broker`，带 replay buffer）扇出，`GET /v1/runs/{id}/stream` 让浏览器订阅续跑过程的工具调用/Thinking/文本流；无订阅者（超时自动拒绝、断连）时 broker 空转无害，前端拿不到流时回退原有的轮询 + 历史刷新。
 
 ## 与 deepseek-harness / 主流设计的取舍
 
