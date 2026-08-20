@@ -89,7 +89,11 @@ async def test_create_list_and_key_masking(
             created = await client.post(
                 "/v1/ops/model-providers",
                 json=_create_payload(slug)
-                | {"api_mode": "responses", "reasoning_summary": "concise"},
+                | {
+                    "api_mode": "responses",
+                    "reasoning_summary": "concise",
+                    "supports_tools": False,
+                },
             )
             assert created.status_code == 201
             body = created.json()
@@ -97,6 +101,7 @@ async def test_create_list_and_key_masking(
             assert body["slug"] == slug
             assert body["api_mode"] == "responses"
             assert body["reasoning_summary"] == "concise"
+            assert body["supports_tools"] is False
             # Trailing slash is normalized away.
             assert body["base_url"] == "https://api.deepseek.com/v1"
             assert body["kind"] == "remote"
@@ -137,12 +142,15 @@ async def test_patch_key_rotation_and_clear(
             provider_id = created.json()["id"]
             # api_mode defaults to chat_completions when omitted.
             assert created.json()["api_mode"] == "chat_completions"
+            # supports_tools defaults to true when omitted.
+            assert created.json()["supports_tools"] is True
 
             patched = await client.patch(
                 f"/v1/ops/model-providers/{provider_id}",
                 json={
                     "name": "代理网关",
                     "supports_vision": True,
+                    "supports_tools": False,
                     "enabled": False,
                     "api_mode": "responses",
                     "reasoning_summary": "detailed",
@@ -151,6 +159,7 @@ async def test_patch_key_rotation_and_clear(
             assert patched.status_code == 200
             assert patched.json()["name"] == "代理网关"
             assert patched.json()["supports_vision"] is True
+            assert patched.json()["supports_tools"] is False
             assert patched.json()["enabled"] is False
             assert patched.json()["api_mode"] == "responses"
             assert patched.json()["reasoning_summary"] == "detailed"

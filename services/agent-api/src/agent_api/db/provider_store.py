@@ -50,6 +50,9 @@ class ResolvedModelProfile:
     reasoning_summary: ReasoningSummary | None
     max_concurrent_runs: int
     supports_vision: bool
+    # False → runs against this provider are rejected up front with a 409
+    # instead of failing mid-run on the endpoint's tool-call error.
+    supports_tools: bool
     is_local: bool
 
 
@@ -71,6 +74,7 @@ def local_profile_from_settings(settings: Settings) -> ResolvedModelProfile:
         # The local deployment is a vision model (qwen3-vl); upload_vision_enabled
         # remains the platform-level switch on top of this capability.
         supports_vision=True,
+        supports_tools=True,
         is_local=True,
     )
 
@@ -89,6 +93,7 @@ def _profile_from_row(row: ModelProvider) -> ResolvedModelProfile:
         reasoning_summary=_coerce_reasoning_summary(row.reasoning_summary),
         max_concurrent_runs=row.max_concurrent_runs,
         supports_vision=row.supports_vision,
+        supports_tools=row.supports_tools,
         is_local=row.kind == "local",
     )
 
@@ -137,6 +142,7 @@ async def sync_builtin_local_provider(session: AsyncSession, settings: Settings)
                 reasoning_summary=None,
                 max_concurrent_runs=profile.max_concurrent_runs,
                 supports_vision=profile.supports_vision,
+                supports_tools=profile.supports_tools,
                 enabled=True,
                 is_builtin=True,
             ),
@@ -151,4 +157,5 @@ async def sync_builtin_local_provider(session: AsyncSession, settings: Settings)
     row.reasoning_summary = None
     row.max_concurrent_runs = profile.max_concurrent_runs
     row.supports_vision = profile.supports_vision
+    row.supports_tools = profile.supports_tools
     row.is_builtin = True

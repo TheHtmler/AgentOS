@@ -2,6 +2,7 @@
 
 import asyncio
 import dataclasses
+from typing import cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -38,6 +39,7 @@ _REMOTE_PROFILE = ResolvedModelProfile(
     reasoning_summary=None,
     max_concurrent_runs=4,
     supports_vision=False,
+    supports_tools=True,
     is_local=False,
 )
 
@@ -56,7 +58,12 @@ def _version(provider_id: UUID | None = None) -> AgentVersion:
     )
 
 
-def _remote_row(*, enabled: bool = True, api_mode: str = "chat_completions") -> ModelProvider:
+def _remote_row(
+    *,
+    enabled: bool = True,
+    api_mode: str = "chat_completions",
+    supports_tools: bool = True,
+) -> ModelProvider:
     return ModelProvider(
         slug=f"remote-{uuid4().hex[:8]}",
         name="Remote fixture",
@@ -71,6 +78,7 @@ def _remote_row(*, enabled: bool = True, api_mode: str = "chat_completions") -> 
         reasoning_summary=None,
         max_concurrent_runs=4,
         supports_vision=False,
+        supports_tools=supports_tools,
         enabled=enabled,
         is_builtin=False,
     )
@@ -88,6 +96,7 @@ def test_local_profile_mirrors_env_settings() -> None:
     assert profile.max_output_tokens == settings.model_max_output_tokens
     assert profile.max_concurrent_runs == settings.model_max_concurrent_runs
     assert profile.supports_vision is True
+    assert profile.supports_tools is True
 
 
 @pytest.mark.anyio
@@ -127,6 +136,18 @@ async def test_resolve_remote_provider(database_session: AsyncSession) -> None:
     assert profile.max_output_tokens == 8_192
     assert profile.temperature == 0.7
     assert profile.supports_vision is False
+    assert profile.supports_tools is True
+
+    tools_disabled_row = _remote_row(supports_tools=False)
+    database_session.add(tools_disabled_row)
+    await database_session.flush()
+
+    tools_disabled_profile = await resolve_model_profile(
+        database_session,
+        _version(tools_disabled_row.id),
+        get_settings(),
+    )
+    assert tools_disabled_profile.supports_tools is False
 
 
 @pytest.mark.anyio
@@ -180,7 +201,8 @@ async def test_create_agent_dispatches_on_api_mode() -> None:
             ),
         )
         assert isinstance(responses_agent.model, OpenAIResponsesModel)
-        assert responses_agent.model_settings["openai_reasoning_summary"] == "concise"
+        responses_settings = cast(dict[str, object], responses_agent.model_settings)
+        assert responses_settings["openai_reasoning_summary"] == "concise"
     finally:
         await http_client.aclose()
 

@@ -41,6 +41,7 @@ class OpsModelProviderOut(BaseModel):
     temperature: float | None
     max_concurrent_runs: int
     supports_vision: bool
+    supports_tools: bool
     enabled: bool
     is_builtin: bool
     has_api_key: bool
@@ -64,6 +65,9 @@ class _ProviderFields(BaseModel):
     temperature: float | None = Field(default=None, ge=0, le=2)
     max_concurrent_runs: int = Field(default=4, gt=0)
     supports_vision: bool = False
+    # Default true: most OpenAI-compatible chat endpoints accept tool calls;
+    # uncheck for text-only endpoints so runs fail fast instead of mid-stream.
+    supports_tools: bool = True
 
     @field_validator("base_url")
     @classmethod
@@ -100,6 +104,7 @@ class PatchOpsModelProviderRequest(BaseModel):
     temperature: float | None = Field(default=None, ge=0, le=2)
     max_concurrent_runs: int | None = Field(default=None, gt=0)
     supports_vision: bool | None = None
+    supports_tools: bool | None = None
     enabled: bool | None = None
     # Omitted/null keeps the stored key; a non-empty string replaces it;
     # clear_api_key removes it (for endpoints that need no auth).
@@ -140,6 +145,7 @@ def _to_out(provider: ModelProvider) -> OpsModelProviderOut:
         temperature=provider.temperature,
         max_concurrent_runs=provider.max_concurrent_runs,
         supports_vision=provider.supports_vision,
+        supports_tools=provider.supports_tools,
         enabled=provider.enabled,
         is_builtin=provider.is_builtin,
         has_api_key=bool(provider.api_key),
@@ -203,6 +209,7 @@ async def create_ops_model_provider(
             temperature=payload.temperature,
             max_concurrent_runs=payload.max_concurrent_runs,
             supports_vision=payload.supports_vision,
+            supports_tools=payload.supports_tools,
             enabled=payload.enabled,
             is_builtin=False,
         )
@@ -251,6 +258,7 @@ async def patch_ops_model_provider(
             "temperature",
             "max_concurrent_runs",
             "supports_vision",
+            "supports_tools",
             "enabled",
         ):
             if field_name in data:

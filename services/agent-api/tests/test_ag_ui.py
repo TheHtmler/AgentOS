@@ -1,7 +1,7 @@
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -598,3 +598,99 @@ async def test_ag_ui_streams_the_full_tool_call_event_sequence(
                 thread = await session.get(Thread, thread_id)
                 if thread is not None:
                     await session.delete(thread)
+
+
+@pytest.mark.anyio
+async def test_ag_ui_rejects_provider_without_tool_support(
+    authenticated_api_user: UUID,
+) -> None:
+    """A provider flagged supports_tools=false fails the run fast with a 409,
+    before any model call, instead of dying mid-stream on the endpoint's error."""
+
+    from agent_api.db.models import AgentVersion, ModelProvider
+
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel(custom_output_text="不应到达模型。")),
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+    default_agent_id = UUID("00000000-0000-0000-0000-000000000001")
+    provider_id = uuid4()
+
+    async with session_factory() as session, session.begin():
+        session.add(
+            ModelProvider(
+                id=provider_id,
+                slug=f"no-tools-{provider_id.hex[:8]}",
+                name="No tools fixture",
+                kind="remote",
+                base_url="https://api.example.com/v1",
+                api_key=None,
+                default_model="fixture-chat",
+                api_mode="chat_completions",
+                context_window=128_000,
+                max_output_tokens=8_192,
+                temperature=None,
+                reasoning_summary=None,
+                max_concurrent_runs=4,
+                supports_vision=False,
+                supports_tools=False,
+                enabled=True,
+                is_builtin=False,
+            ),
+        )
+        version = await session.scalar(
+            select(AgentVersion).where(
+                AgentVersion.agent_id == default_agent_id,
+                AgentVersion.is_published.is_(True),
+            ),
+        )
+        assert version is not None
+        version.model_provider_id = provider_id
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.post(
+                "/v1/ag-ui/runs",
+                json={
+                    "threadId": "new",
+                    "runId": "browser-run-no-tools",
+                    "state": {},
+                    "messages": [
+                        {"id": "browser-message-1", "role": "user", "content": "你好"},
+                    ],
+                    "tools": [],
+                    "context": [],
+                    "forwardedProps": {},
+                },
+            )
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == "The configured model does not support tool calls"
+
+        async with session_factory() as session:
+            thread = await session.scalar(
+                select(Thread).where(Thread.user_id == authenticated_api_user),
+            )
+            assert thread is not None
+            run = await session.scalar(select(Run).where(Run.thread_id == thread.id))
+            assert run is not None
+            assert run.status == "failed"
+
+        async with session_factory() as session, session.begin():
+            thread = await session.get(Thread, thread.id)
+            if thread is not None:
+                await session.delete(thread)
+    finally:
+        async with session_factory() as session, session.begin():
+            version = await session.scalar(
+                select(AgentVersion).where(
+                    AgentVersion.agent_id == default_agent_id,
+                    AgentVersion.is_published.is_(True),
+                ),
+            )
+            if version is not None:
+                version.model_provider_id = None
+            provider = await session.get(ModelProvider, provider_id)
+            if provider is not None:
+                await session.delete(provider)

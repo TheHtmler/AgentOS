@@ -260,6 +260,12 @@ class ModelProvider(Base):
         server_default=text("false"),
         nullable=False,
     )
+    # Whether the endpoint's model accepts native tool calls; runs fail fast
+    # (409) instead of dying on the provider's raw error mid-stream.
+    supports_tools: Mapped[bool] = mapped_column(
+        server_default=text("true"),
+        nullable=False,
+    )
     enabled: Mapped[bool] = mapped_column(
         server_default=text("true"),
         nullable=False,

@@ -346,6 +346,21 @@ async def stream_ag_ui_run(
             detail="Unable to start agent execution",
         ) from error
 
+    # Fail loudly up front when the bound endpoint cannot accept tool calls;
+    # a mid-run provider error would surface as an opaque RUN_ERROR instead.
+    if not profile.supports_tools:
+        logger.warning(
+            "run %s rejected: provider %s (%s) has supports_tools=false",
+            started.run_id,
+            profile.provider_slug,
+            profile.model_name,
+        )
+        await persist_failed_run(started.run_id)
+        raise HTTPException(
+            status_code=409,
+            detail="The configured model does not support tool calls",
+        )
+
     # Ignore browser-supplied history, state, tools, and run identity.
     server_input = client_input.model_copy(
         update={

@@ -23,6 +23,7 @@ type ModelProvider = {
   temperature: number | null;
   max_concurrent_runs: number;
   supports_vision: boolean;
+  supports_tools: boolean;
   enabled: boolean;
   is_builtin: boolean;
   has_api_key: boolean;
@@ -44,6 +45,7 @@ type ProviderFormState = {
   temperature: string;
   maxConcurrentRuns: string;
   supportsVision: boolean;
+  supportsTools: boolean;
   enabled: boolean;
 };
 
@@ -60,6 +62,7 @@ const EMPTY_FORM: ProviderFormState = {
   temperature: "",
   maxConcurrentRuns: "4",
   supportsVision: false,
+  supportsTools: true,
   enabled: true,
 };
 
@@ -77,6 +80,7 @@ function formFromProvider(provider: ModelProvider): ProviderFormState {
     temperature: provider.temperature === null ? "" : String(provider.temperature),
     maxConcurrentRuns: String(provider.max_concurrent_runs),
     supportsVision: provider.supports_vision,
+    supportsTools: provider.supports_tools,
     enabled: provider.enabled,
   };
 }
@@ -176,6 +180,7 @@ export default function ProvidersPage() {
         max_output_tokens: parsePositiveInt(form.maxOutputTokens, "最大输出 tokens"),
         max_concurrent_runs: parsePositiveInt(form.maxConcurrentRuns, "并发上限"),
         supports_vision: form.supportsVision,
+        supports_tools: form.supportsTools,
         enabled: form.enabled,
       };
       const temperature = parseTemperature(form.temperature);
@@ -450,6 +455,14 @@ export default function ProvidersPage() {
             <label className="inline-check">
               <input
                 type="checkbox"
+                checked={form.supportsTools}
+                onChange={(event) => patchForm({ supportsTools: event.target.checked })}
+              />
+              支持工具调用 {boolZh(form.supportsTools)}
+            </label>
+            <label className="inline-check">
+              <input
+                type="checkbox"
                 checked={form.enabled}
                 onChange={(event) => patchForm({ enabled: event.target.checked })}
               />
@@ -489,6 +502,7 @@ export default function ProvidersPage() {
                   <span>摘要 {provider.reasoning_summary ?? "未设置"}</span>
                   <span>上下文 {provider.context_window}</span>
                   <span>视觉 {boolZh(provider.supports_vision)}</span>
+                  <span>工具 {boolZh(provider.supports_tools)}</span>
                   <span>Key {provider.api_key_preview ?? "未设置"}</span>
                 </div>
               </div>
