@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from uuid import UUID
 
@@ -16,10 +17,12 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 from sqlalchemy import select
 
-from agent_api.db.models import Message, Run, Thread
+from agent_api.db.models import Message, Run, RunEvent, Thread
 from agent_api.db.session import close_database, session_factory
 from agent_api.main import app
 from agent_api.runtime import AgentRuntime
+from agent_api.tools.search.tool import AgentDeps
+from agent_api.tools.util.tool import calculate
 
 
 @pytest.fixture(autouse=True)
@@ -462,6 +465,133 @@ async def test_ag_ui_no_emergency_notice_for_routine_message(
         assert response.status_code == 200
         assert "检测到您描述的情况包含可能的紧急信号" not in response.text
         thread_id = UUID(response.headers["x-agentos-thread-id"])
+    finally:
+        if thread_id is not None:
+            async with session_factory() as session, session.begin():
+                thread = await session.get(Thread, thread_id)
+                if thread is not None:
+                    await session.delete(thread)
+
+
+def _sse_events(body: str) -> list[dict[str, object]]:
+    """Parse `data:` frames of a buffered SSE body into ordered event dicts."""
+
+    events: list[dict[str, object]] = []
+    for frame in body.replace("\r\n", "\n").split("\n\n"):
+        for line in frame.split("\n"):
+            if line.startswith("data:"):
+                events.append(json.loads(line[len("data:") :].strip()))
+    return events
+
+
+@pytest.mark.anyio
+async def test_ag_ui_streams_the_full_tool_call_event_sequence(
+    authenticated_api_user: UUID,
+) -> None:
+    """TOOL_CALL_START/ARGS/END/RESULT stream in order, pair by toolCallId, and
+    match the tool_call/tool_result rows persisted in run_events."""
+
+    from pydantic_ai.models.function import DeltaToolCall
+
+    invocation_count = 0
+
+    async def stream_function(
+        messages: list[ModelMessage],
+        _: AgentInfo,
+    ) -> AsyncIterator[dict[int, DeltaToolCall] | str]:
+        nonlocal invocation_count
+        invocation_count += 1
+        if invocation_count == 1:
+            yield {
+                0: DeltaToolCall(
+                    name="calculate",
+                    json_args='{"expression": "1+1"}',
+                    tool_call_id="call-calc-1",
+                ),
+            }
+        else:
+            yield "计算结果是 2。"
+
+    agent = Agent(FunctionModel(stream_function=stream_function), deps_type=AgentDeps)
+    agent.tool(calculate)
+
+    app.state.runtime = AgentRuntime(
+        agent=agent,
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+    thread_id: UUID | None = None
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.post(
+                "/v1/ag-ui/runs",
+                json={
+                    "threadId": "new",
+                    "runId": "browser-run-tool-events",
+                    "state": {},
+                    "messages": [
+                        {"id": "browser-message-1", "role": "user", "content": "算一下 1+1"},
+                    ],
+                    "tools": [],
+                    "context": [],
+                    "forwardedProps": {},
+                },
+            )
+
+        assert response.status_code == 200
+        thread_id = UUID(response.headers["x-agentos-thread-id"])
+        events = _sse_events(response.text)
+        event_types = [event["type"] for event in events]
+
+        start_index = event_types.index("TOOL_CALL_START")
+        args_index = event_types.index("TOOL_CALL_ARGS")
+        end_index = event_types.index("TOOL_CALL_END")
+        result_index = event_types.index("TOOL_CALL_RESULT")
+        finished_index = event_types.index("RUN_FINISHED")
+        assert start_index < args_index < end_index < result_index < finished_index
+
+        start_event = events[start_index]
+        assert start_event["toolCallId"] == "call-calc-1"
+        assert start_event["toolCallName"] == "calculate"
+
+        args_text = "".join(
+            str(event["delta"])
+            for event in events
+            if event["type"] == "TOOL_CALL_ARGS" and event["toolCallId"] == "call-calc-1"
+        )
+        assert args_text == '{"expression": "1+1"}'
+
+        result_event = events[result_index]
+        assert result_event["toolCallId"] == "call-calc-1"
+        result_content = json.loads(str(result_event["content"]))
+        assert result_content["ok"] is True
+        assert result_content["result"] == 2
+
+        async with session_factory() as session:
+            run = await session.scalar(select(Run).where(Run.thread_id == thread_id))
+            assert run is not None
+            run_events = list(
+                (
+                    await session.scalars(
+                        select(RunEvent)
+                        .where(
+                            RunEvent.run_id == run.id,
+                            RunEvent.event_type.in_(["tool_call", "tool_result"]),
+                        )
+                        .order_by(RunEvent.seq),
+                    )
+                ).all()
+            )
+
+        assert run.status == "completed"
+        assert [event.event_type for event in run_events] == ["tool_call", "tool_result"]
+        assert run_events[0].payload["tool"] == "calculate"
+        assert run_events[0].payload["args"] == {"expression": "1+1"}
+        assert run_events[1].payload["tool"] == "calculate"
+        assert run_events[1].payload["ok"] is True
+        assert str(run_events[1].payload["summary"]).startswith("result=2")
+        assert run_events[1].payload.get("duration_ms") is not None
     finally:
         if thread_id is not None:
             async with session_factory() as session, session.begin():
