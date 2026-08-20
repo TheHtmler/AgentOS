@@ -13,6 +13,9 @@ export type ToolCallState = {
   argsText: string;
   status: ToolCallStatus;
   resultSummary?: string;
+  // Parsed result JSON, only available on the live stream (full TOOL_CALL_RESULT
+  // content); history replays carry just the ≤500-char resultSummary.
+  resultData?: Record<string, unknown>;
   provider?: string;
   startedAt?: number;
   durationMs?: number;
@@ -185,11 +188,89 @@ export function toolCallDurationLabel(durationMs: number | undefined): string | 
   return durationMs < 1000 ? `${Math.round(durationMs)}ms` : `${(durationMs / 1000).toFixed(1)}s`;
 }
 
-/** @deprecated Prefer toolCallKeyParam + toolName; kept for any external imports. */
-export function toolCallHeadline(toolCall: ToolCallState): string {
-  const param = toolCallKeyParam(toolCall);
-  const name = toolDisplayName(toolCall.toolName);
-  return param ? `${name}  ${param}` : name;
+type KnowledgeHit = {
+  title: string;
+  snippet: string | null;
+  sourceUrl: string | null;
+  sourceLabel: string | null;
+};
+
+// knowledge_search hit shape: {title, content, document_title, section_label,
+// source_url, source_label, ...} (see tools/knowledge/tool.py payload).
+function knowledgeHitsFromResult(data: Record<string, unknown> | undefined): KnowledgeHit[] {
+  if (data === undefined || !Array.isArray(data.results)) {
+    return [];
+  }
+
+  const hits: KnowledgeHit[] = [];
+  for (const item of data.results.slice(0, 5)) {
+    if (typeof item !== "object" || item === null) {
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    const title = stringField(record, "title") ?? stringField(record, "document_title");
+    if (title === null) {
+      continue;
+    }
+    const content = stringField(record, "content");
+    hits.push({
+      title,
+      snippet: content === null ? null : truncate(content, 140),
+      sourceUrl: stringField(record, "source_url"),
+      sourceLabel: stringField(record, "source_label"),
+    });
+  }
+  return hits;
+}
+
+type SearchLink = { title: string; url: string };
+
+// web_search hit shape: {title, url, ...}.
+function searchLinksFromResult(data: Record<string, unknown> | undefined): SearchLink[] {
+  if (data === undefined || !Array.isArray(data.results)) {
+    return [];
+  }
+
+  const links: SearchLink[] = [];
+  for (const item of data.results.slice(0, 5)) {
+    if (typeof item !== "object" || item === null) {
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    const url = stringField(record, "url");
+    if (url === null) {
+      continue;
+    }
+    links.push({ title: stringField(record, "title") ?? url, url });
+  }
+  return links;
+}
+
+const DEDICATED_ARG_KEYS = new Set(["query", "url", "expression"]);
+
+function formatArgValue(value: unknown): string {
+  if (typeof value === "string") {
+    return truncate(value, 200);
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value === null || value === undefined) {
+    return "—";
+  }
+  return truncate(JSON.stringify(value), 200);
+}
+
+// Generic key→value rows replace the old raw-JSON dump for tools without a
+// dedicated arg row (query/url/expression keep their labelled rows).
+function extraArgEntries(argsText: string): [string, string][] {
+  const record = parseArgsRecord(argsText);
+  if (record === null) {
+    return [];
+  }
+  return Object.entries(record)
+    .filter(([key]) => !DEDICATED_ARG_KEYS.has(key))
+    .map(([key, value]) => [key, formatArgValue(value)]);
 }
 
 export function ToolCallCard({
@@ -202,6 +283,7 @@ export function ToolCallCard({
   const query = queryFromArgsText(toolCall.argsText);
   const url = urlFromArgsText(toolCall.argsText);
   const expression = stringField(parseArgsRecord(toolCall.argsText) ?? {}, "expression");
+  const extraArgs = extraArgEntries(toolCall.argsText);
   const keyParam = toolCallKeyParam(toolCall);
   const statusLabel =
     toolCall.status === "awaiting_approval"
@@ -209,6 +291,15 @@ export function ToolCallCard({
       : toolProgressLabel(toolCall.toolName, toolCall.status);
   const [now, setNow] = useState<number | null>(null);
   const running = toolCall.status === "running";
+
+  const knowledgeHits =
+    toolCall.toolName === "knowledge_search" ? knowledgeHitsFromResult(toolCall.resultData) : [];
+  const searchLinks =
+    toolCall.toolName === "web_search" ? searchLinksFromResult(toolCall.resultData) : [];
+  const fetchLinkUrl =
+    toolCall.toolName === "fetch_url" ? stringField(toolCall.resultData ?? {}, "url") : null;
+  const fetchLinkTitle =
+    toolCall.toolName === "fetch_url" ? stringField(toolCall.resultData ?? {}, "title") : null;
 
   useEffect(() => {
     if (!running || toolCall.durationMs !== undefined || toolCall.startedAt === undefined) {
@@ -268,7 +359,7 @@ export function ToolCallCard({
               {query}
             </p>
           ) : null}
-          {url ? (
+          {url && fetchLinkUrl === null ? (
             <p>
               <span className="agentos-tool-call-label">网页</span>
               {url}
@@ -280,8 +371,56 @@ export function ToolCallCard({
               {expression}
             </p>
           ) : null}
-          {toolCall.argsText.trim() && !query && !url && !expression ? (
+          {extraArgs.map(([key, value]) => (
+            <p key={key}>
+              <span className="agentos-tool-call-label">{key}</span>
+              {value}
+            </p>
+          ))}
+          {toolCall.argsText.trim() && !query && !url && !expression && extraArgs.length === 0 ? (
             <pre>{toolCall.argsText.trim()}</pre>
+          ) : null}
+          {fetchLinkUrl !== null ? (
+            <p>
+              <span className="agentos-tool-call-label">链接</span>
+              <a href={fetchLinkUrl} target="_blank" rel="noreferrer">
+                {fetchLinkTitle ?? fetchLinkUrl}
+              </a>
+            </p>
+          ) : null}
+          {knowledgeHits.length > 0 ? (
+            <div className="agentos-tool-call-hits">
+              <span className="agentos-tool-call-label">命中片段</span>
+              <ul>
+                {knowledgeHits.map((hit, index) => (
+                  <li key={`${hit.title}-${index}`}>
+                    <p className="agentos-tool-call-hit-title">{hit.title}</p>
+                    {hit.snippet ? (
+                      <p className="agentos-tool-call-hit-snippet">{hit.snippet}</p>
+                    ) : null}
+                    {hit.sourceUrl ? (
+                      <a href={hit.sourceUrl} target="_blank" rel="noreferrer">
+                        {hit.sourceLabel ?? hit.sourceUrl}
+                      </a>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {searchLinks.length > 0 ? (
+            <div className="agentos-tool-call-hits">
+              <span className="agentos-tool-call-label">搜索结果</span>
+              <ul>
+                {searchLinks.map((link, index) => (
+                  <li key={`${link.url}-${index}`}>
+                    <a href={link.url} target="_blank" rel="noreferrer">
+                      {link.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
           {toolCall.provider ? (
             <p>
@@ -307,6 +446,7 @@ export function summarizeToolResultContent(content: string): {
   summary: string;
   provider?: string;
   status: ToolCallStatus;
+  resultData?: Record<string, unknown>;
 } {
   const trimmed = content.trim();
 
@@ -321,6 +461,7 @@ export function summarizeToolResultContent(content: string): {
           summary: record.error.slice(0, 500),
           provider,
           status: "error",
+          resultData: record,
         };
       }
 
@@ -329,6 +470,7 @@ export function summarizeToolResultContent(content: string): {
           summary: "需要审批后才能执行",
           provider,
           status: "awaiting_approval",
+          resultData: record,
         };
       }
 
@@ -346,6 +488,7 @@ export function summarizeToolResultContent(content: string): {
           ),
           provider,
           status: "done",
+          resultData: record,
         };
       }
 
@@ -369,6 +512,7 @@ export function summarizeToolResultContent(content: string): {
           summary: summary.slice(0, 500),
           provider,
           status: "done",
+          resultData: record,
         };
       }
 
@@ -378,6 +522,7 @@ export function summarizeToolResultContent(content: string): {
           summary: trimmed.slice(0, 500),
           provider,
           status: "done",
+          resultData: record,
         };
       }
     }

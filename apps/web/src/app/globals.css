@@ -1096,6 +1096,39 @@ body {
   font-weight: 600;
 }
 
+.agentos-tool-call-hits > span {
+  display: inline-block;
+  margin-bottom: 0.3rem;
+}
+
+.agentos-tool-call-hits ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding-left: 1rem;
+  list-style: disc;
+}
+
+.agentos-tool-call-hits li::marker {
+  color: var(--muted);
+}
+
+.agentos-tool-call-hit-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.agentos-tool-call-hit-snippet {
+  color: var(--text-secondary);
+}
+
+.agentos-tool-call-hits a {
+  color: var(--accent, #2563eb);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
 .agentos-tool-call-running .agentos-tool-call-name {
   color: var(--text);
 }

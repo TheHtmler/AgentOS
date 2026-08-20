@@ -493,6 +493,7 @@ function toolStatesFromTimeline(steps: TimelineStep[]): ToolCallState[] {
       argsText: step.argsText,
       status: step.status,
       resultSummary: step.resultSummary,
+      resultData: step.resultData,
       provider: step.provider,
       startedAt: step.startedAt,
       durationMs: step.durationMs,
@@ -1389,6 +1390,7 @@ export function ChatPanel({
               argsText: existing?.argsText || "",
               status: summarized.status,
               resultSummary: summarized.summary,
+              resultData: summarized.resultData ?? existing?.resultData,
               provider: summarized.provider ?? existing?.provider,
               startedAt: existing?.startedAt ?? Date.now(),
               durationMs:

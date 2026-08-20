@@ -37,6 +37,24 @@ type OpsRunEvent = {
   created_at: string;
 };
 
+function truncateText(text: string, max = 160): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length <= max ? normalized : `${normalized.slice(0, max - 1)}…`;
+}
+
+// tool_call events carry `args`; tool_result events carry `summary`. Surface
+// both so the Ops timeline shows what a tool was called with and what came
+// back, not just its name and duration.
+function eventPayloadDetail(event: OpsRunEvent): string | null {
+  if (event.payload.args !== undefined) {
+    return `args ${truncateText(JSON.stringify(event.payload.args))}`;
+  }
+  if (typeof event.payload.summary === "string" && event.payload.summary.trim()) {
+    return truncateText(event.payload.summary);
+  }
+  return null;
+}
+
 type OpsThreadDetail = {
   id: string;
   title: string | null;
@@ -198,22 +216,30 @@ export default function SessionDetailPage() {
                     {eventsByRunId[run.id]?.length === 0 ? (
                       <p className="muted">该 Run 没有工具/模型耗时事件</p>
                     ) : null}
-                    {eventsByRunId[run.id]?.map((event) => (
-                      <div key={event.seq} className="doc-card__meta">
-                        <span>#{event.seq}</span>
-                        <span>{event.event_type}</span>
-                        <span>{formatTime(event.created_at)}</span>
-                        {typeof event.payload.tool === "string" ? (
-                          <span>{event.payload.tool}</span>
-                        ) : null}
-                        {typeof event.payload.duration_ms === "number" ? (
-                          <span>{event.payload.duration_ms} ms</span>
-                        ) : null}
-                        {event.payload.ok === false ? (
-                          <span className="badge badge--failed">失败</span>
-                        ) : null}
-                      </div>
-                    ))}
+                    {eventsByRunId[run.id]?.map((event) => {
+                      const payloadDetail = eventPayloadDetail(event);
+                      return (
+                        <div key={event.seq} className="doc-card__meta">
+                          <span>#{event.seq}</span>
+                          <span>{event.event_type}</span>
+                          <span>{formatTime(event.created_at)}</span>
+                          {typeof event.payload.tool === "string" ? (
+                            <span>{event.payload.tool}</span>
+                          ) : null}
+                          {typeof event.payload.duration_ms === "number" ? (
+                            <span>{event.payload.duration_ms} ms</span>
+                          ) : null}
+                          {event.payload.ok === false ? (
+                            <span className="badge badge--failed">失败</span>
+                          ) : null}
+                          {payloadDetail !== null ? (
+                            <span className="muted" title={payloadDetail}>
+                              {payloadDetail}
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
               </article>
