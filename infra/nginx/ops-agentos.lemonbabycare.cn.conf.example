@@ -13,6 +13,9 @@ server {
     client_max_body_size 20m;
 
     location / {
+        # 必须用 127.0.0.1,不要用 localhost:frps 只绑定 IPv4 回环,localhost 会
+        # 同时解析出 ::1,nginx 轮询两个地址,打到 ::1 的请求全部 connection
+        # refused → 一半请求 502(曾经因此排查过一轮假"缓存问题")。
         proxy_pass http://127.0.0.1:13001;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
