@@ -128,43 +128,44 @@ start_service() {
   launchctl bootstrap "$DOMAIN" "$plist"
 }
 
-# Rebuilding `.next` under a live `next start` is broken: the old process renders
-# HTML from its in-memory build while `/_next/static/*` is read from the deleted/
-# replaced dir on disk, so every CSS/JS asset 404s (the "unstyled login page").
-# Stop the service first, build, then start; keep the old build for rollback.
+# Build first, swap after: the live `next start` keeps serving the old build while
+# the new one compiles into `.next.new` (NEXT_DIST_DIR); downtime is just the
+# bootout → swap → start window (seconds) instead of the whole build (minutes).
+# A failed build leaves the running old build completely untouched.
 deploy_frontend() {
   local name="$1" label="$2" cache_mode="$3"
   local app_dir="$ROOT/apps/$name"
   local next_dir="$app_dir/.next"
+  local new_dir="$app_dir/.next.new"
   local prev_dir="$app_dir/.next.prev"
 
-  if service_loaded "$label"; then
-    log "stop $label while .next is rebuilt"
-    launchctl bootout "${DOMAIN}/${label}"
+  rm -rf "$new_dir"
+  if [[ "$cache_mode" == "reuse" && -d "$next_dir/cache" ]]; then
+    mkdir -p "$new_dir"
+    cp -a "$next_dir/cache" "$new_dir/cache"
   fi
 
+  log "build $name (service keeps serving the old build until the swap)"
+  if ! CI=1 NEXT_DIST_DIR=.next.new pnpm --filter "$name" build; then
+    warn "$name build failed — running build untouched"
+    rm -rf "$new_dir"
+    exit 1
+  fi
+
+  if service_loaded "$label"; then
+    log "stop $label for the .next swap"
+    launchctl bootout "${DOMAIN}/${label}"
+  fi
   rm -rf "$prev_dir"
   if [[ -d "$next_dir" ]]; then
     mv "$next_dir" "$prev_dir"
   fi
-  if [[ "$cache_mode" == "reuse" && -d "$prev_dir/cache" ]]; then
-    mkdir -p "$next_dir"
-    mv "$prev_dir/cache" "$next_dir/cache"
+  mv "$new_dir" "$next_dir"
+  if start_service "$label"; then
+    rm -rf "$prev_dir"
+  else
+    warn "$name failed to start after swap; previous build kept at $prev_dir"
   fi
-
-  log "build $name"
-  if ! CI=1 pnpm --filter "$name" build; then
-    warn "$name build failed — restoring previous .next"
-    rm -rf "$next_dir"
-    if [[ -d "$prev_dir" ]]; then
-      mv "$prev_dir" "$next_dir"
-    fi
-    start_service "$label" || true
-    exit 1
-  fi
-
-  rm -rf "$prev_dir"
-  start_service "$label" || true
 }
 
 http_code() {
@@ -276,7 +277,7 @@ fi
 log "public"
 printf '  web  https://agentos.lemonbabycare.cn/\n'
 printf '  ops  https://ops-agentos.lemonbabycare.cn/\n'
-log "If public ops still shows old UI: purge 宝塔/nginx cache for ops-agentos, then hard-refresh."
+log "If a browser tab still shows old UI after a deploy: hard-refresh (Cmd+Shift+R)."
 
 if [[ -n "${OCR_BASE_URL:-}" ]]; then
   ocr_health="${OCR_BASE_URL%/}/health"
