@@ -18,6 +18,7 @@ from agent_api.tools.fetch.tool import fetch_url
 from agent_api.tools.growth.tool import growth_assess
 from agent_api.tools.knowledge.tool import knowledge_search
 from agent_api.tools.policy import PolicyAction, evaluate
+from agent_api.tools.sandbox.tool import sandbox_exec
 from agent_api.tools.search.tool import AgentDeps, web_search
 from agent_api.tools.util.tool import calculate, time_diff
 
@@ -33,6 +34,7 @@ class ToolDomain(StrEnum):
     CASE = "case"
     ARTIFACT = "artifact"
     MCP = "mcp"
+    SANDBOX = "sandbox"
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,6 +157,14 @@ _BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         description="Collect missing Case slot values from the user via HITL form",
         handler=case_slot_collect,
     ),
+    ToolSpec(
+        name="sandbox_exec",
+        domain=ToolDomain.SANDBOX,
+        risk="exec",
+        default_action=PolicyAction.ASK,
+        description="Execute a command in the current user's isolated Docker workspace",
+        handler=sandbox_exec,
+    ),
 )
 
 
@@ -196,6 +206,12 @@ def is_tool_enabled(spec: ToolSpec, settings: Settings | None = None) -> bool:
         return cfg.case_context_read_enabled
     if spec.domain == ToolDomain.MCP:
         return cfg.mcp_enabled
+    if spec.domain == ToolDomain.SANDBOX:
+        return (
+            cfg.sandbox_enabled
+            and bool(cfg.sandbox_manager_url.strip())
+            and bool(cfg.sandbox_manager_token.strip())
+        )
     return False
 
 
@@ -308,10 +324,14 @@ def mounted_tool_names(
         )
     }
     for spec in _MCP_SPECS:
-        if is_tool_enabled(spec, cfg) and evaluate(
-            spec.name,
-            settings=cfg,
-            overrides=overrides,
-        ) != PolicyAction.DENY:
+        if (
+            is_tool_enabled(spec, cfg)
+            and evaluate(
+                spec.name,
+                settings=cfg,
+                overrides=overrides,
+            )
+            != PolicyAction.DENY
+        ):
             names.add(spec.name)
     return names

@@ -91,6 +91,13 @@ class Settings(BaseSettings):
     ocr_timeout_seconds: float = 60.0
     # Read confirmed Case facts for case-enabled Agents (mounted per-run when Case bound).
     case_context_read_enabled: bool = True
+    # Sandbox execution is opt-in and requires a separately supervised manager.
+    sandbox_enabled: bool = False
+    sandbox_manager_url: str = "http://127.0.0.1:8788"
+    sandbox_manager_token: str = ""
+    sandbox_timeout_seconds: int = 120
+    sandbox_max_output_chars: int = 32_000
+    sandbox_output_preview_chars: int = 6_000
     # Comma-separated tool names forced to deny/ask (deny wins if listed in both).
     tool_policy_deny: str = ""
     tool_policy_ask: str = ""

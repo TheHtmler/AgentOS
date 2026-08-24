@@ -19,6 +19,7 @@
 仓库模板：
 
 - `infra/launchd/com.local.agentos-ops.plist.example`
+- `infra/launchd/com.local.agentos-sandbox-manager.plist.example`
 - `infra/frpc/frpc.agentos.example.toml`
 - `infra/nginx/ops-agentos.lemonbabycare.cn.conf.example`
 
@@ -79,6 +80,23 @@ OPS_SESSION_TTL_HOURS=12
 （可选）也可用 `OPS_ROOT_PASSWORD_HASH`（Argon2id）；两者都设时以 hash 为准。  
 `apps/web/.env.local` / `apps/ops/.env.local` 建议：`AGENT_API_BASE_URL=http://127.0.0.1:8100`(agent-api 已让出 8000 给本机 OCR 服务;OCR_BASE_URL 指向 `http://127.0.0.1:8000`)。
 
+## 5. 用户 Sandbox（可选）
+
+Sandbox Manager 必须与 Agent API 分进程运行，只监听 Mac mini loopback，不加入 FRP/Nginx 公网代理。
+
+```bash
+cp services/sandbox-manager/.env.example services/sandbox-manager/.env
+# 将 SANDBOX_MANAGER_TOKEN 设为随机长 token，并让 Agent API .env 的
+# SANDBOX_MANAGER_TOKEN 使用同一个值。
+uv sync --directory services/sandbox-manager
+./scripts/install-launchd.sh sandbox
+curl -sS --noproxy '*' http://127.0.0.1:8788/health
+```
+
+然后在 `services/agent-api/.env` 设置 `SANDBOX_ENABLED=true`、相同的
+`SANDBOX_MANAGER_URL` 和 token，并重启 Agent API。Ops 的 Agent 版本页会显示
+`sandbox_exec`，默认是「每次审批」；只有发布版本后新 Run 才使用新的工具策略。
+
 本地冒烟：
 
 ```bash
@@ -89,7 +107,7 @@ curl -sS --noproxy '*' -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3001/lo
 
 公网：`https://agentos.lemonbabycare.cn` / `https://ops-agentos.lemonbabycare.cn/login`。
 
-## 5. 注意
+## 6. 注意
 
 - Cookie：`ops_session` 只挂在 ops 子域；与 `agentos.lemonbabycare.cn` 的用户 Cookie 隔离。
 - `NODE_ENV=production` 时 BFF 会给 Cookie 加 `Secure`（需 HTTPS）。

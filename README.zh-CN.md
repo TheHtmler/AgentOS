@@ -7,7 +7,7 @@ AgentOS 是一个正在开发中的可控、可持久化 AI Agent Runtime 平台
 项目从一个小而可验证的核心开始公开构建，逐步扩展到工具执行、人工审批、隔离 Sandbox 和多租户运行。
 
 > [!WARNING]
-> AgentOS 仍在积极开发中，尚未达到生产可用状态。invite-only 认证、用户级 Thread 隔离、Human-in-the-Loop (HITL) 核心流程和可选只读 MCP 支持已实现；组织级租户和 Sandbox 执行仍未实现。
+> AgentOS 仍在积极开发中，尚未达到生产可用状态。invite-only 认证、用户级 Thread 隔离、Human-in-the-Loop (HITL) 核心流程、可选只读 MCP 和 opt-in 用户级 Docker Sandbox MVP 已实现；组织级租户和生产级 Sandbox 运维仍未完成。
 
 ## 当前能力
 
@@ -24,6 +24,8 @@ AgentOS 是一个正在开发中的可控、可持久化 AI Agent Runtime 平台
 - 多 Agent 选择、通用 Case 档案，以及 Run、Artifact 和用户记忆的 Case 作用域隔离。
 - 基础 Case 成员角色（`owner`、`editor`、`viewer`）和同源成员管理；成员必须是已有 active 用户。
 - 策展版 MMA/PA `knowledge_search`、生长评估，以及默认关闭的只读 PubMed MCP 工具集。
+- 可选的用户级 Docker Sandbox Manager：按用户持久化工作区，容器默认禁网并限制资源，输出可归档为 Artifact。
+- Ops 可按 Agent 逐项配置内置工具策略：继承平台默认、允许、每次审批或禁止。
 - 后端使用 pytest、Ruff 和 Pyright，前端使用 ESLint 和 Prettier 进行质量检查。
 
 ## 架构
@@ -33,7 +35,9 @@ flowchart LR
     Browser["浏览器"] -->|"HTTP / SSE"| Web["Next.js Web"]
     Web -->|"同源代理"| API["FastAPI Agent API"]
     API -->|"Pydantic AI"| Ollama["Ollama"]
-    API -->|"Thread、Run、Event"| PostgreSQL["PostgreSQL"]
+    API -->|"Thread、Run、Event、Artifact"| PostgreSQL["PostgreSQL"]
+    API -->|"private token HTTP"| Sandbox["Sandbox Manager"]
+    Sandbox -->|"bounded containers"| Docker["Docker"]
 ```
 
 浏览器请求始终停留在 Next.js 同源边界内。Route Handler 将健康检查、聊天流和 Thread 历史代理到 Agent API；Agent API 负责模型执行和持久化状态。
@@ -65,6 +69,7 @@ flowchart LR
 ```bash
 pnpm install
 uv sync --directory services/agent-api
+uv sync --directory services/sandbox-manager
 ```
 
 ### 2. 配置环境变量
@@ -97,6 +102,16 @@ uv run --directory services/agent-api fastapi dev src/agent_api/main.py --port 8
 ```
 
 健康检查地址为 `http://127.0.0.1:8000/health`，交互式 API 文档地址为 `http://127.0.0.1:8000/docs`。
+
+### 4a. 可选：启动 Sandbox Manager
+
+复制 `services/sandbox-manager/.env.example` 为 `.env`，设置随机的
+`SANDBOX_MANAGER_TOKEN`；Agent API 的 `.env` 使用相同 token，并设置
+`SANDBOX_ENABLED=true`。然后运行：
+
+```bash
+uv run --directory services/sandbox-manager uvicorn sandbox_manager.main:app --host 127.0.0.1 --port 8788
+```
 
 ### 5. 启动 Web 应用
 
@@ -139,7 +154,8 @@ pnpm format:check
 ```text
 AgentOS/
 ├── apps/web/                 Next.js 用户界面与同源 API 代理
-├── services/agent-api/      FastAPI、Pydantic AI、持久化与数据库迁移
+├── services/agent-api/       FastAPI、Pydantic AI、持久化与数据库迁移
+├── services/sandbox-manager/ 私有 Docker 执行边界
 ├── packages/                共享包（预留）
 ├── infra/postgres/          本地 PostgreSQL Compose 配置
 └── docs/                    架构、实现与运维文档
@@ -152,7 +168,7 @@ AgentOS/
 - Tool Registry 和策略执行。
 - 更完整的只读 MCP 集成和受控本地工具。
 - 可持久化的 HITL 中断、批准、拒绝和幂等恢复。
-- 具有资源限制、超时和网络隔离的用户级 Docker Sandbox。
+- Sandbox 终端/WebSocket、生产镜像治理、配额、清理后台和更完整的执行观测。
 - 邀请邮件送达、再登录和组织级租户隔离。
 - 多模型 Provider、持久化工作流和可观测性。
 

@@ -216,6 +216,39 @@ a.btn:hover {
   color: var(--muted);
 }
 
+.tool-policy-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tool-policy-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+
+.tool-policy-row__title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 3px;
+  color: var(--ink);
+}
+
+.tool-policy-row code {
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .tool-policy-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .badge,
 .pill {
   display: inline-flex;

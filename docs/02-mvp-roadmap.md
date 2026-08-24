@@ -18,7 +18,7 @@
 - 自动会话标题（首轮成功后模型起名；已落地）。
 - 实现 `interrupts`、同一 Run `resume` 与幂等处理；超时自动 deny 续跑。（已落地）
 - 前端实现 Tool Call、审批和拒绝卡片。（已落地）
-- 接入只读 MCP，以及本地 Sandbox Tool。
+- 接入只读 MCP，以及本地 Sandbox Tool。（MCP 默认关闭；Sandbox 已以独立 Manager MVP 落地，详见 Phase 3）
 
 完成标准：高风险工具必须经过审批，刷新页面后审批状态和 Run 状态不丢失。只读搜索可自动执行。
 
@@ -53,9 +53,9 @@
 
 ## Phase 3：受控 Runtime
 
-- 实现 Sandbox Manager。
-- Docker Sandbox 使用非 root、资源限制、超时回收和默认禁网。
-- 实现 Sandbox 输出 Artifact、下载和审计记录；知识文档 Artifact 在 Phase 2.5 完成基础能力。
+- 实现 Sandbox Manager。（已落地 MVP：独立服务、内部 token、用户工作区、短生命周期容器）
+- Docker Sandbox 使用非 root、资源限制、超时回收和默认禁网。（已落地）
+- 实现 Sandbox 输出 Artifact、下载和审计记录；知识文档 Artifact 在 Phase 2.5 完成基础能力。（Sandbox 输出已复用现有 Artifact/run_events；终端/WebSocket、配额面板和生产镜像治理仍待补齐）
 
 完成标准：不同用户的运行目录和容器资源互相隔离。
 

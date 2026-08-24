@@ -186,6 +186,15 @@ Always include source URLs/PMIDs. These tools are read-only — never treat resu
 individualized prescriptions.
 """
 
+SANDBOX_INSTRUCTIONS = """\
+## Capability: sandbox_exec
+Use sandbox_exec for code, shell, or file operations that require execution. The command runs
+inside the current user's network-disabled workspace, not on the Agent API host. Keep commands
+small and explain the requested action through the tool call. This tool requires user approval
+by default. Use relative cwd values only; never claim a host path was accessed. Long output may
+return output_artifact_id; use read_artifact with that id when mounted and more output is needed.
+"""
+
 REPORT_ANALYSIS_INSTRUCTIONS = """\
 ## Capability: 化验/检查报告解读（用户明确意图时）
 仅当用户明确要求解读化验单、检查报告、指标对照等时启用本格式；
@@ -287,6 +296,8 @@ def build_instructions(
         sections.append(CASE_INSTRUCTIONS.strip())
     if any(name.startswith("mcp_") for name in mounted_names):
         sections.append(MCP_INSTRUCTIONS.strip())
+    if "sandbox_exec" in mounted_names:
+        sections.append(SANDBOX_INSTRUCTIONS.strip())
     return "\n\n".join(sections)
 
 

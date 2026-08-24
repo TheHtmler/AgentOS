@@ -14,7 +14,7 @@
 浏览器
   -> 云服务器：宝塔 Nginx、HTTPS、frps
   -> FRP 隧道
-  -> Mac mini：frpc、Next.js(web/ops)、FastAPI、Pydantic AI、Ollama、PostgreSQL、Sandbox
+  -> Mac mini：frpc、Next.js(web/ops)、FastAPI、Pydantic AI、Ollama、PostgreSQL、Sandbox Manager、Docker
 ```
 
 云服务器是唯一公网入口。Mac mini 不直接暴露 Ollama、PostgreSQL、MinIO 控制台、Docker Socket 或 Sandbox Manager。
@@ -40,8 +40,8 @@ Ops 部署步骤见 [14-macmini-frp-ops-deploy.md](14-macmini-frp-ops-deploy.md)
 - Agent API：FastAPI + Pydantic AI。
 - Next.js：`apps/web`（`:3000`）与 `apps/ops`（`:3001`），BFF 本机访问 Agent API。
 - PostgreSQL：对话、Run、HITL、审计记录的事实来源。
-- Sandbox Manager：唯一可以控制 Docker 的内部服务。
-- 用户 Sandbox：按需启动、单并发起步、受资源和网络策略限制。
+- Sandbox Manager：唯一可以控制 Docker 的内部服务，默认监听私有 `127.0.0.1:8788`。
+- 用户 Sandbox：按需启动短生命周期容器；按用户 UUID 持久化工作区，单并发起步，受资源和网络策略限制。
 - `frpc`：把 Web / Ops /（如需）Agent API 隧道到云服务器，供宝塔反代。
 
 ## 技术选型
@@ -87,9 +87,9 @@ SSE 负责 Agent 事件输出；普通 HTTP POST 负责创建、恢复和取消�
 | 对话与运行 | `threads`、`messages`、`runs`、`run_events`                     |
 | 工具与审批 | `mcp_servers`、`tools`、`tool_calls`、`interrupts`、`approvals` |
 | 知识与文件 | `knowledge_documents`、`knowledge_chunks`、`artifacts`          |
-| Runtime    | `sandboxes`、`usage_records`、`audit_logs`                      |
+| Runtime    | `usage_records`、`audit_logs`                                   |
 
-`run_events` 采用 append-only 设计，并使用 `(run_id, seq)` 唯一约束。前端断线重连时传入最后一个 `seq`，后端补发缺失事件。审批、恢复、取消和工具调用都必须带 `idempotency_key`。
+`run_events` 采用 append-only 设计，并使用 `(run_id, seq)` 唯一约束。前端断线重连时传入最后一个 `seq`，后端补发缺失事件。审批、恢复、取消和工具调用都必须带 `idempotency_key`。当前 Sandbox 工作区由 Manager 管理，命令输出复用 `artifacts(kind='sandbox')`，尚未增加独立 `sandboxes` 表。
 
 `users` 是登录账户，`cases` 是被咨询/被照护的主体档案（实现已从早期的 `patient_cases` 命名为平台级 `cases`，见[领域 Agent 与患者上下文架构](12-domain-agents-and-patient-context.md))，不能用 `user_id` 代替 `case_id`。新 Thread 和 Run 应同时记录 `agent_id`、`case_id` 和所有者范围；公共知识库只读共享，主体 Artifact、事实、计划和历史消息必须按主体授权隔离。
 
@@ -130,7 +130,7 @@ general-agent
 
 - 初始只保留一个本地模型，推理并发设为 `1`。
 - Context 当前为 16k（qwen3-vl，KV 约 2.5GB）；升 24k 需先验证 swap，步骤见 [15](15-model-upgrade-qwen3-vl.md)。
-- 每次最多一个 Sandbox，内存限制为 512MB 到 1GB，超时自动销毁。
+- 每次最多一个 Sandbox，默认内存 512MB、CPU 1 核、PID 128、超时 120 秒；容器超时自动销毁，用户工作区保留。
 - 初期不常驻 Redis、MinIO、多 Worker 或大量 MCP Server。
 - 若 Memory Pressure 或 Swap 持续增长，先缩小模型/Context，或路由至第三方 API。
 
@@ -139,7 +139,7 @@ general-agent
 - Browser 仅访问云服务器的同一 HTTPS 域名。
 - FRP 只开放 FastAPI 内部入口；使用令牌、TLS 和网络访问限制。
 - Sandbox 默认禁网、非 root、限制 CPU/内存/PID/磁盘；按需要通过受控代理开通出网。
-- Agent 没有 Docker Socket 权限；只有 Sandbox Manager 能创建和销毁容器。
+- Agent API 不直接调用 Docker；只有独立 Sandbox Manager 能创建和销毁容器。Manager 也不能被 Web/FRP 公网访问。
 - Tool Policy 在调用 MCP 或 Sandbox 前执行，并记录审计事件。
 
 ## 未来演进触发条件

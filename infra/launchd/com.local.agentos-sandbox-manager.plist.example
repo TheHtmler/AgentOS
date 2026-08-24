@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Prefer: ./scripts/install-launchd.sh sandbox
+  Requires services/sandbox-manager/.env with SANDBOX_MANAGER_TOKEN.
+  Keep this service on loopback; do not add it to FRP or Nginx.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.agentos-sandbox-manager</string>
+  <key>WorkingDirectory</key>
+  <string>__AGENTOS_ROOT__/services/sandbox-manager</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__UV_BIN__</string>
+    <string>run</string>
+    <string>--directory</string>
+    <string>__AGENTOS_ROOT__/services/sandbox-manager</string>
+    <string>uvicorn</string>
+    <string>sandbox_manager.main:app</string>
+    <string>--host</string>
+    <string>127.0.0.1</string>
+    <string>--port</string>
+    <string>8788</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/agentos-sandbox-manager.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/agentos-sandbox-manager.err.log</string>
+</dict>
+</plist>

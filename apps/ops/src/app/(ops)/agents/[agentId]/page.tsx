@@ -42,6 +42,37 @@ type OpsAgentDetail = {
   versions: OpsAgentVersion[];
 };
 
+type ToolAction = "inherit" | "allow" | "ask" | "deny";
+
+type OpsTool = {
+  name: string;
+  domain: string;
+  risk: string;
+  default_action: "allow" | "ask" | "deny";
+  effective_action: "allow" | "ask" | "deny";
+  enabled: boolean;
+  description: string;
+  source: "builtin" | "mcp";
+};
+
+type OpsToolsResponse = {
+  tools: OpsTool[];
+};
+
+const ACTION_LABELS: Record<ToolAction, string> = {
+  inherit: "继承平台默认",
+  allow: "允许",
+  ask: "每次审批",
+  deny: "禁止",
+};
+
+const RISK_LABELS: Record<string, string> = {
+  read: "只读",
+  write: "写入",
+  exec: "执行",
+  external: "外部访问",
+};
+
 export default function AgentDetailPage() {
   const params = useParams<{ agentId: string }>();
   const [agent, setAgent] = useState<OpsAgentDetail | null>(null);
@@ -51,17 +82,23 @@ export default function AgentDetailPage() {
   const [overlay, setOverlay] = useState("");
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [caseEnabled, setCaseEnabled] = useState(false);
-  const [policyText, setPolicyText] = useState("");
   const [knowledgeBaseSlugsText, setKnowledgeBaseSlugsText] = useState("");
   const [providers, setProviders] = useState<ModelProviderOption[]>([]);
   const [modelProviderId, setModelProviderId] = useState("");
+  const [toolSpecs, setToolSpecs] = useState<OpsTool[]>([]);
+  const [toolActions, setToolActions] = useState<Record<string, ToolAction>>({});
 
-  const applyVersion = useCallback((version: OpsAgentVersion | null) => {
+  const applyVersion = useCallback((version: OpsAgentVersion | null, specs: OpsTool[]) => {
     setOverlay(version?.system_prompt_overlay ?? "");
     setMemoryEnabled(version?.memory_enabled ?? false);
     setCaseEnabled(version?.case_enabled ?? false);
-    setPolicyText(
-      version?.tool_policy_overrides ? JSON.stringify(version.tool_policy_overrides, null, 2) : "",
+    const overrides = version?.tool_policy_overrides ?? {};
+    setToolActions(
+      Object.fromEntries(
+        specs
+          .filter((spec) => spec.source === "builtin")
+          .map((spec) => [spec.name, overrides[spec.name] ?? "inherit"]),
+      ) as Record<string, ToolAction>,
     );
     setKnowledgeBaseSlugsText(version?.knowledge_base_slugs?.join(", ") ?? "");
     setModelProviderId(version?.model_provider_id ?? "");
@@ -69,9 +106,13 @@ export default function AgentDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const detail = await opsJson<OpsAgentDetail>(`/api/ops/agents/${params.agentId}`);
+      const [detail, toolsResponse] = await Promise.all([
+        opsJson<OpsAgentDetail>(`/api/ops/agents/${params.agentId}`),
+        opsJson<OpsToolsResponse>("/api/ops/tools"),
+      ]);
       setAgent(detail);
-      applyVersion(detail.published_version);
+      setToolSpecs(toolsResponse.tools);
+      applyVersion(detail.published_version, toolsResponse.tools);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载失败");
@@ -96,14 +137,13 @@ export default function AgentDetailPage() {
     setSaving(true);
     setError(null);
     try {
-      let tool_policy_overrides: Record<string, "allow" | "ask" | "deny"> | null = null;
-      if (policyText.trim()) {
-        const parsed = JSON.parse(policyText) as unknown;
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          throw new Error('工具策略必须是 JSON 对象，例如 {"web_search":"ask"}');
-        }
-        tool_policy_overrides = parsed as Record<string, "allow" | "ask" | "deny">;
-      }
+      const knownNames = new Set(toolSpecs.map((spec) => spec.name));
+      const previousOverrides = agent?.published_version?.tool_policy_overrides ?? {};
+      const tool_policy_overrides = Object.fromEntries(
+        Object.entries({ ...previousOverrides, ...toolActions }).filter(
+          ([name, action]) => !knownNames.has(name) || action !== "inherit",
+        ),
+      ) as Record<string, "allow" | "ask" | "deny">;
       const knowledge_base_slugs = knowledgeBaseSlugsText.trim()
         ? knowledgeBaseSlugsText
             .split(",")
@@ -116,20 +156,18 @@ export default function AgentDetailPage() {
           system_prompt_overlay: overlay,
           memory_enabled: memoryEnabled,
           case_enabled: caseEnabled,
-          tool_policy_overrides,
+          tool_policy_overrides: Object.keys(tool_policy_overrides).length
+            ? tool_policy_overrides
+            : null,
           knowledge_base_slugs,
           model_provider_id: modelProviderId === "" ? null : modelProviderId,
         }),
       });
       setAgent(updated);
-      applyVersion(updated.published_version);
+      applyVersion(updated.published_version, toolSpecs);
       toast.show("新版本已发布");
     } catch (err) {
-      if (err instanceof SyntaxError) {
-        setError("工具策略 JSON 格式无效");
-      } else {
-        setError(err instanceof Error ? err.message : "发布失败");
-      }
+      setError(err instanceof Error ? err.message : "发布失败");
     } finally {
       setSaving(false);
     }
@@ -199,16 +237,47 @@ export default function AgentDetailPage() {
                 档案能力 {boolZh(caseEnabled)}
               </label>
             </div>
-            <label>
-              工具策略覆盖（可选 JSON）
-              <textarea
-                rows={5}
-                value={policyText}
-                spellCheck={false}
-                placeholder='{"web_search":"ask"}'
-                onChange={(event) => setPolicyText(event.target.value)}
-              />
-            </label>
+            <div className="stack">
+              <div>
+                <h3 className="section-title">内置工具策略</h3>
+                <p className="field-hint">
+                  配置写入新版本；“继承平台默认”由服务端环境策略决定。Sandbox 执行默认需要审批。
+                </p>
+              </div>
+              <div className="tool-policy-list">
+                {toolSpecs
+                  .filter((spec) => spec.source === "builtin")
+                  .map((spec) => (
+                    <div key={spec.name} className="tool-policy-row">
+                      <div>
+                        <div className="tool-policy-row__title">
+                          <code>{spec.name}</code>
+                          <span className="pill">{RISK_LABELS[spec.risk] ?? spec.risk}</span>
+                          {!spec.enabled ? (
+                            <span className="pill pill--danger">平台未启用</span>
+                          ) : null}
+                        </div>
+                        <div className="field-hint">{spec.description}</div>
+                      </div>
+                      <select
+                        value={toolActions[spec.name] ?? "inherit"}
+                        onChange={(event) =>
+                          setToolActions((current) => ({
+                            ...current,
+                            [spec.name]: event.target.value as ToolAction,
+                          }))
+                        }
+                      >
+                        {(Object.keys(ACTION_LABELS) as ToolAction[]).map((action) => (
+                          <option key={action} value={action}>
+                            {ACTION_LABELS[action]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+              </div>
+            </div>
             <label>
               知识库范围（可选，逗号分隔 slug；留空 = 不限制，能查全部知识库）
               <input
@@ -255,7 +324,11 @@ export default function AgentDetailPage() {
                   <span>模型 {providerLabel(version.model_provider_id)}</span>
                   <span>{formatTime(version.created_at)}</span>
                 </div>
-                <button type="button" className="secondary" onClick={() => applyVersion(version)}>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => applyVersion(version, toolSpecs)}
+                >
                   载入到编辑区
                 </button>
               </article>

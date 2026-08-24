@@ -40,6 +40,7 @@ class AgentRuntime:
         search_router: SearchRouter | None = None,
         fetch_router: FetchRouter | None = None,
         ollama_http_client: httpx.AsyncClient | None = None,
+        sandbox_http_client: httpx.AsyncClient | None = None,
         mcp_toolsets: list[AbstractToolset[AgentDeps]] | None = None,
     ) -> None:
         self.agent = agent
@@ -48,6 +49,7 @@ class AgentRuntime:
         self.fetch_router = fetch_router
         # Shared with background auto-title jobs (same process lifetime as the agent).
         self.ollama_http_client = ollama_http_client
+        self.sandbox_http_client = sandbox_http_client
         self.mcp_toolsets = mcp_toolsets or []
         self._run_tasks: dict[UUID, asyncio.Task[None]] = {}
         # Per-run fan-out for HITL resume event streams (see run_events_broker).
@@ -172,6 +174,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         trust_env=False,
         headers={"User-Agent": "AgentOS-fetch_url/0.1"},
     )
+    sandbox_http_client = (
+        httpx.AsyncClient(
+            base_url=settings.sandbox_manager_url.rstrip("/"),
+            timeout=httpx.Timeout(timeout=settings.sandbox_timeout_seconds + 15, connect=5.0),
+            trust_env=False,
+        )
+        if settings.sandbox_enabled and settings.sandbox_manager_url.strip()
+        else None
+    )
     search_router = build_search_router(
         provider_names=settings.search_providers,
         tavily_api_key=settings.tavily_api_key,
@@ -208,6 +219,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         search_router=search_router if settings.search_enabled else None,
         fetch_router=fetch_router if settings.fetch_url_enabled else None,
         ollama_http_client=http_client,
+        sandbox_http_client=sandbox_http_client,
         mcp_toolsets=mcp_toolsets,
     )
     app.state.runtime = runtime
@@ -255,6 +267,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             await close_database()
         finally:
             await fetch_http_client.aclose()
+            if sandbox_http_client is not None:
+                await sandbox_http_client.aclose()
             await search_http_client.aclose()
             await http_client.aclose()
 

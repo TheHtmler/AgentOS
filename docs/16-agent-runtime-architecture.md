@@ -67,6 +67,10 @@
   包含来源与耗时，供 Web 历史回放和 Ops 会话审计使用。当前仍是单 stdio 服务器，
   服务器命令与 allowlist 来自服务配置，不是 Ops 动态安装。
 - `knowledge_search` 的知识库范围按 Agent 分类可见，不按挂载与否区分：`agent_versions.knowledge_base_slugs`（`NULL` = 不限制，能查全部激活的 `KnowledgeBase`；非空列表只限定到那几个 slug)从 `AgentVersion` 经 `AgentDeps` 传入，`search_knowledge_chunks` 强制过滤——不是模型可传的参数，垂类 agent 不能被话术引导去读别的垂类内容。General（`kind="general"`)默认不限制；`imd`（遗传代谢）限定到 `mma-pa`。
+- `sandbox_exec` 是用户级执行能力：只有 `SANDBOX_ENABLED=true` 且 Agent API 配置了 Manager URL/token 时才挂载，默认策略为 `ask`。它只把当前用户 UUID、Run UUID、相对工作目录、命令和硬上限转发给独立 Sandbox Manager；模型不能指定宿主机路径、镜像、挂载或 Docker 参数。
+- Sandbox Manager（`services/sandbox-manager`）是唯一控制 Docker 的进程。每次命令使用短生命周期容器，用户工作区按 `workspace_root/{user_id}` 持久化；容器使用 `--network none`、非 root UID/GID、只读根文件系统、仅挂载 `/workspace`、丢弃 capabilities、`no-new-privileges`、CPU/内存/PID/超时/输出限制。同一用户串行执行，默认全局并发 1。
+- Sandbox 输出超过预览上限时写入现有 owner-scoped Artifact（`kind="sandbox"`），模型拿到预览和 `output_artifact_id`，后续通过 `read_artifact` 分页；命令请求和结果摘要进入既有 `run_events`。Manager 只监听私有地址，不能通过 Web/FRP 暴露。
+- Ops 的 Agent 版本发布页按注册表展示内置工具，并可逐项选择「继承平台默认 / 允许 / 每次审批 / 禁止」；后端拒绝未注册的工具名，发布仍创建不可变 `AgentVersion`。
 
 ## 持久化、回放与 HITL
 
@@ -77,7 +81,7 @@
 
 ## 与 deepseek-harness / 主流设计的取舍
 
-**已采用**（本轮落地）：指令/数据快照分离（≈ PromptSection/PromptContext);run 前预算 + 每 step 压力检查（≈ token-meter + pre-step compaction 触发）；工具结果首尾剪枝（≈ toolResultPruner);Artifact 外溢 + 分页读（≈ spill store)；检查点续跑（≈ approval seam + session log 投影）。
+**已采用**（本轮落地）：指令/数据快照分离（≈ PromptSection/PromptContext);run 前预算 + 每 step 压力检查（≈ token-meter + pre-step compaction 触发）；工具结果首尾剪枝（≈ toolResultPruner);Artifact 外溢 + 分页读（≈ spill store)；检查点续跑（≈ approval seam + session log 投影）；独立 Manager + 用户工作区 + 受限容器执行。
 
 **明确不引入**，及原因：
 
@@ -92,7 +96,7 @@
 ## 演进触发条件
 
 - Ops 时间线的 `context_budget` 事件（或 `step budget trim` / `dropped oldest run` 日志）高频 → 先升 `num_ctx` 24576(16GB 需 `iogpu.wired_limit_mb=12288`，步骤见 [15-model-upgrade-qwen3-vl.md](15-model-upgrade-qwen3-vl.md))，再考虑摘要压缩。
-- Skills 需求 → 先落地可审核、版本化的指令模块（挂到 AgentVersion），不把 GitHub/本地 Skill 当作任意可执行插件；需要执行权限时另立安全评审与沙箱边界。
+- Skills 需求 → 先落地可审核、版本化的指令模块（挂到 AgentVersion），不把 GitHub/本地 Skill 当作任意可执行插件；需要执行权限时统一复用 `sandbox_exec` 和 Manager 安全边界。
 - MCP 需求 → 先完成多服务器注册、连接探测、allowlist 与 AgentVersion 绑定，再开放 Ops 写配置；当前单 stdio + 环境配置保持只读外部能力边界。
 - 语音输入 → ASR 旁路服务（whisper.cpp / FunASR)，复用 PaddleOCR 的 sidecar 模式，不换模型。
 - prompt/模型改动验收 →（已落地)`scripts/eval_agent_scenarios.py` + `eval/scenarios/*.json`：跑真实 Ollama 模型验证工具选择/HITL 触发/不虚构三类场景，改 `agent.py`/工具描述/`SYSTEM_INSTRUCTIONS` 前后手动跑一次（见 AGENTS.md）；不进 pytest/门禁（依赖真实模型，非确定性）。`eval/runner.py` 仍是纯函数级 golden suite（仅覆盖 `calculate`/`time_diff`），两者不是同一层。

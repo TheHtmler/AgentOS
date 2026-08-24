@@ -7,7 +7,7 @@ AgentOS is a work-in-progress runtime platform for building controllable, durabl
 The project is being built in public from a small, verifiable core toward tool execution, human approval, isolated sandboxes, and multi-tenant operation.
 
 > [!WARNING]
-> AgentOS is under active development and is not production-ready. Invite-only authentication, per-user Thread isolation, the core Human-in-the-Loop (HITL) approval flow, and optional read-only MCP support are implemented; organization tenancy and sandbox execution are not implemented yet.
+> AgentOS is under active development and is not production-ready. Invite-only authentication, per-user Thread isolation, the core Human-in-the-Loop (HITL) approval flow, optional read-only MCP support, and an opt-in Docker Sandbox MVP are implemented; organization tenancy and production Sandbox operations are not complete.
 
 ## Available Today
 
@@ -27,6 +27,8 @@ The project is being built in public from a small, verifiable core toward tool e
 - Multi-Agent selection, generic Case records, and Case-scoped Run, Artifact, and memory boundaries.
 - Basic Case membership roles (`owner`, `editor`, `viewer`) with same-origin member management for existing active users.
 - Curated MMA/PA `knowledge_search`, growth assessment, and an optional read-only PubMed MCP toolset (disabled by default).
+- An opt-in user-level Docker Sandbox Manager with per-user workspaces, bounded network-disabled execution, and owner-scoped output Artifacts.
+- Ops controls for per-Agent built-in tool policies: inherit, allow, ask, or deny.
 - Persistent HITL interrupts with approval, denial, idempotent resume, cancellation, and timeout auto-denial.
 - Tool-call timeline cards, approval cards, thread rename/delete, and automatic thread titles.
 - Typed backend checks with pytest, Ruff, and Pyright, plus ESLint and Prettier for the web app.
@@ -38,7 +40,9 @@ flowchart LR
     Browser["Browser"] -->|"HTTP / SSE"| Web["Next.js Web"]
     Web -->|"Same-origin proxy"| API["FastAPI Agent API"]
     API -->|"Pydantic AI"| Ollama["Ollama"]
-    API -->|"Threads, runs, events"| PostgreSQL["PostgreSQL"]
+    API -->|"Threads, runs, events, Artifacts"| PostgreSQL["PostgreSQL"]
+    API -->|"Private token HTTP"| Sandbox["Sandbox Manager"]
+    Sandbox -->|"Bounded containers"| Docker["Docker"]
 ```
 
 Browser traffic stays on the Next.js origin. Route Handlers proxy health, chat streams, and thread history to the Agent API, while the Agent API owns model execution and durable state.
@@ -70,6 +74,7 @@ All commands below run from the repository root.
 ```bash
 pnpm install
 uv sync --directory services/agent-api
+uv sync --directory services/sandbox-manager
 ```
 
 ### 2. Configure the environment
@@ -102,6 +107,16 @@ uv run --directory services/agent-api fastapi dev src/agent_api/main.py --port 8
 ```
 
 The health endpoint is available at `http://127.0.0.1:8000/health`, and interactive API documentation is available at `http://127.0.0.1:8000/docs`.
+
+### 4a. Optional: start the Sandbox Manager
+
+Copy `services/sandbox-manager/.env.example` to `.env`, set a random
+`SANDBOX_MANAGER_TOKEN`, and use the same token plus `SANDBOX_ENABLED=true` in the
+Agent API `.env`. Then run:
+
+```bash
+uv run --directory services/sandbox-manager uvicorn sandbox_manager.main:app --host 127.0.0.1 --port 8788
+```
 
 ### 5. Start the web app
 
@@ -144,7 +159,8 @@ Backend integration tests require the development PostgreSQL instance and an up-
 ```text
 AgentOS/
 ├── apps/web/                 Next.js user interface and same-origin API proxies
-├── services/agent-api/      FastAPI, Pydantic AI, persistence, and migrations
+├── services/agent-api/       FastAPI, Pydantic AI, persistence, and migrations
+├── services/sandbox-manager/ Private Docker execution boundary
 ├── packages/                Shared packages (reserved)
 ├── infra/postgres/          Local PostgreSQL Compose configuration
 └── docs/                    Architecture, implementation, and operations notes
@@ -155,7 +171,7 @@ Start with the [documentation index](docs/README.md) for the architecture baseli
 ## Roadmap
 
 - Broader read-only MCP integration and controlled local tools.
-- Per-user Docker sandboxes with resource limits, timeouts, and network isolation.
+- Sandbox terminal/WebSocket UX, production image governance, quotas, cleanup, and broader execution observability.
 - Artifact persistence and audit records.
 - Organization-level tenancy, invitation delivery, user disablement, and administrator audit.
 - Multiple model providers, durable workflows, and observability.

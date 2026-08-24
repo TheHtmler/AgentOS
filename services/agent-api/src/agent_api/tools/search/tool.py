@@ -33,6 +33,8 @@ class AgentDeps:
     persist_tool_events: bool = True
     # Shared Ollama/OpenAI-compatible client for embeddings (knowledge hybrid search).
     http_client: httpx.AsyncClient | None = None
+    # Internal Sandbox Manager client; the model never receives this transport directly.
+    sandbox_client: httpx.AsyncClient | None = None
     # From the published AgentVersion: None = unrestricted (every active
     # KnowledgeBase); a non-empty list scopes knowledge_search to those slugs.
     knowledge_base_slugs: list[str] | None = None

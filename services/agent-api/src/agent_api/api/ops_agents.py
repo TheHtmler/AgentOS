@@ -13,6 +13,7 @@ from sqlalchemy import and_, func, select, update
 from agent_api.api.ops_auth import get_ops_subject
 from agent_api.db.models import Agent, AgentVersion, ModelProvider
 from agent_api.db.session import session_factory
+from agent_api.tools.registry import get_tool_spec
 
 router = APIRouter(prefix="/v1/ops/agents", tags=["ops-agents"])
 
@@ -213,6 +214,14 @@ async def publish_ops_agent_version(
 ) -> OpsAgentDetailOut:
     overrides: dict[str, object] | None = None
     if payload.tool_policy_overrides is not None:
+        unknown = sorted(
+            name for name in payload.tool_policy_overrides if get_tool_spec(name) is None
+        )
+        if unknown:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Unknown tool policy override(s): {', '.join(unknown)}",
+            )
         overrides = {name: action for name, action in payload.tool_policy_overrides.items()}
 
     async with session_factory() as session, session.begin():

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Install/refresh LaunchAgents for api / web / ops on Mac mini.
+# Install/refresh LaunchAgents for api / web / ops / sandbox on Mac mini.
 # Usage:
 #   ./scripts/install-launchd.sh           # all
 #   ./scripts/install-launchd.sh api web
 #   ./scripts/install-launchd.sh ops
+#   ./scripts/install-launchd.sh sandbox
 
 set -euo pipefail
 
@@ -68,8 +69,12 @@ install_one() {
       label="com.local.agentos-ops"
       src="$ROOT/infra/launchd/com.local.agentos-ops.plist.example"
       ;;
+    sandbox)
+      label="com.local.agentos-sandbox-manager"
+      src="$ROOT/infra/launchd/com.local.agentos-sandbox-manager.plist.example"
+      ;;
     *)
-      echo "unknown target: $target (api|web|ops)" >&2
+      echo "unknown target: $target (api|web|ops|sandbox)" >&2
       exit 1
       ;;
   esac
