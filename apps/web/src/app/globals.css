@@ -751,10 +751,61 @@ body {
 .agentos-mermaid-canvas {
   overflow-x: auto;
   padding: 0.75rem;
+  cursor: zoom-in;
 }
 
 .agentos-mermaid-canvas svg {
   max-width: 100%;
+  height: auto;
+}
+
+.agentos-mermaid-actions {
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.agentos-mermaid-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  background: var(--overlay);
+}
+
+.agentos-mermaid-overlay-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  background: var(--panel-muted);
+}
+
+.agentos-mermaid-overlay-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.agentos-mermaid-overlay-scroll {
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 1rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.agentos-mermaid-overlay-canvas {
+  display: inline-block;
+  border-radius: 8px;
+  background: var(--surface-code);
+  padding: 0.5rem;
+}
+
+.agentos-mermaid-overlay-canvas svg {
+  display: block;
   height: auto;
 }
 

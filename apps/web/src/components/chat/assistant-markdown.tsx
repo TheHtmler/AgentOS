@@ -8,12 +8,26 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type UIEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
+
+function subscribeNoop() {
+  return () => {};
+}
+
+function useIsClient() {
+  return useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
+}
 
 function collectText(node: ReactNode): string {
   if (node === null || node === undefined || typeof node === "boolean") {
@@ -54,11 +68,110 @@ function extractCodeParts(children: ReactNode): { language: string | null; codeT
 
 let mermaidRenderSeq = 0;
 
+function MermaidZoomOverlay({ svg, onClose }: { svg: string; onClose: () => void }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [naturalWidth, setNaturalWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  // mermaid sets max-width:100% on the svg; measure the viewBox once and then
+  // drive an explicit pixel width so zoom actually enlarges past the viewport.
+  useEffect(() => {
+    const svgEl = scrollRef.current?.querySelector("svg");
+    const width = svgEl?.viewBox?.baseVal?.width;
+    if (width && width > 0) {
+      setNaturalWidth(width);
+    }
+  }, []);
+
+  useEffect(() => {
+    const svgEl = scrollRef.current?.querySelector("svg");
+    if (!svgEl || naturalWidth === null) {
+      return;
+    }
+    svgEl.style.maxWidth = "none";
+    svgEl.style.width = `${Math.round(naturalWidth * zoom)}px`;
+    svgEl.style.height = "auto";
+  }, [zoom, naturalWidth]);
+
+  return (
+    <div
+      className="agentos-mermaid-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="放大查看图表"
+    >
+      <div className="agentos-mermaid-overlay-toolbar">
+        <div className="agentos-mermaid-overlay-zoom">
+          <button
+            type="button"
+            className="agentos-code-block-copy"
+            onClick={() => setZoom((value) => Math.max(0.5, value / 1.25))}
+            aria-label="缩小"
+          >
+            −
+          </button>
+          <span>{Math.round(zoom * 100)}%</span>
+          <button
+            type="button"
+            className="agentos-code-block-copy"
+            onClick={() => setZoom((value) => Math.min(4, value * 1.25))}
+            aria-label="放大"
+          >
+            +
+          </button>
+          <button type="button" className="agentos-code-block-copy" onClick={() => setZoom(1)}>
+            重置
+          </button>
+        </div>
+        <button
+          type="button"
+          className="agentos-code-block-copy"
+          onClick={onClose}
+          aria-label="关闭"
+        >
+          ✕
+        </button>
+      </div>
+      <div
+        ref={scrollRef}
+        className="agentos-mermaid-overlay-scroll"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onClose();
+          }
+        }}
+      >
+        <div className="agentos-mermaid-overlay-canvas" dangerouslySetInnerHTML={{ __html: svg }} />
+      </div>
+    </div>
+  );
+}
+
 function MermaidBlock({ codeText }: { codeText: string }) {
   // Keep the last successfully rendered diagram on screen; while the fence is
   // still streaming in, parses fail and the source view shows instead.
   const [svg, setSvg] = useState<string | null>(null);
   const [showCode, setShowCode] = useState(false);
+  const [zoomOpen, setZoomOpen] = useState(false);
+  const isClient = useIsClient();
 
   useEffect(() => {
     let cancelled = false;
@@ -96,13 +209,22 @@ function MermaidBlock({ codeText }: { codeText: string }) {
       <div className="agentos-code-block-toolbar">
         <span className="agentos-code-block-lang">mermaid</span>
         {svg !== null ? (
-          <button
-            type="button"
-            onClick={() => setShowCode((value) => !value)}
-            className="agentos-code-block-copy"
-          >
-            {showCode ? "图表" : "代码"}
-          </button>
+          <span className="agentos-mermaid-actions">
+            <button
+              type="button"
+              onClick={() => setZoomOpen(true)}
+              className="agentos-code-block-copy"
+            >
+              放大
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCode((value) => !value)}
+              className="agentos-code-block-copy"
+            >
+              {showCode ? "图表" : "代码"}
+            </button>
+          </span>
         ) : null}
       </div>
       {showCode || svg === null ? (
@@ -112,8 +234,19 @@ function MermaidBlock({ codeText }: { codeText: string }) {
           </pre>
         </div>
       ) : (
-        <div className="agentos-mermaid-canvas" dangerouslySetInnerHTML={{ __html: svg }} />
+        <div
+          className="agentos-mermaid-canvas"
+          title="点击放大"
+          onClick={() => setZoomOpen(true)}
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
       )}
+      {zoomOpen && isClient && svg !== null
+        ? createPortal(
+            <MermaidZoomOverlay svg={svg} onClose={() => setZoomOpen(false)} />,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
