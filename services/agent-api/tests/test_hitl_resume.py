@@ -1,6 +1,7 @@
 """HITL resume / cancel API integration tests."""
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from typing import cast
 from uuid import UUID
@@ -12,6 +13,7 @@ from pydantic_ai import Agent, RunContext, Tool
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import DeferredToolRequests
 
+from agent_api.db.chat_store import get_run_message_history
 from agent_api.db.models import Interrupt, Thread
 from agent_api.db.session import close_database, session_factory
 from agent_api.main import app
@@ -129,6 +131,47 @@ async def test_resume_approve_completes_run(authenticated_api_user: UUID) -> Non
                 )
                 assert row is not None
                 assert row.status == "approved"
+    finally:
+        if thread_id is not None:
+            async with session_factory() as session, session.begin():
+                thread = await session.get(Thread, thread_id)
+                if thread is not None:
+                    await session.delete(thread)
+
+
+@pytest.mark.anyio
+async def test_resume_checkpoint_stays_snapshot_free(authenticated_api_user: UUID) -> None:
+    """The per-run context snapshot reaches the model but must never be persisted."""
+
+    app.state.runtime = AgentRuntime(
+        agent=_approval_agent(),
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+    thread_id: UUID | None = None
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            thread_id, run_id, tool_call_id = await _start_waiting_run(client)
+            resume = await client.post(
+                f"/v1/runs/{run_id}/resume",
+                json={
+                    "idempotency_key": "approve-snapshot-free",
+                    "decisions": [
+                        {"tool_call_id": tool_call_id, "decision": "approve"},
+                    ],
+                },
+            )
+            assert resume.status_code == 200
+            final = await _wait_for_status(client, run_id, "completed", "failed")
+            assert final["status"] == "completed"
+
+            async with session_factory() as session:
+                checkpoint = await get_run_message_history(session, run_id=run_id)
+            assert checkpoint is not None
+            serialized = json.dumps(checkpoint, ensure_ascii=False)
+            assert "以下为平台注入的本轮上下文数据" not in serialized
+            assert "请打开 https://example.com" in serialized
     finally:
         if thread_id is not None:
             async with session_factory() as session, session.begin():

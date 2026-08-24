@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from datetime import datetime
 from typing import cast
 
@@ -19,7 +20,7 @@ from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.toolsets import AbstractToolset
 
 from agent_api.config import Settings, get_settings
-from agent_api.context_budget import make_step_history_processor
+from agent_api.context_budget import BudgetReport, make_step_history_processor
 from agent_api.db.provider_store import ResolvedModelProfile, local_profile_from_settings
 from agent_api.runtime_context import format_runtime_context_pack
 from agent_api.tools.fetch.router import FetchRouter
@@ -402,6 +403,7 @@ def create_agent(
     case_bound: bool = False,
     tool_policy_overrides: dict[str, str] | None = None,
     toolsets: list[AbstractToolset[AgentDeps]] | None = None,
+    on_step_trim: Callable[[BudgetReport], None] | None = None,
 ) -> Agent[AgentDeps, AgentOutput]:
     """Build a stateless agent; the caller owns and closes the HTTP client."""
 
@@ -506,6 +508,7 @@ def create_agent(
                 make_step_history_processor(
                     context_window=profile.context_window,
                     output_reserve=profile.max_output_tokens,
+                    on_trim=on_step_trim,
                 )
             )
         ],

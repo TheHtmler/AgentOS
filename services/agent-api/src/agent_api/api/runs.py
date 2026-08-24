@@ -172,9 +172,11 @@ async def resume_run_execution(
 
     try:
         async with session_factory() as session, session.begin():
-            run = await get_run(session, run_id=run_id, user_id=user.id)
-            # Idempotent replays keep status running/completed; only a fresh leave from
-            # waiting_approval should start another background continuation.
+            # Lock the Run for the whole decide-and-check transaction: a concurrent
+            # replay with the same idempotency key blocks here, then observes
+            # status=running after the winner commits — so only the caller that
+            # actually leaves waiting_approval starts a background continuation.
+            run = await get_run(session, run_id=run_id, user_id=user.id, for_update=True)
             should_start = run.status == "waiting_approval"
             resolved = await apply_interrupt_decisions(
                 session,

@@ -195,10 +195,15 @@ async def get_run(
     *,
     run_id: UUID,
     user_id: UUID,
+    for_update: bool = False,
 ) -> Run:
-    """Return one Run for server-side observability."""
+    """Return one Run for server-side observability.
 
-    run = await session.scalar(
+    ``for_update=True`` row-locks the Run (not the joined Thread) so callers
+    can make check-then-act decisions that stay valid until commit.
+    """
+
+    statement = (
         select(Run)
         .join(Thread, Thread.id == Run.thread_id)
         .where(
@@ -207,6 +212,9 @@ async def get_run(
             Thread.deleted_at.is_(None),
         )
     )
+    if for_update:
+        statement = statement.with_for_update(of=Run)
+    run = await session.scalar(statement)
     if run is None:
         raise RunNotFoundError(f"Run {run_id} does not exist")
 
@@ -609,7 +617,7 @@ async def append_run_event(
     return event
 
 
-_OPS_TIMELINE_EVENT_TYPES = ("tool_call", "tool_result", "model_step")
+_OPS_TIMELINE_EVENT_TYPES = ("tool_call", "tool_result", "model_step", "context_budget")
 
 
 async def list_run_events_for_ops(
@@ -721,6 +729,45 @@ async def append_model_step_event(
             "duration_ms": duration_ms,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+        },
+    )
+
+
+async def append_context_budget_event(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    phase: str,
+    history_before_tokens: int,
+    history_after_tokens: int,
+    budget_tokens: int,
+    pruned_chars: int,
+    dropped_runs: int,
+    actions: list[str],
+    summary: str,
+) -> RunEvent:
+    """Record one context-budget trim (``phase`` = ``pre_run`` | ``step``).
+
+    Emitted only when the guard actually rewrote the outgoing view. This is the
+    data behind the docs/16 escalation trigger ("trim logs become frequent") —
+    an Ops-readable fact instead of a log line that only exists on the server.
+    The Ops timeline renders ``summary`` for any event type without frontend
+    changes.
+    """
+
+    return await append_run_event(
+        session,
+        run_id=run_id,
+        event_type="context_budget",
+        payload={
+            "phase": phase,
+            "history_before_tokens": history_before_tokens,
+            "history_after_tokens": history_after_tokens,
+            "budget_tokens": budget_tokens,
+            "pruned_chars": pruned_chars,
+            "dropped_runs": dropped_runs,
+            "actions": actions,
+            "summary": summary[:500],
         },
     )
 

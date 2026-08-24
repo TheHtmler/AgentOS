@@ -2,9 +2,11 @@
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -14,12 +16,13 @@ from agent_api.db.chat_store import (
     InvalidRunStateError,
     ThreadBusyError,
     apply_interrupt_decisions,
+    get_run,
     get_run_message_history,
     list_pending_interrupts,
     pause_run_for_approval,
     start_run,
 )
-from agent_api.db.models import Interrupt, Run
+from agent_api.db.models import Agent, Interrupt, Run, Thread, User
 from agent_api.hitl_types import ApprovalRequest, InterruptDecision
 
 
@@ -255,3 +258,56 @@ async def test_apply_decisions_idempotent(database_session: AsyncSession) -> Non
             )
     finally:
         await transaction.rollback()
+
+
+@pytest.mark.anyio
+async def test_get_run_for_update_holds_row_lock_until_commit() -> None:
+    """The resume endpoint's locked status check serializes concurrent resumes.
+
+    A second transaction taking the same row lock must wait (rejected here via
+    NOWAIT), then observe the winner's committed ``running`` status instead of
+    starting a duplicate background continuation.
+    """
+
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    run_id: UUID | None = None
+    thread_id: UUID | None = None
+    user_id: UUID | None = None
+
+    try:
+        async with factory() as setup, setup.begin():
+            agent = await setup.scalar(select(Agent).where(Agent.is_default.is_(True)))
+            if agent is None:
+                pytest.skip("no default agent seeded in database")
+            user = User(email=f"run-lock-{uuid4().hex}@example.com", status="active")
+            thread = Thread(user_id=user.id, agent_id=agent.id, title="run-lock-thread")
+            setup.add_all([user, thread])
+            await setup.flush()
+            run = Run(thread_id=thread.id, status="waiting_approval", model_name="test-model")
+            setup.add(run)
+            await setup.flush()
+            run_id, thread_id, user_id = run.id, thread.id, user.id
+
+        async with factory() as first, first.begin():
+            locked = await get_run(first, run_id=run_id, user_id=user_id, for_update=True)
+            assert locked.status == "waiting_approval"
+
+            async with factory() as second, second.begin():
+                with pytest.raises(OperationalError):
+                    await second.scalar(
+                        select(Run).where(Run.id == run_id).with_for_update(nowait=True),
+                    )
+
+            async with factory() as third:
+                # A plain read is unaffected and still sees the pre-commit state.
+                visible = await get_run(third, run_id=run_id, user_id=user_id)
+                assert visible.status == "waiting_approval"
+    finally:
+        if run_id is not None and thread_id is not None and user_id is not None:
+            async with factory() as cleanup, cleanup.begin():
+                for model, pk in ((Run, run_id), (Thread, thread_id), (User, user_id)):
+                    row = await cleanup.get(model, pk)
+                    if row is not None:
+                        await cleanup.delete(row)
+        await engine.dispose()

@@ -39,9 +39,11 @@ from agent_api.api.chat import (
     parse_model_messages_json,
     persist_cancelled_run,
     persist_completed_run,
+    persist_context_budget_event,
     persist_failed_run,
     persist_model_step_event,
     persist_text_delta,
+    schedule_context_budget_event,
     strip_thinking_parts,
     user_facing_run_error_message,
 )
@@ -310,12 +312,18 @@ async def stream_ag_ui_run(
             vision_count=len(vision_parts),
         )
         budget_report.log(run_id=started.run_id)
+        await persist_context_budget_event(started.run_id, budget_report, phase="pre_run")
         history = inject_context_snapshot(history, snapshot)
         agent = runtime.build_run_agent(
             system_prompt_overlay=version.system_prompt_overlay,
             tool_policy_overrides=version.tool_policy_overrides,
             case_bound=case_id is not None,
             model_profile=profile,
+            on_step_trim=lambda report: schedule_context_budget_event(
+                started.run_id,
+                report,
+                phase="step",
+            ),
         )
     except ModelProviderUnavailableError as error:
         logger.exception("Model provider unavailable for run %s", started.run_id)

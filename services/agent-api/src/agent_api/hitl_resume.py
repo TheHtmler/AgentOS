@@ -36,9 +36,11 @@ from agent_api.api.chat import (
     format_run_failure_message,
     parse_model_messages_json,
     persist_completed_run,
+    persist_context_budget_event,
     persist_failed_run,
     persist_model_step_event,
     persist_text_delta,
+    schedule_context_budget_event,
     strip_thinking_parts,
     user_facing_run_error_message,
 )
@@ -192,7 +194,7 @@ async def continue_run_after_approval(
         timezone_name=settings.runtime_timezone,
         locale=settings.runtime_locale,
     )
-    message_history, budget_report = apply_context_budget(
+    checkpoint_history, budget_report = apply_context_budget(
         message_history,
         context_window=profile.context_window,
         output_reserve=profile.max_output_tokens,
@@ -200,13 +202,21 @@ async def continue_run_after_approval(
         user_text=prompt,
     )
     budget_report.log(run_id=run_id)
+    await persist_context_budget_event(run_id, budget_report, phase="pre_run")
     # Prepend on resume: appending would split the checkpoint's trailing tool pair.
-    message_history = inject_context_snapshot(message_history, snapshot, position="start")
+    # The snapshot is per-run injected data: the model sees it, but durable history
+    # must stay snapshot-free — it is rebuilt and re-injected on every run.
+    message_history = inject_context_snapshot(checkpoint_history, snapshot, position="start")
     agent = runtime.build_run_agent(
         system_prompt_overlay=version.system_prompt_overlay,
         tool_policy_overrides=version.tool_policy_overrides,
         case_bound=case_id is not None,
         model_profile=profile,
+        on_step_trim=lambda report: schedule_context_budget_event(
+            run_id,
+            report,
+            phase="step",
+        ),
     )
 
     # No new user turn exists on resume: the adapter's frontend message list
@@ -272,7 +282,7 @@ async def continue_run_after_approval(
             new_messages = result.new_messages()
             model_messages = strip_thinking_parts(
                 parse_model_messages_json(
-                    ModelMessagesTypeAdapter.dump_json([*message_history, *new_messages]),
+                    ModelMessagesTypeAdapter.dump_json([*checkpoint_history, *new_messages]),
                 ),
             )
             if isinstance(result.output, DeferredToolRequests) and result.output.approvals:

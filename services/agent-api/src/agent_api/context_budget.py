@@ -193,17 +193,18 @@ class BudgetReport:
     dropped_runs: int = 0
     actions: list[str] = field(default_factory=lambda: [])
 
+    def summary(self) -> str:
+        """One-line digest of what the guard did; reused by logs and run_events."""
+
+        return (
+            f"history {self.history_before_tokens} -> {self.history_after_tokens} tokens "
+            f"(budget {self.budget_tokens}): {'; '.join(self.actions)}"
+        )
+
     def log(self, *, run_id: object) -> None:
         if not self.actions:
             return
-        logger.info(
-            "context budget trim for run %s: history %d -> %d tokens (budget %d); %s",
-            run_id,
-            self.history_before_tokens,
-            self.history_after_tokens,
-            self.budget_tokens,
-            "; ".join(self.actions),
-        )
+        logger.info("context budget trim for run %s: %s", run_id, self.summary())
 
 
 def apply_context_budget(
@@ -331,11 +332,14 @@ def make_step_history_processor(
     *,
     context_window: int,
     output_reserve: int,
+    on_trim: Callable[[BudgetReport], None] | None = None,
 ) -> Callable[[list[ModelMessage]], list[ModelMessage]]:
     """Build the per-step pressure check wired into the ProcessHistory capability.
 
     Runs before every model request (including mid-run tool-loop steps); only the
-    outgoing view is trimmed — durable history stays complete.
+    outgoing view is trimmed — durable history stays complete. ``on_trim`` fires
+    (synchronously) whenever the guard actually rewrote the view, so callers can
+    persist the fact; callback failures are logged and never break the request.
     """
 
     budget = max(
@@ -350,13 +354,12 @@ def make_step_history_processor(
     def process(messages: list[ModelMessage]) -> list[ModelMessage]:
         trimmed, report = trim_messages_to_step_budget(messages, budget_tokens=budget)
         if report.actions:
-            logger.info(
-                "step budget trim: history %d -> %d tokens (budget %d); %s",
-                report.history_before_tokens,
-                report.history_after_tokens,
-                report.budget_tokens,
-                "; ".join(report.actions),
-            )
+            logger.info("step budget trim: %s", report.summary())
+            if on_trim is not None:
+                try:
+                    on_trim(report)
+                except Exception:
+                    logger.exception("step budget on_trim callback failed")
         return trimmed
 
     return process

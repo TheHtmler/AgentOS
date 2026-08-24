@@ -71,7 +71,7 @@
 ## 持久化、回放与 HITL
 
 - 事实源：PostgreSQL。`threads`/`messages`/`runs`/`run_events`（有序 append-only)/`run_message_histories`(pydantic-ai 原始消息快照，续聊与 HITL 续跑的检查点）/`interrupts`/`artifacts`/`agents`/`agent_versions`/`user_memories`（含向量）/`cases`/`case_facts`/`knowledge_*`。
-- 每个 run 记录 `input_tokens`/`output_tokens`/`model_request_count`；预算裁剪动作记服务端日志。与 harness「模型可见即已记录」的差距：我们的快照/裁剪视图不落库，可由输入确定性重推，但没有逐 step 的事件级回放。
+- 每个 run 记录 `input_tokens`/`output_tokens`/`model_request_count`；预算裁剪动作除服务端日志外写入 `run_events`(`context_budget`,phase=`pre_run`/`step`,best-effort,含估算 token 与动作摘要）,Ops 会话事件时间线可读。与 harness「模型可见即已记录」的差距：快照/裁剪视图本身仍不落库，可由输入确定性重推，但没有逐 step 的事件级回放。
 - Web 过程时间线对 Thinking 与工具调用显示本轮/单工具耗时；工具历史 API 从 `run_events.tool_result.duration_ms` 回放该字段。若模型通过 AG-UI 返回可读 reasoning，Web 仅在当前 SSE 回合临时展示（最多 12000 字符）；加密 reasoning 会明确标注不可读。原始 reasoning、摘要和 provider raw 内容永不写入持久化历史；为保证 Responses 续聊，服务端只保留 `id`/`signature`/`provider_name` 这组 opaque 连续性元数据。
 - HITL:`DeferredToolRequests` 输出 → interrupt 落库 → AG-UI 审批卡 → 携带 DeferredToolResults 从检查点续跑；超时（默认 30 分钟）自动拒绝。同一 thread 同时只允许一个 running run。续跑不再是黑盒：`hitl_resume` 复用 AG-UI 流式管线（`AGUIAdapter` + 溢出重试 + 文本增量落库），事件经进程内 per-run broker(`run_events_broker`，带 replay buffer）扇出，`GET /v1/runs/{id}/stream` 让浏览器订阅续跑过程的工具调用/Thinking/文本流；无订阅者（超时自动拒绝、断连）时 broker 空转无害，前端拿不到流时回退原有的轮询 + 历史刷新。
 
@@ -91,9 +91,9 @@
 
 ## 演进触发条件
 
-- `step budget trim` / `dropped oldest run` 日志高频 → 先升 `num_ctx` 24576(16GB 需 `iogpu.wired_limit_mb=12288`，步骤见 [15-model-upgrade-qwen3-vl.md](15-model-upgrade-qwen3-vl.md))，再考虑摘要压缩。
+- Ops 时间线的 `context_budget` 事件（或 `step budget trim` / `dropped oldest run` 日志）高频 → 先升 `num_ctx` 24576(16GB 需 `iogpu.wired_limit_mb=12288`，步骤见 [15-model-upgrade-qwen3-vl.md](15-model-upgrade-qwen3-vl.md))，再考虑摘要压缩。
 - Skills 需求 → 先落地可审核、版本化的指令模块（挂到 AgentVersion），不把 GitHub/本地 Skill 当作任意可执行插件；需要执行权限时另立安全评审与沙箱边界。
 - MCP 需求 → 先完成多服务器注册、连接探测、allowlist 与 AgentVersion 绑定，再开放 Ops 写配置；当前单 stdio + 环境配置保持只读外部能力边界。
 - 语音输入 → ASR 旁路服务（whisper.cpp / FunASR)，复用 PaddleOCR 的 sidecar 模式，不换模型。
 - prompt/模型改动验收 →（已落地)`scripts/eval_agent_scenarios.py` + `eval/scenarios/*.json`：跑真实 Ollama 模型验证工具选择/HITL 触发/不虚构三类场景，改 `agent.py`/工具描述/`SYSTEM_INSTRUCTIONS` 前后手动跑一次（见 AGENTS.md）；不进 pytest/门禁（依赖真实模型，非确定性）。`eval/runner.py` 仍是纯函数级 golden suite（仅覆盖 `calculate`/`time_diff`），两者不是同一层。
-- 观测加深 →（部分落地)`run_events` 新增 `tool_result.duration_ms`（六个工具模块统一打点）与 `model_step`（整个 run 的墙钟耗时 + token 用量，`api/chat.py::persist_model_step_event`，best-effort 不影响主流程）；Ops `GET /v1/ops/sessions/{thread_id}/runs/{run_id}/events` + 会话详情页「查看事件」可读时间线。是整轮粗粒度，不是 tool-loop 内逐次模型请求的 per-step trace——AG-UI adapter（`pydantic_ai.ui.ag_ui.AGUIAdapter`）目前不暴露那个边界；仍未引入 OpenTelemetry（单机单进程，无 collector）。
+- 观测加深 →（部分落地)`run_events` 新增 `tool_result.duration_ms`（六个工具模块统一打点）、`model_step`（整个 run 的墙钟耗时 + token 用量，`api/chat.py::persist_model_step_event`,best-effort 不影响主流程）与 `context_budget`(pre_run/step 裁剪事实，`persist_context_budget_event`,fire-and-forget，同为 best-effort);Ops `GET /v1/ops/sessions/{thread_id}/runs/{run_id}/events` + 会话详情页「查看事件」可读时间线。是整轮粗粒度，不是 tool-loop 内逐次模型请求的 per-step trace——AG-UI adapter（`pydantic_ai.ui.ag_ui.AGUIAdapter`）目前不暴露那个边界；仍未引入 OpenTelemetry（单机单进程，无 collector）。

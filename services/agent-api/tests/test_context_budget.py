@@ -15,6 +15,7 @@ from pydantic_ai.messages import (
 )
 
 from agent_api.context_budget import (
+    BudgetReport,
     aiter_with_overflow_retry,
     apply_context_budget,
     cap_vision_to_budget,
@@ -94,7 +95,9 @@ def test_prune_short_tool_results_is_noop() -> None:
     history = [user_message("问"), assistant_tool_call(), tool_result("短结果")]
     trimmed, removed = prune_old_tool_results(history, keep_last_runs=0)
     assert removed == 0
-    assert trimmed[2].parts[0].content == "短结果"
+    short_part = trimmed[2].parts[0]
+    assert isinstance(short_part, ToolReturnPart)
+    assert short_part.content == "短结果"
 
 
 def test_drop_oldest_runs_cuts_at_user_boundaries() -> None:
@@ -110,7 +113,9 @@ def test_drop_oldest_runs_cuts_at_user_boundaries() -> None:
     trimmed, dropped = drop_oldest_runs(history, keep_runs=2)
 
     assert dropped == 1
-    assert trimmed[0].parts[0].content == "第二问"
+    first_part = trimmed[0].parts[0]
+    assert isinstance(first_part, UserPromptPart)
+    assert first_part.content == "第二问"
     assert len(trimmed) == 4
 
 
@@ -197,7 +202,7 @@ def test_prune_tool_results_before_tail_protects_live_chain() -> None:
 
 def test_step_processor_trims_paging_pileup() -> None:
     # Simulate a mid-run read_artifact paging loop piling up large results.
-    messages: list = [user_message("提取这份报告的数据")]
+    messages: list[ModelMessage] = [user_message("提取这份报告的数据")]
     for _ in range(6):
         messages.append(assistant_tool_call())
         messages.append(tool_result("检" * 6_000))
@@ -207,15 +212,71 @@ def test_step_processor_trims_paging_pileup() -> None:
 
     assert history_tokens(trimmed) < history_tokens(messages)
     # Live tool chain at the tail is untouched.
-    assert trimmed[-1].parts[0].content == "检" * 6_000
+    tail_part = trimmed[-1].parts[0]
+    assert isinstance(tail_part, ToolReturnPart)
+    assert tail_part.content == "检" * 6_000
     # Older pages were pruned, not dropped mid-run (pairing preserved).
-    assert any("已裁剪" in str(trimmed[2].parts[0].content) for _ in [0])
+    pruned_part = trimmed[2].parts[0]
+    assert isinstance(pruned_part, ToolReturnPart)
+    assert "已裁剪" in str(pruned_part.content)
 
 
 def test_step_processor_noop_when_within_budget() -> None:
     messages = [user_message("你好"), assistant_text("你好！")]
     processor = make_step_history_processor(context_window=16_384, output_reserve=4_096)
     assert processor(messages) == messages
+
+
+def test_step_processor_reports_trim_via_callback() -> None:
+    messages: list[ModelMessage] = [user_message("提取这份报告的数据")]
+    for _ in range(6):
+        messages.append(assistant_tool_call())
+        messages.append(tool_result("检" * 6_000))
+    reports: list[BudgetReport] = []
+
+    processor = make_step_history_processor(
+        context_window=16_384,
+        output_reserve=4_096,
+        on_trim=reports.append,
+    )
+    processor(messages)
+
+    assert len(reports) == 1
+    assert reports[0].actions
+    assert "budget" in reports[0].summary()
+
+
+def test_step_processor_callback_quiet_within_budget() -> None:
+    messages = [user_message("你好"), assistant_text("你好！")]
+    reports: list[BudgetReport] = []
+
+    processor = make_step_history_processor(
+        context_window=16_384,
+        output_reserve=4_096,
+        on_trim=reports.append,
+    )
+    processor(messages)
+
+    assert reports == []
+
+
+def test_step_processor_callback_failure_does_not_break_trim() -> None:
+    messages: list[ModelMessage] = [user_message("提取这份报告的数据")]
+    for _ in range(6):
+        messages.append(assistant_tool_call())
+        messages.append(tool_result("检" * 6_000))
+
+    def broken_callback(_report: BudgetReport) -> None:
+        raise RuntimeError("observability write failed")
+
+    processor = make_step_history_processor(
+        context_window=16_384,
+        output_reserve=4_096,
+        on_trim=broken_callback,
+    )
+
+    trimmed = processor(messages)
+    assert history_tokens(trimmed) < history_tokens(messages)
 
 
 def test_trim_messages_to_step_budget_drops_old_runs_when_pruning_not_enough() -> None:
@@ -231,7 +292,9 @@ def test_trim_messages_to_step_budget_drops_old_runs_when_pruning_not_enough() -
 
     assert report.actions
     assert report.history_after_tokens <= report.history_before_tokens
-    assert trimmed[-1].parts[0].content == "新" * 6_000
+    newest_part = trimmed[-1].parts[0]
+    assert isinstance(newest_part, ToolReturnPart)
+    assert newest_part.content == "新" * 6_000
 
 
 def test_cap_vision_keeps_single_image() -> None:

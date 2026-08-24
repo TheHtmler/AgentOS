@@ -12,7 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.api import ops_auth as ops_auth_api
 from agent_api.config import get_settings
-from agent_api.db.chat_store import append_model_step_event, append_tool_result_event
+from agent_api.db.chat_store import (
+    append_context_budget_event,
+    append_model_step_event,
+    append_tool_result_event,
+)
 from agent_api.db.models import Agent, Message, Run, Thread, User
 from agent_api.db.ops_store import create_ops_session
 from agent_api.db.session import close_database, session_factory
@@ -141,6 +145,18 @@ async def test_ops_run_events_timeline(
         input_tokens=500,
         output_tokens=80,
     )
+    await append_context_budget_event(
+        database_session,
+        run_id=run.id,
+        phase="pre_run",
+        history_before_tokens=15000,
+        history_after_tokens=9000,
+        budget_tokens=10000,
+        pruned_chars=1200,
+        dropped_runs=1,
+        actions=["pruned 1200 chars from old tool results", "dropped 1 oldest run(s)"],
+        summary="history 15000 -> 9000 tokens (budget 10000): dropped 1 oldest run(s)",
+    )
     await database_session.commit()
 
     token = await _ops_cookie(monkeypatch)
@@ -153,9 +169,15 @@ async def test_ops_run_events_timeline(
         response = await client.get(f"/v1/ops/sessions/{thread.id}/runs/{run.id}/events")
         assert response.status_code == 200
         events = response.json()["events"]
-        assert [event["event_type"] for event in events] == ["tool_result", "model_step"]
+        assert [event["event_type"] for event in events] == [
+            "tool_result",
+            "model_step",
+            "context_budget",
+        ]
         assert events[0]["payload"]["duration_ms"] == 42
         assert events[1]["payload"]["input_tokens"] == 500
+        assert events[2]["payload"]["phase"] == "pre_run"
+        assert events[2]["payload"]["dropped_runs"] == 1
 
         other_thread = Thread(user_id=user.id, agent_id=agent.id, title="ops-events-mismatch")
         database_session.add(other_thread)

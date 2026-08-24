@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import AsyncGenerator, Coroutine
+from collections.abc import AsyncGenerator, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any, cast
 from uuid import UUID
@@ -17,6 +17,7 @@ from agent_api.agent import (
     warm_up_ollama_model,
 )
 from agent_api.config import get_settings
+from agent_api.context_budget import BudgetReport
 from agent_api.db.provider_store import ResolvedModelProfile, sync_builtin_local_provider
 from agent_api.db.session import close_database
 from agent_api.run_events_broker import RunEventBroker
@@ -109,6 +110,7 @@ class AgentRuntime:
         tool_policy_overrides: dict[str, object] | None,
         case_bound: bool = False,
         model_profile: ResolvedModelProfile | None = None,
+        on_step_trim: Callable[[BudgetReport], None] | None = None,
     ) -> Agent[Any, AgentOutput]:
         """Build a fresh agent with the published configuration for one run."""
 
@@ -134,6 +136,7 @@ class AgentRuntime:
             case_bound=case_bound,
             tool_policy_overrides=overrides,
             toolsets=self.mcp_toolsets,
+            on_step_trim=on_step_trim,
         )
 
     async def stop_background_runs(self) -> None:

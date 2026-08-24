@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import cast
@@ -15,9 +16,11 @@ from pydantic_ai.messages import (
 
 from agent_api.config import get_settings
 from agent_api.context_budget import (
+    BudgetReport,
     is_context_overflow_error,
 )
 from agent_api.db.chat_store import (
+    append_context_budget_event,
     append_model_step_event,
     append_text_delta,
     cancel_run,
@@ -219,6 +222,59 @@ async def persist_model_step_event(
             )
     except Exception:
         logger.exception("Unable to persist model_step event for run %s", run_id)
+
+
+async def persist_context_budget_event(
+    run_id: UUID,
+    report: BudgetReport,
+    *,
+    phase: str,
+) -> None:
+    """Persist one budget-trim fact for the Ops timeline; best-effort only.
+
+    No-op when the guard did nothing, so call sites stay one line. Must never
+    fail the run itself over an observability write.
+    """
+
+    if not report.actions:
+        return
+    try:
+        async with session_factory() as session, session.begin():
+            await append_context_budget_event(
+                session,
+                run_id=run_id,
+                phase=phase,
+                history_before_tokens=report.history_before_tokens,
+                history_after_tokens=report.history_after_tokens,
+                budget_tokens=report.budget_tokens,
+                pruned_chars=report.pruned_chars,
+                dropped_runs=report.dropped_runs,
+                actions=report.actions,
+                summary=report.summary(),
+            )
+    except Exception:
+        logger.exception("Unable to persist context_budget event for run %s", run_id)
+
+
+_context_budget_event_tasks: set[asyncio.Task[None]] = set()
+
+
+def schedule_context_budget_event(run_id: UUID, report: BudgetReport, *, phase: str) -> None:
+    """Fire-and-forget persist from the sync per-step history processor.
+
+    The processor runs inside the agent's event loop in production; unit tests
+    may drive it without one — then there is simply no loop to schedule on.
+    """
+
+    if not report.actions:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    task = loop.create_task(persist_context_budget_event(run_id, report, phase=phase))
+    _context_budget_event_tasks.add(task)
+    task.add_done_callback(_context_budget_event_tasks.discard)
 
 
 def format_run_failure_message(error: BaseException, *, limit: int = 500) -> str:
