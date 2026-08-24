@@ -4,7 +4,12 @@ from uuid import uuid4
 import pytest
 
 from sandbox_manager.config import Settings
-from sandbox_manager.executor import SandboxInputError, build_docker_args, normalize_cwd
+from sandbox_manager.executor import (
+    SandboxInputError,
+    build_docker_args,
+    normalize_cwd,
+    resolve_workspace_file,
+)
 from sandbox_manager.models import ExecuteRequest
 
 
@@ -37,3 +42,16 @@ def test_docker_command_has_execution_boundaries(tmp_path: Path) -> None:
     assert "dst=/workspace" in args[args.index("--mount") + 1]
     assert "--privileged" not in args
     assert "docker.sock" not in " ".join(args)
+
+
+def test_resolve_workspace_file_rejects_escape_and_symlink(tmp_path: Path) -> None:
+    workspace = tmp_path / "user"
+    workspace.mkdir()
+    file_path = workspace / "joke.txt"
+    file_path.write_text("hello", encoding="utf-8")
+
+    assert resolve_workspace_file(workspace, "joke.txt") == file_path.resolve()
+    with pytest.raises(SandboxInputError):
+        resolve_workspace_file(workspace, "../joke.txt")
+    with pytest.raises(FileNotFoundError):
+        resolve_workspace_file(workspace, "missing.txt")

@@ -20,6 +20,10 @@ export function upstreamResponseHeaders(upstream: Response): Headers {
   if (contentType !== null) {
     headers.set("Content-Type", contentType);
   }
+  const contentDisposition = upstream.headers.get("content-disposition");
+  if (contentDisposition !== null) {
+    headers.set("Content-Disposition", contentDisposition);
+  }
 
   return headers;
 }

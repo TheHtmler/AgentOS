@@ -1,12 +1,12 @@
 # 实施进度
 
-最后更新：2026-08-24（用户级 Sandbox MVP + Ops 内置工具策略与 Schema 详情）
+最后更新：2026-08-25（Sandbox 文件发现与聊天预览）
 
 ## 当前状态
 
 前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与 MMA/PA `knowledge_search` 已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。Run、Artifact、用户记忆和多看护人基础 ACL 已绑定 Case 作用域。公共知识库已有 P0 策展切片与混合检索、运营审核与文档快照。平台 util 工具（`time_diff` / `calculate`）与薄评测 runner + foundation golden suite 已落地。聊天模型已切换为 `agentos-qwen3vl:16k`：16k 上下文、单流并发、Qwen3-VL 报告视觉输入和更大的 OCR 预览均已接入。新增用户级 Sandbox MVP：独立 Sandbox Manager、用户工作区、默认禁网/非 root/资源限制、命令输出 Artifact 和 `sandbox_exec` HITL 工具；Ops Agent 版本页可逐项配置内置工具策略。
 
-本轮 Sandbox 仍是 opt-in：未配置 Manager token 或 `SANDBOX_ENABLED=true` 时不会挂载执行工具。Manager 的生产镜像治理、配额/清理后台、终端/WebSocket 和真实 Mac mini Docker 烟测仍需单独验收。
+本轮 Sandbox 仍是 opt-in：未配置 Manager token 或 `SANDBOX_ENABLED=true` 时不会挂载执行工具。命令执行前后会发现新增/修改文件并回传元数据；聊天通过当前登录用户校验后预览文本、图片和 PDF，其他 MIME 提供下载，单文件服务受 `SANDBOX_FILE_MAX_BYTES` 限制。Manager 的生产镜像治理、配额/清理后台、终端/WebSocket 和真实 Mac mini Docker 烟测仍需单独验收。
 
 已完成：
 
@@ -143,7 +143,7 @@
 - Artifact 原文件下载、完整 `messages.role=tool` 模型历史对齐，以及 Artifact 审计记录（聊天报告上传/OCR 已落地，见上）。
 - Chunk 在线编辑（快照一键恢复已落地）。
 - 运营后台扩展：外部 MCP 服务器配置、多 ops 账号表。
-- 更复杂的 Case ACL（邀请生命周期、所有权转移、组织/临床角色）、领域扩展表（如护理计划/化验时间线）；Sandbox；侧栏按工具类型的富展示。
+- 更复杂的 Case ACL（邀请生命周期、所有权转移、组织/临床角色）、领域扩展表（如护理计划/化验时间线）；Sandbox 配额清理、终端/WebSocket；侧栏按工具类型的富展示。
 - 参数级 Tool Policy（如按 URL/命令细规则）、审计表落库。
 
 ## 下一步

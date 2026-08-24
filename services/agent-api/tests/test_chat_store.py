@@ -18,8 +18,8 @@ from agent_api.db.chat_store import (
     pause_run_for_approval,
     start_run,
 )
-from agent_api.hitl_types import ApprovalRequest
 from agent_api.db.models import Agent, Run, RunEvent, RunMessageHistory, Thread, User
+from agent_api.hitl_types import ApprovalRequest
 
 
 @pytest.mark.anyio
@@ -174,6 +174,7 @@ async def test_list_thread_tool_calls_anchors_to_matching_user_message(
             provider="duckduckgo",
             ok=True,
             summary="duckduckgo: 2 results",
+            metadata={"files": [{"path": "joke.txt", "size": 5, "mime_type": "text/plain"}]},
         )
         await complete_run(session, run_id=first.run_id, assistant_content="第一轮回答")
 
@@ -218,6 +219,9 @@ async def test_list_thread_tool_calls_anchors_to_matching_user_message(
         assert tool_calls[0].provider == "duckduckgo"
         assert tool_calls[0].summary == "duckduckgo: 2 results"
         assert tool_calls[0].after_message_id == user_ids[0]
+        assert tool_calls[0].files == [
+            {"path": "joke.txt", "size": 5, "mime_type": "text/plain"},
+        ]
         assert tool_calls[0].args == {"query": "第一轮搜索", "max_results": 5}
         assert tool_calls[1].status == "error"
         assert tool_calls[1].provider == "tavily"

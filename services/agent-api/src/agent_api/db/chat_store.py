@@ -71,6 +71,7 @@ class ThreadToolCallItem:
     summary: str
     duration_ms: int | None
     after_message_id: UUID
+    files: list[dict[str, object]]
 
 
 async def _create_thread(
@@ -342,6 +343,13 @@ async def list_thread_tool_calls(
             summary = summary_value if isinstance(summary_value, str) else ""
             duration_value = result_payload.get("duration_ms")
             duration_ms = duration_value if isinstance(duration_value, int) else None
+            raw_files = result_payload.get("files")
+            files: list[dict[str, object]] = []
+            if isinstance(raw_files, list):
+                for raw_file in cast(list[object], raw_files):
+                    if isinstance(raw_file, dict):
+                        typed_file = cast(dict[object, object], raw_file)
+                        files.append({str(key): value for key, value in typed_file.items()})
 
             items.append(
                 ThreadToolCallItem(
@@ -353,6 +361,7 @@ async def list_thread_tool_calls(
                     summary=summary[:500],
                     duration_ms=duration_ms,
                     after_message_id=after_message_id,
+                    files=files,
                 )
             )
 
@@ -685,6 +694,7 @@ async def append_tool_result_event(
     ok: bool,
     summary: str,
     duration_ms: int | None = None,
+    metadata: dict[str, object] | None = None,
 ) -> RunEvent:
     """Record a short tool outcome summary for debugging and audits."""
 
@@ -696,6 +706,8 @@ async def append_tool_result_event(
     }
     if duration_ms is not None:
         payload["duration_ms"] = duration_ms
+    if metadata:
+        payload.update(metadata)
     return await append_run_event(
         session,
         run_id=run_id,

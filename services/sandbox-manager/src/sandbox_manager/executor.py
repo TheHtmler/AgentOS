@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 import os
 import re
 import shutil
@@ -9,7 +10,7 @@ from pathlib import Path, PurePosixPath
 from uuid import UUID, uuid4
 
 from sandbox_manager.config import Settings
-from sandbox_manager.models import ExecuteRequest, ExecuteResponse
+from sandbox_manager.models import ExecuteRequest, ExecuteResponse, SandboxFile
 
 _SAFE_IMAGE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@:-]{0,180}$")
 
@@ -104,6 +105,73 @@ def _truncate(value: str, limit: int) -> tuple[str, bool]:
     return value[:head] + marker + value[-tail:], True
 
 
+def _snapshot_files(workspace: Path) -> dict[str, tuple[int, int]]:
+    """Capture regular workspace files so command-created files can be surfaced."""
+
+    snapshot: dict[str, tuple[int, int]] = {}
+    for entry in workspace.rglob("*"):
+        if entry.is_symlink() or not entry.is_file():
+            continue
+        try:
+            stat = entry.stat()
+            relative_path = entry.relative_to(workspace).as_posix()
+        except OSError:
+            continue
+        snapshot[relative_path] = (stat.st_size, stat.st_mtime_ns)
+    return snapshot
+
+
+def _changed_files(
+    workspace: Path,
+    before: dict[str, tuple[int, int]],
+) -> list[SandboxFile]:
+    changed: list[SandboxFile] = []
+    after = _snapshot_files(workspace)
+    for relative_path in sorted(after):
+        if before.get(relative_path) == after[relative_path]:
+            continue
+        path = workspace.joinpath(*PurePosixPath(relative_path).parts)
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        mime_type = mimetypes.guess_type(relative_path)[0] or "application/octet-stream"
+        changed.append(
+            SandboxFile(
+                path=relative_path,
+                size=stat.st_size,
+                mime_type=mime_type,
+            )
+        )
+        # A command can generate many build/cache files. Keep the model-facing
+        # result bounded while the workspace itself remains intact.
+        if len(changed) >= 32:
+            break
+    return changed
+
+
+def resolve_workspace_file(workspace: Path, relative_path: str) -> Path:
+    """Resolve one regular file without allowing absolute, parent, or symlink paths."""
+
+    normalized = (relative_path or "").strip().replace("\\", "/")
+    if not normalized or normalized.startswith("/"):
+        raise SandboxInputError("file path must be relative to /workspace")
+    path = PurePosixPath(normalized)
+    if any(part in ("", ".", "..") for part in path.parts):
+        raise SandboxInputError("file path must stay inside /workspace")
+
+    candidate = workspace.joinpath(*path.parts)
+    if candidate.is_symlink() or not candidate.is_file():
+        raise FileNotFoundError(normalized)
+    resolved_workspace = workspace.resolve()
+    resolved_candidate = candidate.resolve()
+    try:
+        resolved_candidate.relative_to(resolved_workspace)
+    except ValueError as exc:
+        raise SandboxInputError("file path must stay inside /workspace") from exc
+    return resolved_candidate
+
+
 async def execute(settings: Settings, request: ExecuteRequest) -> ExecuteResponse:
     if shutil.which(settings.docker_bin) is None:
         raise RuntimeError("Docker executable is unavailable")
@@ -124,6 +192,7 @@ async def _execute_locked(settings: Settings, request: ExecuteRequest) -> Execut
     workspace = workspace_path(settings.workspace_root, request.user_id)
     workspace.mkdir(parents=True, exist_ok=True)
     workspace.chmod(0o700)
+    before_files = _snapshot_files(workspace)
     cwd = normalize_cwd(request.cwd)
     cwd_path = workspace if cwd == "." else workspace.joinpath(*PurePosixPath(cwd).parts)
     cwd_path.mkdir(parents=True, exist_ok=True)
@@ -173,4 +242,5 @@ async def _execute_locked(settings: Settings, request: ExecuteRequest) -> Execut
         stderr=stderr,
         output_truncated=stdout_truncated or stderr_truncated,
         duration_ms=round((time.monotonic() - started_at) * 1000),
+        files=_changed_files(workspace, before_files),
     )

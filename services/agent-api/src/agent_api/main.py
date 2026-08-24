@@ -14,6 +14,7 @@ from agent_api.api.ops_sessions import router as ops_sessions_router
 from agent_api.api.ops_stats import router as ops_stats_router
 from agent_api.api.ops_tools import router as ops_tools_router
 from agent_api.api.runs import router as runs_router
+from agent_api.api.sandboxes import router as sandboxes_router
 from agent_api.api.threads import router as threads_router
 from agent_api.api.uploads import router as uploads_router
 from agent_api.runtime import lifespan
@@ -39,6 +40,7 @@ app.include_router(cases_router)
 app.include_router(threads_router)
 app.include_router(uploads_router)
 app.include_router(runs_router)
+app.include_router(sandboxes_router)
 app.include_router(auth_router)
 app.include_router(ops_auth_router)
 app.include_router(ops_stats_router)

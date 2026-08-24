@@ -141,6 +141,7 @@ async def run_sandbox_exec(
             ok=bool(result.get("ok", False)),
             summary=_result_summary(result, artifact_id),
             duration_ms=round((time.monotonic() - started_at) * 1000),
+            files=_sandbox_files(result),
         )
     return json.dumps(result, ensure_ascii=False)
 
@@ -169,6 +170,31 @@ def _result_summary(result: dict[str, Any], artifact_id: str | None) -> str:
     exit_code = result.get("exit_code")
     suffix = f", artifact={artifact_id}" if artifact_id else ""
     return f"{status}, exit_code={exit_code}{suffix}"[:500]
+
+
+def _sandbox_files(result: dict[str, Any]) -> list[dict[str, object]]:
+    raw_files = result.get("files")
+    if not isinstance(raw_files, list):
+        return []
+
+    files: list[dict[str, object]] = []
+    for raw_file in cast(list[object], raw_files):
+        if not isinstance(raw_file, dict):
+            continue
+        typed_file = cast(dict[str, Any], raw_file)
+        path = typed_file.get("path")
+        size = typed_file.get("size")
+        mime_type = typed_file.get("mime_type")
+        if (
+            isinstance(path, str)
+            and path
+            and isinstance(size, int)
+            and size >= 0
+            and isinstance(mime_type, str)
+            and mime_type
+        ):
+            files.append({"path": path, "size": size, "mime_type": mime_type})
+    return files[:32]
 
 
 async def _persist_output_artifact(
@@ -222,6 +248,7 @@ async def _persist_tool_result(
     ok: bool,
     summary: str,
     duration_ms: int,
+    files: list[dict[str, object]] | None = None,
 ) -> None:
     try:
         from agent_api.db.chat_store import append_tool_result_event
@@ -236,6 +263,7 @@ async def _persist_tool_result(
                 ok=ok,
                 summary=summary,
                 duration_ms=duration_ms,
+                metadata={"files": files} if files else None,
             )
     except Exception:
         logger.exception("Unable to persist sandbox_exec tool_result for run %s", run_id)

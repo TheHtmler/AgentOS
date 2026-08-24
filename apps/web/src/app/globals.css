@@ -1190,6 +1190,81 @@ body {
   word-break: break-all;
 }
 
+.agentos-tool-call-files {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.agentos-tool-call-file {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.agentos-tool-call-file summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+  padding: 0.45rem 0.55rem;
+  list-style-position: inside;
+}
+
+.agentos-tool-call-file-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentos-tool-call-file-meta {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.agentos-tool-call-file-preview {
+  border-top: 1px solid var(--border);
+  padding: 0.5rem;
+}
+
+.agentos-tool-call-file-preview pre {
+  max-height: 16rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.6rem;
+  background: var(--panel-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agentos-tool-call-file-preview img,
+.agentos-tool-call-file-preview iframe {
+  display: block;
+  width: 100%;
+  max-height: 24rem;
+  border: 0;
+  object-fit: contain;
+}
+
+.agentos-tool-call-file-preview iframe {
+  height: 24rem;
+}
+
+.agentos-tool-call-file-download {
+  display: inline-block;
+  padding: 0.35rem 0.55rem;
+  color: var(--accent, #2563eb);
+  font-size: 0.72rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .agentos-tool-call-running .agentos-tool-call-name {
   color: var(--text);
 }

@@ -12,6 +12,14 @@ class ExecuteRequest(BaseModel):
     max_output_chars: int = Field(default=32_000, ge=1, le=64_000)
 
 
+class SandboxFile(BaseModel):
+    """A workspace file changed by the command, without reading its contents."""
+
+    path: str
+    size: int
+    mime_type: str
+
+
 class ExecuteResponse(BaseModel):
     ok: bool
     exit_code: int | None
@@ -20,3 +28,4 @@ class ExecuteResponse(BaseModel):
     stderr: str
     output_truncated: bool
     duration_ms: int
+    files: list[SandboxFile]

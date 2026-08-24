@@ -220,6 +220,15 @@ _OUTPUT_SCHEMAS: dict[str, dict[str, object]] = {
             "output_truncated": _BOOLEAN,
             "output_artifact_id": {"type": ["string", "null"]},
             "duration_ms": {"type": "integer"},
+            "files": _array(
+                _object(
+                    {
+                        "path": _STRING,
+                        "size": {"type": "integer"},
+                        "mime_type": _STRING,
+                    },
+                ),
+            ),
             "error": _STRING,
             "code": _STRING,
         },
@@ -244,7 +253,7 @@ _OUTPUT_DESCRIPTIONS: dict[str, str] = {
     "case_context_read": "当前和历史 Case facts；失败时返回 error。",
     "case_attribution_confirm": "HITL 批准后的写入数量和状态。",
     "case_slot_collect": "HITL 表单写入的字段、缺失字段和状态。",
-    "sandbox_exec": "命令退出状态、stdout/stderr 和可选 Artifact 引用。",
+    "sandbox_exec": "命令退出状态、stdout/stderr、生成文件元数据和可选 Artifact 引用。",
 }
 
 

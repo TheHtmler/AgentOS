@@ -21,7 +21,130 @@ export type ToolCallState = {
   durationMs?: number;
   expanded: boolean;
   afterMessageId: string;
+  files?: SandboxFile[];
 };
+
+export type SandboxFile = {
+  path: string;
+  size: number;
+  mimeType: string;
+};
+
+function sandboxFileUrl(file: SandboxFile, download = false): string {
+  const params = new URLSearchParams({ path: file.path });
+  if (download) {
+    params.set("download", "1");
+  }
+  return `/api/sandbox/files?${params.toString()}`;
+}
+
+export function sandboxFilesFromValue(value: unknown): SandboxFile[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (typeof item !== "object" || item === null) {
+      return [];
+    }
+    const record = item as Record<string, unknown>;
+    if (
+      typeof record.path !== "string" ||
+      !record.path.trim() ||
+      typeof record.size !== "number" ||
+      !Number.isFinite(record.size) ||
+      record.size < 0 ||
+      typeof record.mime_type !== "string" ||
+      !record.mime_type.trim()
+    ) {
+      return [];
+    }
+    return [
+      {
+        path: record.path,
+        size: record.size,
+        mimeType: record.mime_type,
+      },
+    ];
+  });
+}
+
+function formatFileSize(size: number): string {
+  if (size < 1_024) {
+    return `${size} B`;
+  }
+  if (size < 1_024 * 1_024) {
+    return `${(size / 1_024).toFixed(1)} KB`;
+  }
+  return `${(size / (1_024 * 1_024)).toFixed(1)} MB`;
+}
+
+function isTextFile(file: SandboxFile): boolean {
+  return (
+    file.mimeType.startsWith("text/") ||
+    ["application/json", "application/javascript", "application/xml"].includes(file.mimeType)
+  );
+}
+
+function SandboxFilePreview({ file }: { file: SandboxFile }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const previewUrl = sandboxFileUrl(file);
+  const previewable =
+    isTextFile(file) || file.mimeType.startsWith("image/") || file.mimeType === "application/pdf";
+
+  useEffect(() => {
+    if (!open || !isTextFile(file) || text !== null || error !== null) {
+      return;
+    }
+    const controller = new AbortController();
+    void fetch(previewUrl, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("文件暂时无法读取");
+        }
+        setText(await response.text());
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : "文件暂时无法读取");
+        }
+      });
+    return () => controller.abort();
+  }, [error, file, open, previewUrl, text]);
+
+  return (
+    <details
+      className="agentos-tool-call-file"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary>
+        <span className="agentos-tool-call-file-name">{file.path}</span>
+        <span className="agentos-tool-call-file-meta">
+          {file.mimeType} · {formatFileSize(file.size)}
+        </span>
+      </summary>
+      {previewable ? (
+        <div className="agentos-tool-call-file-preview">
+          {isTextFile(file) ? (
+            <pre>{error ?? text ?? "正在读取…"}</pre>
+          ) : file.mimeType.startsWith("image/") ? (
+            // The endpoint checks the session and owner before serving this URL.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt={file.path} />
+          ) : (
+            <iframe src={previewUrl} title={file.path} sandbox="" />
+          )}
+        </div>
+      ) : null}
+      <a href={sandboxFileUrl(file, true)} className="agentos-tool-call-file-download">
+        下载文件
+      </a>
+    </details>
+  );
+}
 
 function stringField(record: Record<string, unknown>, key: string): string | null {
   const value = record[key];
@@ -300,6 +423,7 @@ export function ToolCallCard({
     toolCall.toolName === "fetch_url" ? stringField(toolCall.resultData ?? {}, "url") : null;
   const fetchLinkTitle =
     toolCall.toolName === "fetch_url" ? stringField(toolCall.resultData ?? {}, "title") : null;
+  const files = toolCall.files ?? sandboxFilesFromValue(toolCall.resultData?.files);
 
   useEffect(() => {
     if (!running || toolCall.durationMs !== undefined || toolCall.startedAt === undefined) {
@@ -422,6 +546,14 @@ export function ToolCallCard({
               </ul>
             </div>
           ) : null}
+          {files.length > 0 ? (
+            <div className="agentos-tool-call-files">
+              <span className="agentos-tool-call-label">生成文件</span>
+              {files.map((file) => (
+                <SandboxFilePreview key={file.path} file={file} />
+              ))}
+            </div>
+          ) : null}
           {toolCall.provider ? (
             <p>
               <span className="agentos-tool-call-label">来源</span>
@@ -513,6 +645,18 @@ export function summarizeToolResultContent(content: string): {
           provider,
           status: "done",
           resultData: record,
+        };
+      }
+
+      if (Array.isArray(record.files) && typeof record.ok === "boolean") {
+        const files = sandboxFilesFromValue(record.files);
+        return {
+          summary: `sandbox_exec: ${record.ok ? "执行完成" : "执行失败"}${
+            files.length > 0 ? `，生成 ${files.length} 个文件` : ""
+          }`,
+          status: record.ok ? "done" : "error",
+          resultData: record,
+          provider,
         };
       }
 

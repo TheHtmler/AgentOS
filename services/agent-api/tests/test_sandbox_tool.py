@@ -61,6 +61,7 @@ async def test_sandbox_tool_calls_manager(monkeypatch: pytest.MonkeyPatch) -> No
             "stderr": "",
             "output_truncated": False,
             "duration_ms": 4,
+            "files": [{"path": "joke.txt", "size": 5, "mime_type": "text/plain"}],
         },
     )
     result = json.loads(
@@ -80,6 +81,7 @@ async def test_sandbox_tool_calls_manager(monkeypatch: pytest.MonkeyPatch) -> No
     assert result["ok"] is True
     assert result["output_preview"] == "0123456789"
     assert result["stdout"] == "0123456789"
+    assert result["files"] == [{"path": "joke.txt", "size": 5, "mime_type": "text/plain"}]
     assert client.request is not None
     assert client.request["url"] == "/v1/sandboxes/execute"
     assert client.request["headers"] == {"X-AgentOS-Sandbox-Token": "token"}

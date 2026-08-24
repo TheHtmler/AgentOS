@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     pids_limit: int = 128
     max_timeout_seconds: int = 300
     max_output_chars: int = 32_000
+    file_max_bytes: int = 20_000_000
     max_concurrent_runs: int = 1
     port: int = 8788
 
@@ -34,7 +35,13 @@ class Settings(BaseSettings):
             raise ValueError("SANDBOX_MANAGER_TOKEN must not contain whitespace")
         return value
 
-    @field_validator("pids_limit", "max_timeout_seconds", "max_output_chars", "max_concurrent_runs")
+    @field_validator(
+        "pids_limit",
+        "max_timeout_seconds",
+        "max_output_chars",
+        "file_max_bytes",
+        "max_concurrent_runs",
+    )
     @classmethod
     def positive_limits(cls, value: int) -> int:
         if value < 1:

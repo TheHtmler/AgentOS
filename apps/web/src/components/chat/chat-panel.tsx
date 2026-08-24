@@ -18,6 +18,7 @@ import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval
 import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
 import { ThinkingStepCard, type ThinkingStepState } from "@/components/chat/thinking-step-card";
 import {
+  sandboxFilesFromValue,
   summarizeToolResultContent,
   ToolCallCard,
   type ToolCallState,
@@ -319,6 +320,7 @@ function parseHistoryToolCalls(value: unknown): ToolCallState[] | null {
       durationMs: typeof item.duration_ms === "number" ? item.duration_ms : undefined,
       expanded: false,
       afterMessageId: item.after_message_id,
+      files: sandboxFilesFromValue(item.files),
     });
   }
 
@@ -507,6 +509,7 @@ function toolStatesFromTimeline(steps: TimelineStep[]): ToolCallState[] {
       status: step.status,
       resultSummary: step.resultSummary,
       resultData: step.resultData,
+      files: step.files,
       provider: step.provider,
       startedAt: step.startedAt,
       durationMs: step.durationMs,
@@ -1560,6 +1563,7 @@ export function ChatPanel({
         status: summarized.status,
         resultSummary: summarized.summary,
         resultData: summarized.resultData ?? existing?.resultData,
+        files: sandboxFilesFromValue(summarized.resultData?.files),
         provider: summarized.provider ?? existing?.provider,
         startedAt: existing?.startedAt ?? Date.now(),
         durationMs:
