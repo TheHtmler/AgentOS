@@ -5,7 +5,7 @@ from typing import cast
 from uuid import UUID
 
 from pydantic_ai import ModelMessagesTypeAdapter
-from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -278,24 +278,48 @@ def schedule_context_budget_event(run_id: UUID, report: BudgetReport, *, phase: 
 
 
 def format_run_failure_message(error: BaseException, *, limit: int = 500) -> str:
-    """Store a short, non-secret failure hint on the Run row for later diagnosis."""
+    """Store a short, non-secret failure hint on the Run row for later diagnosis.
+
+    Provider errors often arrive wrapped in an ExceptionGroup ("unhandled errors
+    in a TaskGroup"), which says nothing on its own — append the deepest real
+    error so the Ops timeline shows the actual cause.
+    """
 
     text = f"{type(error).__name__}: {error}".strip()
+    chain = _error_chain(error)
+    leaves = [item for item in chain if not isinstance(item, BaseExceptionGroup)]
+    root = leaves[-1]
+    root_text = f"{type(root).__name__}: {root}".strip()
+    if root is not error and root_text != text:
+        text = f"{text} (root cause: {root_text})"
     if not text or text == ":":
         return "Agent model failed."
     return text[:limit]
 
 
 def _error_chain(error: BaseException) -> list[BaseException]:
-    """Walk chained provider errors without looping on malformed exception links."""
+    """Walk chained provider errors, unwrapping ExceptionGroup members.
+
+    Model calls run inside TaskGroups, so the real provider error often arrives
+    wrapped in an ExceptionGroup whose members are not linked via ``__cause__`` —
+    without unwrapping, timeout/overload/config diagnosis all degrades to the
+    generic fallback.
+    """
 
     chain: list[BaseException] = []
-    current: BaseException | None = error
     seen: set[int] = set()
-    while current is not None and id(current) not in seen:
+    stack: list[BaseException] = [error]
+    while stack:
+        current = stack.pop(0)
+        if id(current) in seen:
+            continue
         seen.add(id(current))
         chain.append(current)
-        current = current.__cause__ or current.__context__
+        if isinstance(current, BaseExceptionGroup):
+            stack.extend(cast("BaseExceptionGroup[BaseException]", current).exceptions)
+        linked = current.__cause__ or current.__context__
+        if linked is not None:
+            stack.append(linked)
     return chain
 
 
@@ -319,9 +343,33 @@ def _is_model_overloaded(error: BaseException) -> bool:
     return any("overloaded" in str(item).lower() for item in _error_chain(error))
 
 
+def _is_non_json_endpoint_response(error: BaseException) -> bool:
+    """Endpoint answered with a web page or an empty stream instead of API data.
+
+    Classic symptom of a base_url / api_mode mismatch (e.g. the gateway only
+    serves the API under /v1 while base_url points at the site root, so the web
+    console's catch-all answers with HTML). Non-streamed chat mode surfaces it
+    as a non-JSON response; the streaming path surfaces it as an empty stream.
+    """
+
+    for item in _error_chain(error):
+        if not isinstance(item, UnexpectedModelBehavior):
+            continue
+        message = str(item)
+        if "expected JSON data" in message or "Streamed response ended without content" in message:
+            return True
+    return False
+
+
 def user_facing_run_error_message(error: BaseException) -> str:
     """Map provider failures to actionable user-facing text instead of a generic 500."""
 
+    if _is_non_json_endpoint_response(error):
+        return (
+            "模型端点返回了无法解析的应答（可能是网页或空响应），通常是 Provider 的 base_url "
+            "与 API 模式不匹配（例如端点只服务 /v1 前缀）。请到 Ops 检查 Provider 配置；"
+            "配置无误则稍后重试。"
+        )
     if is_context_overflow_error(error):
         return (
             "当前内容超出了模型上下文窗口（16k tokens)。"

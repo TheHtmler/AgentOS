@@ -1,8 +1,8 @@
 """Multi-attachment degradation + overflow error mapping (no DB required)."""
 
-from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
 
-from agent_api.api.chat import user_facing_run_error_message
+from agent_api.api.chat import format_run_failure_message, user_facing_run_error_message
 from agent_api.uploads.context import preview_budgets
 from agent_api.uploads.vision import resolve_vision_limits
 
@@ -57,3 +57,36 @@ def test_overload_error_maps_to_retry_message() -> None:
         user_facing_run_error_message(RuntimeError("Our servers are currently overloaded"))
         == "上游模型当前过载，请稍后重试。"
     )
+
+
+def test_non_json_endpoint_maps_to_config_diagnosis() -> None:
+    error = UnexpectedModelBehavior(
+        "Invalid response from openai chat completions endpoint, expected JSON data"
+    )
+
+    message = user_facing_run_error_message(error)
+
+    assert "base_url" in message
+    assert "Ops" in message
+
+
+def test_empty_stream_maps_to_config_diagnosis() -> None:
+    error = UnexpectedModelBehavior("Streamed response ended without content or tool calls")
+
+    assert "base_url" in user_facing_run_error_message(error)
+
+
+def test_exception_group_unwraps_to_root_cause() -> None:
+    leaf = UnexpectedModelBehavior(
+        "Invalid response from openai chat completions endpoint, expected JSON data"
+    )
+    group = ExceptionGroup("unhandled errors in a TaskGroup", [leaf])
+
+    assert "base_url" in user_facing_run_error_message(group)
+    stored = format_run_failure_message(group)
+    assert "expected JSON data" in stored
+    assert "root cause" in stored
+
+
+def test_format_run_failure_message_keeps_single_error() -> None:
+    assert format_run_failure_message(RuntimeError("boom")) == "RuntimeError: boom"
