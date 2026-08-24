@@ -190,8 +190,9 @@ SANDBOX_INSTRUCTIONS = """\
 ## Capability: sandbox_exec
 Use sandbox_exec for code, shell, or file operations that require execution. The command runs
 inside the current user's network-disabled workspace, not on the Agent API host. Keep commands
-small and explain the requested action through the tool call. This tool requires user approval
-by default. Use relative cwd values only; never claim a host path was accessed. Long output may
+small and explain the requested action through the tool call. Execution inside the isolated
+workspace is allowed by default; Ops may require approval or disable this tool for an Agent
+version. Use relative cwd values only; never claim a host path was accessed. Long output may
 return output_artifact_id; use read_artifact with that id when mounted and more output is needed.
 """
 

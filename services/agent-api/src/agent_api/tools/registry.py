@@ -161,7 +161,7 @@ _BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         name="sandbox_exec",
         domain=ToolDomain.SANDBOX,
         risk="exec",
-        default_action=PolicyAction.ASK,
+        default_action=PolicyAction.ALLOW,
         description="Execute a command in the current user's isolated Docker workspace",
         handler=sandbox_exec,
     ),

@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from agent_api.config import Settings
+from agent_api.tools.policy import PolicyAction, evaluate
 from agent_api.tools.registry import get_tool_spec, is_tool_enabled
 from agent_api.tools.sandbox.tool import run_sandbox_exec
 from agent_api.tools.search.tool import AgentDeps
@@ -31,6 +32,10 @@ def test_sandbox_registry_is_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
     spec = get_tool_spec("sandbox_exec")
     assert spec is not None
     assert spec.risk == "exec"
+    assert spec.default_action == PolicyAction.ALLOW
+    assert evaluate("sandbox_exec", settings=settings) == PolicyAction.ALLOW
+    ask_settings = settings.model_copy(update={"tool_policy_ask": "sandbox_exec"})
+    assert evaluate("sandbox_exec", settings=ask_settings) == PolicyAction.ASK
     assert is_tool_enabled(spec, settings) is True
 
 

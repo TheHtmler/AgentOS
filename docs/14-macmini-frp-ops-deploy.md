@@ -95,7 +95,8 @@ curl -sS --noproxy '*' http://127.0.0.1:8788/health
 
 然后在 `services/agent-api/.env` 设置 `SANDBOX_ENABLED=true`、相同的
 `SANDBOX_MANAGER_URL` 和 token，并重启 Agent API。Ops 的 Agent 版本页会显示
-`sandbox_exec`，默认是「每次审批」；只有发布版本后新 Run 才使用新的工具策略。
+`sandbox_exec`，平台默认是「允许」；如需更严格的命令控制，可在版本策略中改为
+「每次审批」或「禁止」，只有发布版本后新 Run 才使用新的工具策略。
 
 本地冒烟：
 

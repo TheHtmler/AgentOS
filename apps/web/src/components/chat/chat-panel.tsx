@@ -18,9 +18,11 @@ import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval
 import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
 import { ThinkingStepCard, type ThinkingStepState } from "@/components/chat/thinking-step-card";
 import {
+  SandboxFilePreviewPane,
   sandboxFilesFromValue,
   summarizeToolResultContent,
   ToolCallCard,
+  type SandboxFile,
   type ToolCallState,
 } from "@/components/chat/tool-call-card";
 import { formatMessageTimestamp, formatRunDurationLabel } from "@/lib/format-time";
@@ -635,6 +637,7 @@ export function ChatPanel({
   const [approvalRunId, setApprovalRunId] = useState<string | null>(null);
   const [pendingInterrupts, setPendingInterrupts] = useState<PendingInterrupt[]>([]);
   const [uploadedArtifacts, setUploadedArtifacts] = useState<UploadedArtifact[]>([]);
+  const [selectedSandboxFile, setSelectedSandboxFile] = useState<SandboxFile | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
 
@@ -1182,6 +1185,7 @@ export function ChatPanel({
           if (history.thread_id !== threadId) {
             setUploadedArtifacts([]);
             setUploadNotice(null);
+            setSelectedSandboxFile(null);
           }
           agentRef.current = createAgent(history.thread_id, history.messages, agentId);
           setMessages(history.messages);
@@ -1941,6 +1945,7 @@ export function ChatPanel({
     if (!isLoadingHistory) {
       setUploadedArtifacts([]);
       setUploadNotice(null);
+      setSelectedSandboxFile(null);
       onNewConversation();
     }
   }
@@ -2030,241 +2035,256 @@ export function ChatPanel({
         </div>
       ) : null}
 
-      <div
-        ref={messagesViewportRef}
-        onScroll={handleMessageScroll}
-        onWheel={handleViewportWheel}
-        onTouchStart={handleViewportTouchStart}
-        onTouchMove={handleViewportTouchMove}
-        className="agentos-message-viewport min-h-0 flex-1 overflow-y-auto overscroll-contain"
-      >
-        <div className="agentos-message-list mx-auto">
-          {messages.length === 0 ? (
-            <div className="agentos-empty-state">
-              <p className="agentos-empty-eyebrow">Start with a task</p>
-              <p className="agentos-chat-heading">从一个任务开始</p>
-              <p className="agentos-chat-subheading">
-                助手会实时展示处理进度、相关资料和最终回答。
-              </p>
-              <div className="agentos-starter-prompts">
-                {STARTER_PROMPTS.map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    onClick={() => applyStarterPrompt(prompt)}
-                    className="agentos-starter-prompt max-w-full text-left text-sm"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            messages.map((message, index) => {
-              const { precedingUserId, isPrimaryAssistantForTurn } = turnMetaByIndex[index] ?? {
-                precedingUserId: undefined,
-                isPrimaryAssistantForTurn: false,
-              };
-
-              const liveSteps =
-                isPrimaryAssistantForTurn &&
-                precedingUserId !== undefined &&
-                liveUserMessageId === precedingUserId
-                  ? timelineSteps.filter((step) => step.afterMessageId === precedingUserId)
-                  : [];
-              const historicalTools =
-                isPrimaryAssistantForTurn &&
-                precedingUserId !== undefined &&
-                liveUserMessageId !== precedingUserId
-                  ? historyToolCalls.filter(
-                      (toolCall) => toolCall.afterMessageId === precedingUserId,
-                    )
-                  : [];
-
-              const processChildren =
-                message.role === "assistant"
-                  ? [
-                      ...liveSteps.map((step) => {
-                        if (step.kind === "thinking") {
-                          return <ThinkingStepCard key={step.id} step={step} />;
-                        }
-
-                        return (
-                          <ToolCallCard
-                            key={step.id}
-                            toolCall={step}
-                            onToggle={() => toggleTimelineStep(step.id)}
-                          />
-                        );
-                      }),
-                      ...historicalTools.map((toolCall) => (
-                        <ToolCallCard
-                          key={toolCall.id}
-                          toolCall={toolCall}
-                          onToggle={() => toggleHistoryToolCall(toolCall.id)}
-                        />
-                      )),
-                    ]
-                  : [];
-
-              // Edge case: tools/thinking arrived before the assistant placeholder exists.
-              // Keep a temporary stack under the live user message so the turn is not blank.
-              const orphanLiveSteps =
-                message.role === "user" &&
-                liveUserMessageId === message.id &&
-                currentAssistantMessageIndex < 0
-                  ? timelineSteps.filter((step) => step.afterMessageId === message.id)
-                  : [];
-
-              return (
-                <Fragment key={message.id}>
-                  <div
-                    className={`agentos-message-wrap ${
-                      message.role === "user"
-                        ? "agentos-message-wrap-user"
-                        : "agentos-message-wrap-assistant"
-                    }`}
-                  >
-                    <article
-                      className={`agentos-message ${
-                        message.role === "user"
-                          ? "agentos-message-user"
-                          : `agentos-message-assistant ${
-                              isStreaming && index === currentAssistantMessageIndex
-                                ? "agentos-message-streaming"
-                                : ""
-                            }`
-                      }`}
+      <div className="agentos-chat-body">
+        <div
+          ref={messagesViewportRef}
+          onScroll={handleMessageScroll}
+          onWheel={handleViewportWheel}
+          onTouchStart={handleViewportTouchStart}
+          onTouchMove={handleViewportTouchMove}
+          className="agentos-message-viewport min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
+          <div className="agentos-message-list mx-auto">
+            {messages.length === 0 ? (
+              <div className="agentos-empty-state">
+                <p className="agentos-empty-eyebrow">Start with a task</p>
+                <p className="agentos-chat-heading">从一个任务开始</p>
+                <p className="agentos-chat-subheading">
+                  助手会实时展示处理进度、相关资料和最终回答。
+                </p>
+                <div className="agentos-starter-prompts">
+                  {STARTER_PROMPTS.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => applyStarterPrompt(prompt)}
+                      className="agentos-starter-prompt max-w-full text-left text-sm"
                     >
-                      {processChildren.length > 0 ? (
-                        <div className="agentos-message-process">{processChildren}</div>
-                      ) : null}
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              messages.map((message, index) => {
+                const { precedingUserId, isPrimaryAssistantForTurn } = turnMetaByIndex[index] ?? {
+                  precedingUserId: undefined,
+                  isPrimaryAssistantForTurn: false,
+                };
 
-                      {message.content ? (
-                        message.role === "assistant" ? (
-                          <AssistantMarkdown content={message.content} />
-                        ) : (
-                          (() => {
-                            const { displayText, artifactIds } = parseUserMessageAttachments(
-                              message.content,
-                            );
-                            return (
-                              <div className="space-y-2">
-                                {artifactIds.length > 0 ? (
-                                  <div
-                                    className="agentos-message-attachments flex flex-wrap gap-2"
-                                    aria-label="附件"
-                                  >
-                                    {artifactIds.map((artifactId) => (
-                                      <a
-                                        key={artifactId}
-                                        href={uploadContentUrl(artifactId)}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="agentos-upload-thumb block overflow-hidden"
-                                        title="查看附件"
-                                      >
-                                        {/* Heuristic: try image; PDF still loads as object/download via link */}
-                                        <img
-                                          src={uploadContentUrl(artifactId)}
-                                          alt=""
-                                          className="agentos-upload-thumb-image h-20 w-20 object-cover"
-                                          onError={(event) => {
-                                            const target = event.currentTarget;
-                                            target.style.display = "none";
-                                            const fallback = target.nextElementSibling;
-                                            if (fallback instanceof HTMLElement) {
-                                              fallback.hidden = false;
-                                            }
-                                          }}
-                                        />
-                                        <span
-                                          hidden
-                                          className="agentos-upload-chip inline-flex h-20 w-20 items-center justify-center px-2 text-center text-[11px] leading-tight"
-                                        >
-                                          文件
-                                        </span>
-                                      </a>
-                                    ))}
-                                  </div>
-                                ) : null}
-                                {displayText ? (
-                                  <p className="break-words whitespace-pre-wrap">{displayText}</p>
-                                ) : null}
-                              </div>
-                            );
-                          })()
-                        )
-                      ) : message.role === "assistant" && isStreaming ? (
-                        <p aria-live="polite" className="agentos-chat-subheading">
-                          {processChildren.length > 0 ? "继续生成中…" : "正在生成最终回答..."}
-                        </p>
-                      ) : null}
-                    </article>
+                const liveSteps =
+                  isPrimaryAssistantForTurn &&
+                  precedingUserId !== undefined &&
+                  liveUserMessageId === precedingUserId
+                    ? timelineSteps.filter((step) => step.afterMessageId === precedingUserId)
+                    : [];
+                const historicalTools =
+                  isPrimaryAssistantForTurn &&
+                  precedingUserId !== undefined &&
+                  liveUserMessageId !== precedingUserId
+                    ? historyToolCalls.filter(
+                        (toolCall) => toolCall.afterMessageId === precedingUserId,
+                      )
+                    : [];
 
-                    {message.role === "assistant" && message.content ? (
-                      <div className="agentos-message-toolbar">
-                        <button
-                          type="button"
-                          onClick={() => void copyAssistantMessage(message)}
-                          className="agentos-copy-button"
-                        >
-                          {copiedMessageId === message.id ? "已复制" : "复制"}
-                        </button>
-                      </div>
-                    ) : null}
-
-                    {message.createdAt || message.durationLabel ? (
-                      <div
-                        className={`agentos-message-time ${
-                          message.role === "user"
-                            ? "agentos-message-time-user"
-                            : "agentos-message-time-assistant"
-                        }`}
-                      >
-                        {message.createdAt ? (
-                          <time dateTime={message.createdAt}>
-                            {formatMessageTimestamp(message.createdAt)}
-                          </time>
-                        ) : null}
-                        {message.durationLabel ? (
-                          <span>
-                            {message.createdAt ? " · " : ""}
-                            {message.durationLabel}
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {orphanLiveSteps.length > 0 ? (
-                    <article className="agentos-message agentos-message-assistant agentos-message-streaming">
-                      <div className="agentos-message-process">
-                        {orphanLiveSteps.map((step) => {
+                const processChildren =
+                  message.role === "assistant"
+                    ? [
+                        ...liveSteps.map((step) => {
                           if (step.kind === "thinking") {
                             return <ThinkingStepCard key={step.id} step={step} />;
                           }
+
                           return (
                             <ToolCallCard
                               key={step.id}
                               toolCall={step}
                               onToggle={() => toggleTimelineStep(step.id)}
+                              onFileSelect={(file) => setSelectedSandboxFile(file)}
+                              selectedFilePath={selectedSandboxFile?.path ?? null}
                             />
                           );
-                        })}
-                      </div>
-                      <p aria-live="polite" className="agentos-chat-subheading">
-                        继续生成中…
-                      </p>
-                    </article>
-                  ) : null}
-                </Fragment>
-              );
-            })
-          )}
+                        }),
+                        ...historicalTools.map((toolCall) => (
+                          <ToolCallCard
+                            key={toolCall.id}
+                            toolCall={toolCall}
+                            onToggle={() => toggleHistoryToolCall(toolCall.id)}
+                            onFileSelect={(file) => setSelectedSandboxFile(file)}
+                            selectedFilePath={selectedSandboxFile?.path ?? null}
+                          />
+                        )),
+                      ]
+                    : [];
 
-          <div ref={messagesEndRef} />
+                // Edge case: tools/thinking arrived before the assistant placeholder exists.
+                // Keep a temporary stack under the live user message so the turn is not blank.
+                const orphanLiveSteps =
+                  message.role === "user" &&
+                  liveUserMessageId === message.id &&
+                  currentAssistantMessageIndex < 0
+                    ? timelineSteps.filter((step) => step.afterMessageId === message.id)
+                    : [];
+
+                return (
+                  <Fragment key={message.id}>
+                    <div
+                      className={`agentos-message-wrap ${
+                        message.role === "user"
+                          ? "agentos-message-wrap-user"
+                          : "agentos-message-wrap-assistant"
+                      }`}
+                    >
+                      <article
+                        className={`agentos-message ${
+                          message.role === "user"
+                            ? "agentos-message-user"
+                            : `agentos-message-assistant ${
+                                isStreaming && index === currentAssistantMessageIndex
+                                  ? "agentos-message-streaming"
+                                  : ""
+                              }`
+                        }`}
+                      >
+                        {processChildren.length > 0 ? (
+                          <div className="agentos-message-process">{processChildren}</div>
+                        ) : null}
+
+                        {message.content ? (
+                          message.role === "assistant" ? (
+                            <AssistantMarkdown content={message.content} />
+                          ) : (
+                            (() => {
+                              const { displayText, artifactIds } = parseUserMessageAttachments(
+                                message.content,
+                              );
+                              return (
+                                <div className="space-y-2">
+                                  {artifactIds.length > 0 ? (
+                                    <div
+                                      className="agentos-message-attachments flex flex-wrap gap-2"
+                                      aria-label="附件"
+                                    >
+                                      {artifactIds.map((artifactId) => (
+                                        <a
+                                          key={artifactId}
+                                          href={uploadContentUrl(artifactId)}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="agentos-upload-thumb block overflow-hidden"
+                                          title="查看附件"
+                                        >
+                                          {/* Heuristic: try image; PDF still loads as object/download via link */}
+                                          <img
+                                            src={uploadContentUrl(artifactId)}
+                                            alt=""
+                                            className="agentos-upload-thumb-image h-20 w-20 object-cover"
+                                            onError={(event) => {
+                                              const target = event.currentTarget;
+                                              target.style.display = "none";
+                                              const fallback = target.nextElementSibling;
+                                              if (fallback instanceof HTMLElement) {
+                                                fallback.hidden = false;
+                                              }
+                                            }}
+                                          />
+                                          <span
+                                            hidden
+                                            className="agentos-upload-chip inline-flex h-20 w-20 items-center justify-center px-2 text-center text-[11px] leading-tight"
+                                          >
+                                            文件
+                                          </span>
+                                        </a>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                  {displayText ? (
+                                    <p className="break-words whitespace-pre-wrap">{displayText}</p>
+                                  ) : null}
+                                </div>
+                              );
+                            })()
+                          )
+                        ) : message.role === "assistant" && isStreaming ? (
+                          <p aria-live="polite" className="agentos-chat-subheading">
+                            {processChildren.length > 0 ? "继续生成中…" : "正在生成最终回答..."}
+                          </p>
+                        ) : null}
+                      </article>
+
+                      {message.role === "assistant" && message.content ? (
+                        <div className="agentos-message-toolbar">
+                          <button
+                            type="button"
+                            onClick={() => void copyAssistantMessage(message)}
+                            className="agentos-copy-button"
+                          >
+                            {copiedMessageId === message.id ? "已复制" : "复制"}
+                          </button>
+                        </div>
+                      ) : null}
+
+                      {message.createdAt || message.durationLabel ? (
+                        <div
+                          className={`agentos-message-time ${
+                            message.role === "user"
+                              ? "agentos-message-time-user"
+                              : "agentos-message-time-assistant"
+                          }`}
+                        >
+                          {message.createdAt ? (
+                            <time dateTime={message.createdAt}>
+                              {formatMessageTimestamp(message.createdAt)}
+                            </time>
+                          ) : null}
+                          {message.durationLabel ? (
+                            <span>
+                              {message.createdAt ? " · " : ""}
+                              {message.durationLabel}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {orphanLiveSteps.length > 0 ? (
+                      <article className="agentos-message agentos-message-assistant agentos-message-streaming">
+                        <div className="agentos-message-process">
+                          {orphanLiveSteps.map((step) => {
+                            if (step.kind === "thinking") {
+                              return <ThinkingStepCard key={step.id} step={step} />;
+                            }
+                            return (
+                              <ToolCallCard
+                                key={step.id}
+                                toolCall={step}
+                                onToggle={() => toggleTimelineStep(step.id)}
+                                onFileSelect={(file) => setSelectedSandboxFile(file)}
+                                selectedFilePath={selectedSandboxFile?.path ?? null}
+                              />
+                            );
+                          })}
+                        </div>
+                        <p aria-live="polite" className="agentos-chat-subheading">
+                          继续生成中…
+                        </p>
+                      </article>
+                    ) : null}
+                  </Fragment>
+                );
+              })
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
         </div>
+
+        {selectedSandboxFile !== null ? (
+          <SandboxFilePreviewPane
+            file={selectedSandboxFile}
+            onClose={() => setSelectedSandboxFile(null)}
+          />
+        ) : null}
       </div>
 
       {error ? (

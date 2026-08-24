@@ -86,20 +86,57 @@ function isTextFile(file: SandboxFile): boolean {
   );
 }
 
-function SandboxFilePreview({ file }: { file: SandboxFile }) {
-  const [open, setOpen] = useState(false);
+export function GeneratedFileList({
+  files,
+  selectedPath,
+  onSelect,
+}: {
+  files: SandboxFile[];
+  selectedPath?: string | null;
+  onSelect?: (file: SandboxFile) => void;
+}) {
+  if (files.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="agentos-generated-files">
+      <span className="agentos-generated-files-label">生成文件</span>
+      <div className="agentos-generated-files-list">
+        {files.map((file) => (
+          <button
+            key={file.path}
+            type="button"
+            className={`agentos-generated-file-row ${
+              selectedPath === file.path ? "agentos-generated-file-row-selected" : ""
+            }`}
+            aria-pressed={selectedPath === file.path}
+            title="在右侧预览文件"
+            onClick={() => onSelect?.(file)}
+          >
+            <span className="agentos-generated-file-main">
+              <span className="agentos-generated-file-name">{file.path}</span>
+              <span className="agentos-generated-file-meta">
+                {file.mimeType} · {formatFileSize(file.size)}
+              </span>
+            </span>
+            <span className="agentos-generated-file-action" aria-hidden="true">
+              ›
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SandboxTextPreview({ url }: { url: string }) {
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const previewUrl = sandboxFileUrl(file);
-  const previewable =
-    isTextFile(file) || file.mimeType.startsWith("image/") || file.mimeType === "application/pdf";
 
   useEffect(() => {
-    if (!open || !isTextFile(file) || text !== null || error !== null) {
-      return;
-    }
     const controller = new AbortController();
-    void fetch(previewUrl, { cache: "no-store", signal: controller.signal })
+    void fetch(url, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error("文件暂时无法读取");
@@ -112,37 +149,51 @@ function SandboxFilePreview({ file }: { file: SandboxFile }) {
         }
       });
     return () => controller.abort();
-  }, [error, file, open, previewUrl, text]);
+  }, [url]);
+
+  return <pre>{error ?? text ?? "正在读取…"}</pre>;
+}
+
+export function SandboxFilePreviewPane({
+  file,
+  onClose,
+}: {
+  file: SandboxFile;
+  onClose: () => void;
+}) {
+  const previewUrl = sandboxFileUrl(file);
+  const textFile = isTextFile(file);
 
   return (
-    <details
-      className="agentos-tool-call-file"
-      open={open}
-      onToggle={(event) => setOpen(event.currentTarget.open)}
-    >
-      <summary>
-        <span className="agentos-tool-call-file-name">{file.path}</span>
-        <span className="agentos-tool-call-file-meta">
-          {file.mimeType} · {formatFileSize(file.size)}
-        </span>
-      </summary>
-      {previewable ? (
-        <div className="agentos-tool-call-file-preview">
-          {isTextFile(file) ? (
-            <pre>{error ?? text ?? "正在读取…"}</pre>
-          ) : file.mimeType.startsWith("image/") ? (
-            // The endpoint checks the session and owner before serving this URL.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={previewUrl} alt={file.path} />
-          ) : (
-            <iframe src={previewUrl} title={file.path} sandbox="" />
-          )}
+    <aside className="agentos-file-preview-pane" aria-label="文件预览">
+      <header className="agentos-file-preview-header">
+        <div className="agentos-file-preview-heading">
+          <strong title={file.path}>{file.path}</strong>
+          <span>
+            {file.mimeType} · {formatFileSize(file.size)}
+          </span>
         </div>
-      ) : null}
-      <a href={sandboxFileUrl(file, true)} className="agentos-tool-call-file-download">
-        下载文件
-      </a>
-    </details>
+        <button type="button" onClick={onClose} aria-label="关闭文件预览" title="关闭预览">
+          ×
+        </button>
+      </header>
+      <div className="agentos-file-preview-body">
+        {textFile ? (
+          <SandboxTextPreview key={`${file.path}:${file.size}`} url={previewUrl} />
+        ) : file.mimeType.startsWith("image/") ? (
+          // The endpoint checks the session and owner before serving this URL.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={previewUrl} alt={file.path} />
+        ) : file.mimeType === "application/pdf" ? (
+          <iframe src={previewUrl} title={file.path} sandbox="" />
+        ) : (
+          <p className="agentos-file-preview-unavailable">此文件类型暂不支持在线预览。</p>
+        )}
+      </div>
+      <footer className="agentos-file-preview-footer">
+        <a href={sandboxFileUrl(file, true)}>下载文件</a>
+      </footer>
+    </aside>
   );
 }
 
@@ -399,9 +450,13 @@ function extraArgEntries(argsText: string): [string, string][] {
 export function ToolCallCard({
   toolCall,
   onToggle,
+  onFileSelect,
+  selectedFilePath,
 }: {
   toolCall: ToolCallState;
   onToggle: () => void;
+  onFileSelect?: (file: SandboxFile) => void;
+  selectedFilePath?: string | null;
 }) {
   const query = queryFromArgsText(toolCall.argsText);
   const url = urlFromArgsText(toolCall.argsText);
@@ -475,6 +530,10 @@ export function ToolCallCard({
         </span>
       </button>
 
+      {files.length > 0 ? (
+        <GeneratedFileList files={files} selectedPath={selectedFilePath} onSelect={onFileSelect} />
+      ) : null}
+
       {toolCall.expanded ? (
         <div className="agentos-tool-call-content">
           {query ? (
@@ -544,14 +603,6 @@ export function ToolCallCard({
                   </li>
                 ))}
               </ul>
-            </div>
-          ) : null}
-          {files.length > 0 ? (
-            <div className="agentos-tool-call-files">
-              <span className="agentos-tool-call-label">生成文件</span>
-              {files.map((file) => (
-                <SandboxFilePreview key={file.path} file={file} />
-              ))}
             </div>
           ) : null}
           {toolCall.provider ? (

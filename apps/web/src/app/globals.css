@@ -1190,30 +1190,55 @@ body {
   word-break: break-all;
 }
 
-.agentos-tool-call-files {
+.agentos-generated-files {
   display: grid;
   gap: 0.35rem;
+  margin-top: 0.35rem;
+  padding: 0 0.45rem 0.05rem;
 }
 
-.agentos-tool-call-file {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
+.agentos-generated-files-label {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 650;
 }
 
-.agentos-tool-call-file summary {
+.agentos-generated-files-list {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.agentos-generated-file-row {
   display: flex;
   min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  cursor: pointer;
-  padding: 0.45rem 0.55rem;
-  list-style-position: inside;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 0.42rem 0.55rem;
+  color: inherit;
+  text-align: left;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
 }
 
-.agentos-tool-call-file-name {
+.agentos-generated-file-row:hover,
+.agentos-generated-file-row-selected {
+  border-color: var(--accent-border);
+  background: var(--panel-muted);
+}
+
+.agentos-generated-file-main {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.agentos-generated-file-name {
   min-width: 0;
   overflow: hidden;
   color: var(--text);
@@ -1222,43 +1247,122 @@ body {
   white-space: nowrap;
 }
 
-.agentos-tool-call-file-meta {
+.agentos-generated-file-meta {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentos-generated-file-action {
   flex-shrink: 0;
+  color: var(--accent-dim);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.agentos-chat-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.agentos-file-preview-pane {
+  display: flex;
+  min-width: 18rem;
+  max-width: 30rem;
+  flex: 0 1 26rem;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--panel-muted);
+}
+
+.agentos-file-preview-header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.8rem 0.9rem;
+}
+
+.agentos-file-preview-heading {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+.agentos-file-preview-heading strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentos-file-preview-heading span {
   color: var(--muted);
   font-size: 0.68rem;
 }
 
-.agentos-tool-call-file-preview {
-  border-top: 1px solid var(--border);
-  padding: 0.5rem;
+.agentos-file-preview-header button {
+  flex: none;
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
 }
 
-.agentos-tool-call-file-preview pre {
-  max-height: 16rem;
+.agentos-file-preview-header button:hover {
+  color: var(--text);
+}
+
+.agentos-file-preview-body {
+  min-height: 0;
+  flex: 1;
   overflow: auto;
-  margin: 0;
   padding: 0.6rem;
-  background: var(--panel-muted);
+}
+
+.agentos-file-preview-body pre {
+  min-height: 100%;
+  margin: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0.7rem;
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.agentos-tool-call-file-preview img,
-.agentos-tool-call-file-preview iframe {
+.agentos-file-preview-body img,
+.agentos-file-preview-body iframe {
   display: block;
   width: 100%;
-  max-height: 24rem;
+  height: 100%;
+  min-height: 18rem;
   border: 0;
   object-fit: contain;
 }
 
-.agentos-tool-call-file-preview iframe {
-  height: 24rem;
+.agentos-file-preview-unavailable {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
 }
 
-.agentos-tool-call-file-download {
-  display: inline-block;
-  padding: 0.35rem 0.55rem;
+.agentos-file-preview-footer {
+  display: flex;
+  gap: 0.4rem;
+  border-top: 1px solid var(--border);
+  padding: 0.65rem 0.9rem;
+}
+
+.agentos-file-preview-footer a {
   color: var(--accent, #2563eb);
   font-size: 0.72rem;
   text-decoration: underline;
@@ -2055,6 +2159,18 @@ body {
     border-bottom: 0;
     border-left: 0;
     border-radius: 0;
+  }
+
+  .agentos-chat-body {
+    flex-direction: column;
+  }
+
+  .agentos-file-preview-pane {
+    min-width: 0;
+    max-width: none;
+    flex: 0 0 min(45dvh, 28rem);
+    border-top: 1px solid var(--border);
+    border-left: 0;
   }
 }
 

@@ -67,9 +67,9 @@
   包含来源与耗时，供 Web 历史回放和 Ops 会话审计使用。当前仍是单 stdio 服务器，
   服务器命令与 allowlist 来自服务配置，不是 Ops 动态安装。
 - `knowledge_search` 的知识库范围按 Agent 分类可见，不按挂载与否区分：`agent_versions.knowledge_base_slugs`（`NULL` = 不限制，能查全部激活的 `KnowledgeBase`；非空列表只限定到那几个 slug)从 `AgentVersion` 经 `AgentDeps` 传入，`search_knowledge_chunks` 强制过滤——不是模型可传的参数，垂类 agent 不能被话术引导去读别的垂类内容。General（`kind="general"`)默认不限制；`imd`（遗传代谢）限定到 `mma-pa`。
-- `sandbox_exec` 是用户级执行能力：只有 `SANDBOX_ENABLED=true` 且 Agent API 配置了 Manager URL/token 时才挂载，默认策略为 `ask`。它只把当前用户 UUID、Run UUID、相对工作目录、命令和硬上限转发给独立 Sandbox Manager；模型不能指定宿主机路径、镜像、挂载或 Docker 参数。
+- `sandbox_exec` 是用户级执行能力：只有 `SANDBOX_ENABLED=true` 且 Agent API 配置了 Manager URL/token 时才挂载，默认策略为 `allow`，因为命令始终受独立 Manager 的禁网、非 root、用户工作区和资源限制约束；Ops 仍可按 Agent 版本设为 `ask` 或 `deny`。它只把当前用户 UUID、Run UUID、相对工作目录、命令和硬上限转发给独立 Sandbox Manager；模型不能指定宿主机路径、镜像、挂载或 Docker 参数。
 - Sandbox Manager（`services/sandbox-manager`）是唯一控制 Docker 的进程。每次命令使用短生命周期容器，用户工作区按 `workspace_root/{normalized_account}` 持久化；UUID 仍用于请求身份、用户锁和旧目录迁移。容器使用 `--network none`、非 root UID/GID、只读根文件系统、仅挂载 `/workspace`、丢弃 capabilities、`no-new-privileges`、CPU/内存/PID/超时/输出限制。同一用户串行执行，默认全局并发 1。
-- Sandbox 输出超过预览上限时写入现有 owner-scoped Artifact（`kind="sandbox"`），模型拿到预览和 `output_artifact_id`，后续通过 `read_artifact` 分页；命令执行前后发现的新增/修改文件以受限的 `path/size/mime_type` 元数据进入工具结果和 `run_events`，聊天通过 Agent API 的当前用户校验代理文件预览/下载。Manager 只监听私有地址，不能通过 Web/FRP 暴露；文件读取拒绝绝对路径、父目录和符号链接。
+- Sandbox 输出超过预览上限时写入现有 owner-scoped Artifact（`kind="sandbox"`），模型拿到预览和 `output_artifact_id`，后续通过 `read_artifact` 分页；命令执行前后发现的新增/修改文件以受限的 `path/size/mime_type` 元数据进入工具结果和 `run_events`，聊天在生成位置显示文件名，点击后通过 Agent API 的当前用户校验代理文件右侧预览/下载。Manager 只监听私有地址，不能通过 Web/FRP 暴露；文件读取拒绝绝对路径、父目录和符号链接。
 - Ops 的 Agent 版本发布页按注册表展示内置工具，并可逐项选择「继承平台默认 / 允许 / 每次审批 / 禁止」；后端拒绝未注册的工具名，发布仍创建不可变 `AgentVersion`。
 
 - Ops 的工具目录支持按来源查看内建和 MCP 工具：`GET /v1/ops/tools/{tool_name}` 返回当前策略、内建工具的真实输入 JSON Schema，以及文档化的解码后输出 JSON Schema；MCP 工具的输入/输出 Schema 由远端服务器在运行时提供，页面会明确标注这一边界。旧 `/skills` 路径仅保留兼容重定向。
