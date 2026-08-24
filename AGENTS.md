@@ -24,7 +24,7 @@
   - `src/agent_api/db/` — SQLAlchemy 模型与 repository;`migrations/` — Alembic。
 - `infra/` — Ollama Modelfile、launchd plist、frp/nginx 配置。
 - `docs/` — 架构事实来源，索引在 `docs/README.md`;`docs/16` 是 Agent 运行时建成态架构。
-- `scripts/macmini-deploy.sh` — Mac mini 部署（pull → sync → migrate → seed agents/核心知识库 → build → 重启）。前端构建是「先建后换」：服务不停，先用 `NEXT_DIST_DIR=.next.new` 构建（`next.config` 的 `distDir` 读这个环境变量），成功后 bootout → 替换 `.next` → 启动，停机窗口只有几秒；构建失败旧构建原样在跑。核心知识文档仅在缺失时播种，避免覆盖 Ops 侧编辑；`seed/knowledge/mma_pa_chunks.json` 变更后需手动重跑 `scripts/seed_knowledge.py`。
+- `scripts/macmini-deploy.sh` — Mac mini 部署（pull → sync → migrate → seed agents/核心知识库 → build → 重启）。前端构建是「先建后换」：服务不停，先用 `NEXT_DIST_DIR=.next.new` 构建（`next.config` 的 `distDir` 读这个环境变量），成功后 bootout → **等服务注册项与端口都释放** → 替换 `.next` → 启动并等 HTTP 就绪（不就绪会在脚本输出里告警）；停机窗口只有几秒，构建失败旧构建原样在跑。bootout 是异步的，跳过等待会让新进程撞上旧进程占着的端口，曾导致「部署后 502、再跑一次才好」。核心知识文档仅在缺失时播种，避免覆盖 Ops 侧编辑；`seed/knowledge/mma_pa_chunks.json` 变更后需手动重跑 `scripts/seed_knowledge.py`。
 
 ## 常用命令
 

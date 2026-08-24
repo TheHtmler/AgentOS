@@ -25,6 +25,8 @@ DOMAIN="gui/${UID_NUM}"
 API_LABEL="${AGENTOS_API_LABEL:-com.local.agentos-api}"
 WEB_LABEL="${AGENTOS_WEB_LABEL:-com.local.agentos-web}"
 OPS_LABEL="${AGENTOS_OPS_LABEL:-com.local.agentos-ops}"
+WEB_PORT="${AGENTOS_WEB_PORT:-3000}"
+OPS_PORT="${AGENTOS_OPS_PORT:-3001}"
 
 DO_PULL=1
 DO_API=0
@@ -132,8 +134,38 @@ start_service() {
 # the new one compiles into `.next.new` (NEXT_DIST_DIR); downtime is just the
 # bootout → swap → start window (seconds) instead of the whole build (minutes).
 # A failed build leaves the running old build completely untouched.
+#
+# bootout is asynchronous: the old process may hold the listen socket (and the
+# service registry entry) for seconds — longer with open SSE connections. Starting
+# the new instance before the port frees crashes it on EADDRINUSE, and launchd's
+# KeepAlive throttle then stretches the outage (the old "502 until the next
+# deploy" bug). Always wait for the registry entry AND the port to go away.
+wait_port_free() {
+  local port="$1" label="$2" tries=60
+  while ((tries-- > 0)); do
+    if ! service_loaded "$label" && ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  warn "port $port still busy after bootout of $label — continuing anyway"
+}
+
+wait_http_ready() {
+  local url="$1" name="$2" tries=60 code
+  while ((tries-- > 0)); do
+    code="$(http_code "$url")"
+    if [[ "$code" != "down" && "$code" != "000" ]]; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  warn "$name did not come up at $url after restart — check launchd logs (/tmp/agentos-${name}.out.log)"
+  return 1
+}
+
 deploy_frontend() {
-  local name="$1" label="$2" cache_mode="$3"
+  local name="$1" label="$2" cache_mode="$3" port="$4"
   local app_dir="$ROOT/apps/$name"
   local next_dir="$app_dir/.next"
   local new_dir="$app_dir/.next.new"
@@ -155,6 +187,7 @@ deploy_frontend() {
   if service_loaded "$label"; then
     log "stop $label for the .next swap"
     launchctl bootout "${DOMAIN}/${label}"
+    wait_port_free "$port" "$label"
   fi
   rm -rf "$prev_dir"
   if [[ -d "$next_dir" ]]; then
@@ -163,6 +196,7 @@ deploy_frontend() {
   mv "$new_dir" "$next_dir"
   if start_service "$label"; then
     rm -rf "$prev_dir"
+    wait_http_ready "http://127.0.0.1:${port}/" "$name" || true
   else
     warn "$name failed to start after swap; previous build kept at $prev_dir"
   fi
@@ -244,12 +278,12 @@ if [[ "$DO_WEB" -eq 1 || "$DO_OPS" -eq 1 ]]; then
 fi
 
 if [[ "$DO_WEB" -eq 1 ]]; then
-  deploy_frontend web "$WEB_LABEL" reuse
+  deploy_frontend web "$WEB_LABEL" reuse "$WEB_PORT"
 fi
 
 if [[ "$DO_OPS" -eq 1 ]]; then
   # ops: clean rebuild (no cache carry-over) — stale prerender cache has bitten before.
-  deploy_frontend ops "$OPS_LABEL" clean
+  deploy_frontend ops "$OPS_LABEL" clean "$OPS_PORT"
 fi
 
 sleep 2

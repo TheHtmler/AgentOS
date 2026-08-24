@@ -115,6 +115,7 @@
 - HITL 续跑正确性修复两条：续跑持久化检查点不再混入当轮上下文快照（此前违反「快照不落库」硬约束，且快照伪 run 边界会污染后续裁剪的 run 计数）;`POST /v1/runs/{id}/resume` 在行锁（`get_run(for_update=True)`）内判断谁离开 `waiting_approval`，同幂等键并发重放不再双启后台续跑。
 - 模型错误可诊断化：`_error_chain` 拆开 `ExceptionGroup`（此前 timeout/overload 识别也一并失效）;「端点返回网页或空流」（典型 base_url / api_mode 不匹配，如少 `/v1` 前缀）映射为指向 Ops Provider 配置的文案，不再落到「模型服务暂时不可用」兜底；`format_run_failure_message` 追加 root cause 落库，Ops 时间线可见真实原因。
 - Thinking 展示修复：Responses provider 的 reasoning 同时带可读 summary 与加密签名，前端此前被末尾的 encrypted 事件无条件降级为「加密 reasoning 不可读」；现在已有可读内容时保留文本，仅在没有可读内容时才标注加密。想看流式 thinking 的配置：`responses` 模式 + `reasoning_summary`(auto/concise/detailed);chat_completions 形态是否可见取决于端点是否透传 `reasoning_content`。
+- 部署 502 修复：`macmini-deploy.sh` 的 bootout 是异步的，旧进程可能数秒内仍占着 3000/3001(SSE 长连接更慢），新进程随即 bootstrap 撞 EADDRINUSE 进入 KeepAlive 崩溃退避，表现为「部署后 502、再跑一次才好」；现在 bootout 后等服务注册项与端口都释放才 swap 启动，启动后等 HTTP 就绪，不就绪在脚本输出里告警（`/tmp/agentos-{web,ops}.out.log`)。
 
 ## 验证
 
