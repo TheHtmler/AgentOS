@@ -16,7 +16,13 @@
 
 set -euo pipefail
 
+# Bash reads script files lazily in chunks: if git pull replaces THIS script
+# mid-run, execution continues at a stale byte offset inside the new content —
+# the first deploy of a script change runs mangled code. Snapshot the args and
+# our own path now; after the pull, re-exec the new script if it changed.
+ORIG_ARGS=("$@")
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 cd "$ROOT"
 
 UID_NUM="$(id -u)"
@@ -213,8 +219,13 @@ if [[ "$DO_PULL" -eq 1 ]]; then
   branch="$(git rev-parse --abbrev-ref HEAD)"
   remote="$(git config --get "branch.${branch}.remote" 2>/dev/null || echo origin)"
   log "git fetch ${remote} ${branch} && merge --ff-only"
+  self_before="$(shasum "$SELF" | awk '{print $1}')"
   git fetch "$remote" "$branch"
   git merge --ff-only "${remote}/${branch}"
+  if [[ "$(shasum "$SELF" | awk '{print $1}')" != "$self_before" ]]; then
+    log "deploy script changed by pull — re-exec the new version"
+    exec bash "$SELF" --no-pull "${ORIG_ARGS[@]}"
+  fi
 else
   log "skip git pull"
 fi
