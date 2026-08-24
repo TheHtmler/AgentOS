@@ -67,6 +67,7 @@ export const TOOL_DOMAIN_LABELS: Record<string, string> = {
   case: "档案",
   artifact: "产物",
   mcp: "MCP",
+  sandbox: "隔离执行",
 };
 
 export const TOOL_RISK_LABELS: Record<string, string> = {

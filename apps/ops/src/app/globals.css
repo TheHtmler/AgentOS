@@ -355,6 +355,24 @@ a.btn:hover {
   border-radius: var(--radius);
 }
 
+.tool-inventory-link {
+  color: inherit;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.tool-inventory-link:hover {
+  border-color: #cfd3da;
+  background: #fcfcfd;
+}
+
+.tool-inventory-link__action {
+  color: var(--focus);
+  font-size: 12px;
+  font-weight: 550;
+}
+
 .row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -738,6 +756,109 @@ button.secondary.is-selected {
 .meta-grid > div {
   display: grid;
   gap: 3px;
+}
+
+.tool-detail-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tool-detail-meta > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tool-detail-meta strong {
+  overflow-wrap: anywhere;
+}
+
+.tool-schema-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.schema-panel__description {
+  margin: 5px 0 0;
+  font-size: 12px;
+}
+
+.schema-field-list {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.schema-field {
+  display: grid;
+  gap: 4px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.schema-field__head,
+.schema-field__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+
+.schema-field__head code {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.schema-field__required {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid #fedf89;
+  border-radius: 999px;
+  color: var(--warn);
+  background: var(--warn-soft);
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.4;
+}
+
+.schema-field__type {
+  color: var(--focus);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+
+.schema-field__meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.schema-raw {
+  display: grid;
+  gap: 8px;
+}
+
+.schema-raw summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.schema-raw[open] summary {
+  color: var(--ink);
+}
+
+.schema-raw .chunk-body {
+  max-height: 420px;
+}
+
+@media (max-width: 640px) {
+  .tool-detail-meta,
+  .tool-schema-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .crumb {

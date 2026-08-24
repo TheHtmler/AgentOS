@@ -61,3 +61,14 @@ async def test_ops_tools_inventory(monkeypatch: pytest.MonkeyPatch) -> None:
         assert "web_search" in names
         assert "knowledge_search" in names
         assert all(row["source"] in {"builtin", "mcp"} for row in body["tools"])
+
+        detail = await client.get("/v1/ops/tools/web_search")
+        assert detail.status_code == 200
+        detail_body = detail.json()
+        assert detail_body["source"] == "builtin"
+        assert detail_body["input_schema"]["required"] == ["query"]
+        assert "results" in detail_body["output_schema"]["properties"]
+        assert detail_body["output_transport"] == "json_string"
+
+        missing = await client.get("/v1/ops/tools/not_registered")
+        assert missing.status_code == 404

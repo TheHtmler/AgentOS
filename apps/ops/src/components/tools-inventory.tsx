@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
@@ -80,7 +81,11 @@ export function ToolsInventory({
       {tools.length > 0 ? (
         <div className="doc-list always">
           {tools.map((tool) => (
-            <article key={tool.name} className="doc-card">
+            <Link
+              key={tool.name}
+              href={`/${source === "builtin" ? "skills" : "mcp"}/${encodeURIComponent(tool.name)}`}
+              className="doc-card tool-inventory-link"
+            >
               <div className="doc-card__title">{tool.name}</div>
               <p style={{ margin: 0 }}>{tool.description}</p>
               <div className="doc-card__meta">
@@ -94,7 +99,8 @@ export function ToolsInventory({
                   {labelOf(POLICY_ACTION_LABELS, tool.effective_action)}
                 </span>
               </div>
-            </article>
+              <span className="tool-inventory-link__action">查看输入/输出定义 →</span>
+            </Link>
           ))}
         </div>
       ) : null}
