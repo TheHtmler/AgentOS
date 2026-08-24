@@ -39,6 +39,85 @@ function languageFromClassName(className: string | undefined): string | null {
   return match?.[1] ?? null;
 }
 
+function extractCodeParts(children: ReactNode): { language: string | null; codeText: string } {
+  const codeElement = Children.toArray(children).find((child) => isValidElement(child));
+  const className =
+    isValidElement<{ className?: string }>(codeElement) &&
+    typeof codeElement.props.className === "string"
+      ? codeElement.props.className
+      : undefined;
+  return {
+    language: languageFromClassName(className),
+    codeText: collectText(children).replace(/\n$/, ""),
+  };
+}
+
+let mermaidRenderSeq = 0;
+
+function MermaidBlock({ codeText }: { codeText: string }) {
+  // Keep the last successfully rendered diagram on screen; while the fence is
+  // still streaming in, parses fail and the source view shows instead.
+  const [svg, setSvg] = useState<string | null>(null);
+  const [showCode, setShowCode] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const renderId = `agentos-mmd-${(mermaidRenderSeq += 1)}`;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const { default: mermaid } = await import("mermaid");
+          mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: "strict",
+            theme: document.documentElement.dataset["theme"] === "dark" ? "dark" : "default",
+          });
+          const result = await mermaid.render(renderId, codeText);
+          if (!cancelled) {
+            setSvg(result.svg);
+          }
+        } catch {
+          // Partial source mid-stream is unparsable — keep the previous render.
+        } finally {
+          // mermaid appends its error diagram to <body> on parse failure.
+          document.getElementById(renderId)?.remove();
+          document.getElementById(`d${renderId}`)?.remove();
+        }
+      })();
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [codeText]);
+
+  return (
+    <div className="agentos-code-block">
+      <div className="agentos-code-block-toolbar">
+        <span className="agentos-code-block-lang">mermaid</span>
+        {svg !== null ? (
+          <button
+            type="button"
+            onClick={() => setShowCode((value) => !value)}
+            className="agentos-code-block-copy"
+          >
+            {showCode ? "图表" : "代码"}
+          </button>
+        ) : null}
+      </div>
+      {showCode || svg === null ? (
+        <div className="agentos-code-block-scroll">
+          <pre>
+            <code>{codeText}</code>
+          </pre>
+        </div>
+      ) : (
+        <div className="agentos-mermaid-canvas" dangerouslySetInnerHTML={{ __html: svg }} />
+      )}
+    </div>
+  );
+}
+
 function CodeBlock({ children }: { children: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -46,14 +125,7 @@ function CodeBlock({ children }: { children: ReactNode }) {
   const savedScrollTopRef = useRef(0);
   const userPinnedRef = useRef(false);
 
-  const codeElement = Children.toArray(children).find((child) => isValidElement(child));
-  const className =
-    isValidElement<{ className?: string }>(codeElement) &&
-    typeof codeElement.props.className === "string"
-      ? codeElement.props.className
-      : undefined;
-  const language = languageFromClassName(className);
-  const codeText = collectText(children).replace(/\n$/, "");
+  const { language, codeText } = extractCodeParts(children);
 
   useLayoutEffect(() => {
     const port = scrollRef.current;
@@ -175,7 +247,13 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({ content }: { 
               {children}
             </a>
           ),
-          pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+          pre: ({ children }) => {
+            const { language, codeText } = extractCodeParts(children);
+            if (language === "mermaid") {
+              return <MermaidBlock codeText={codeText} />;
+            }
+            return <CodeBlock>{children}</CodeBlock>;
+          },
           // Wide GFM tables scroll horizontally instead of crushing the bubble.
           table: ({ children }) => (
             <div className="agentos-md-table-wrap">

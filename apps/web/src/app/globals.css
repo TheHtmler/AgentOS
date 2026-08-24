@@ -748,6 +748,16 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+.agentos-mermaid-canvas {
+  overflow-x: auto;
+  padding: 0.75rem;
+}
+
+.agentos-mermaid-canvas svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .agentos-md pre {
   overflow: visible;
   margin: 0;
