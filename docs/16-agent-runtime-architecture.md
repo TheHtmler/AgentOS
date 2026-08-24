@@ -72,7 +72,7 @@
 - Sandbox 输出超过预览上限时写入现有 owner-scoped Artifact（`kind="sandbox"`），模型拿到预览和 `output_artifact_id`，后续通过 `read_artifact` 分页；命令请求和结果摘要进入既有 `run_events`。Manager 只监听私有地址，不能通过 Web/FRP 暴露。
 - Ops 的 Agent 版本发布页按注册表展示内置工具，并可逐项选择「继承平台默认 / 允许 / 每次审批 / 禁止」；后端拒绝未注册的工具名，发布仍创建不可变 `AgentVersion`。
 
-- Ops 的 Skills/MCP 清单支持进入工具详情：`GET /v1/ops/tools/{tool_name}` 返回当前策略、内建工具的真实输入 JSON Schema，以及文档化的解码后输出 JSON Schema；MCP 工具的输入/输出 Schema 由远端服务器在运行时提供，页面会明确标注这一边界。
+- Ops 的工具目录支持按来源查看内建和 MCP 工具：`GET /v1/ops/tools/{tool_name}` 返回当前策略、内建工具的真实输入 JSON Schema，以及文档化的解码后输出 JSON Schema；MCP 工具的输入/输出 Schema 由远端服务器在运行时提供，页面会明确标注这一边界。旧 `/skills` 路径仅保留兼容重定向。
 
 ## 持久化、回放与 HITL
 

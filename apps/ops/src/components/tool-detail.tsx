@@ -26,9 +26,7 @@ type OpsToolDetail = {
   output_transport: string;
 };
 
-type ToolSource = "builtin" | "mcp";
-
-const sourceLabels: Record<ToolSource, string> = {
+const sourceLabels: Record<OpsToolDetail["source"], string> = {
   builtin: "内建工具",
   mcp: "MCP 工具",
 };
@@ -120,7 +118,7 @@ function SchemaPanel({
   );
 }
 
-export function ToolDetail({ source }: { source: ToolSource }) {
+export function ToolDetail() {
   const params = useParams<{ toolName: string }>();
   const [detail, setDetail] = useState<OpsToolDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -138,17 +136,14 @@ export function ToolDetail({ source }: { source: ToolSource }) {
     })();
   }, [params.toolName]);
 
-  const backHref = source === "builtin" ? "/skills" : "/mcp";
-  const backLabel = source === "builtin" ? "返回技能" : "返回 MCP";
-
   if (error) {
     return (
       <div className="stack">
         <PageHeader
           title="工具定义"
           actions={
-            <Link className="btn" href={backHref}>
-              {backLabel}
+            <Link className="btn" href="/tools">
+              返回工具
             </Link>
           }
         />
@@ -163,8 +158,8 @@ export function ToolDetail({ source }: { source: ToolSource }) {
         <PageHeader
           title="工具定义"
           actions={
-            <Link className="btn" href={backHref}>
-              {backLabel}
+            <Link className="btn" href="/tools">
+              返回工具
             </Link>
           }
         />
@@ -179,8 +174,8 @@ export function ToolDetail({ source }: { source: ToolSource }) {
         title={detail.name}
         lead={detail.description}
         actions={
-          <Link className="btn" href={backHref}>
-            {backLabel}
+          <Link className="btn" href="/tools">
+            返回工具
           </Link>
         }
       />

@@ -24,6 +24,13 @@ type OpsToolsResponse = {
   tools: OpsTool[];
 };
 
+type ToolSource = "all" | "builtin" | "mcp";
+
+const sourceLabels: Record<Exclude<ToolSource, "all">, string> = {
+  builtin: "内建",
+  mcp: "MCP",
+};
+
 export function ToolsInventory({
   title,
   lead,
@@ -31,7 +38,7 @@ export function ToolsInventory({
 }: {
   title: string;
   lead: string;
-  source: "builtin" | "mcp";
+  source: ToolSource;
 }) {
   const [data, setData] = useState<OpsToolsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +54,10 @@ export function ToolsInventory({
   }, []);
 
   const tools = useMemo(
-    () => (data?.tools ?? []).filter((tool) => tool.source === source),
+    () =>
+      source === "all"
+        ? (data?.tools ?? [])
+        : (data?.tools ?? []).filter((tool) => tool.source === source),
     [data, source],
   );
 
@@ -73,7 +83,9 @@ export function ToolsInventory({
           <p className="muted" style={{ margin: 0 }}>
             {source === "mcp"
               ? "还没有登记外部 MCP 工具。运行时允许名单为空时，这里会保持空白。"
-              : "没有内建技能。"}
+              : source === "builtin"
+                ? "没有内建工具。"
+                : "当前没有已登记工具。"}
           </p>
         </section>
       ) : null}
@@ -83,7 +95,7 @@ export function ToolsInventory({
           {tools.map((tool) => (
             <Link
               key={tool.name}
-              href={`/${source === "builtin" ? "skills" : "mcp"}/${encodeURIComponent(tool.name)}`}
+              href={`/tools/${encodeURIComponent(tool.name)}`}
               className="doc-card tool-inventory-link"
             >
               <div className="doc-card__title">{tool.name}</div>
@@ -91,6 +103,7 @@ export function ToolsInventory({
               <div className="doc-card__meta">
                 <span>{labelOf(TOOL_DOMAIN_LABELS, tool.domain)}</span>
                 <span>{labelOf(TOOL_RISK_LABELS, tool.risk)}</span>
+                <span>{sourceLabels[tool.source]}</span>
                 <span className={`badge badge--${tool.enabled ? "completed" : "cancelled"}`}>
                   {tool.enabled ? "已启用" : "已关闭"}
                 </span>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
-type NavIconName = "grid" | "book" | "bot" | "chat" | "spark" | "plug" | "chip";
+type NavIconName = "grid" | "book" | "bot" | "chat" | "tool" | "plug" | "chip";
 
 type NavItem = {
   href: string;
@@ -23,15 +23,16 @@ const NAV_GROUPS: { label: string; items: readonly NavItem[] }[] = [
       { href: "/knowledge", label: "知识库", icon: "book" },
       { href: "/agents", label: "智能体", icon: "bot" },
       { href: "/providers", label: "模型", icon: "chip" },
+      { href: "/tools", label: "工具", icon: "tool" },
     ],
   },
   {
     label: "观测",
-    items: [
-      { href: "/sessions", label: "会话", icon: "chat" },
-      { href: "/skills", label: "技能", icon: "spark" },
-      { href: "/mcp", label: "MCP", icon: "plug" },
-    ],
+    items: [{ href: "/sessions", label: "会话", icon: "chat" }],
+  },
+  {
+    label: "扩展",
+    items: [{ href: "/mcp", label: "MCP 接入", icon: "plug" }],
   },
 ];
 
@@ -83,10 +84,10 @@ function NavIcon({ name }: { name: NavIconName }) {
       </svg>
     );
   }
-  if (name === "spark") {
+  if (name === "tool") {
     return (
       <svg {...common} aria-hidden>
-        <path d="M8 2.5 9 6l3.5 1L9 8l-1 3.5L7 8 3.5 7 7 6l1-3.5Z" />
+        <path d="M9.5 3.2a3 3 0 0 0 3.3 3.9l-4.9 4.9a1.4 1.4 0 1 1-2-2l4.9-4.9a3 3 0 0 0-3.9-3.3l1.8 1.8-1.4 1.4-1.8-1.8a3 3 0 0 0 3.9 3.3" />
       </svg>
     );
   }

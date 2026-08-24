@@ -1,5 +1,10 @@
-import { ToolDetail } from "@/components/tool-detail";
+import { redirect } from "next/navigation";
 
-export default function BuiltinToolDetailPage() {
-  return <ToolDetail source="builtin" />;
+type PageProps = {
+  params: Promise<{ toolName: string }>;
+};
+
+export default async function BuiltinToolDetailPage({ params }: PageProps) {
+  const { toolName } = await params;
+  redirect(`/tools/${encodeURIComponent(toolName)}`);
 }

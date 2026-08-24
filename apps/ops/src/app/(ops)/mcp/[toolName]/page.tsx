@@ -1,5 +1,10 @@
-import { ToolDetail } from "@/components/tool-detail";
+import { redirect } from "next/navigation";
 
-export default function McpToolDetailPage() {
-  return <ToolDetail source="mcp" />;
+type PageProps = {
+  params: Promise<{ toolName: string }>;
+};
+
+export default async function McpToolDetailPage({ params }: PageProps) {
+  const { toolName } = await params;
+  redirect(`/tools/${encodeURIComponent(toolName)}`);
 }
