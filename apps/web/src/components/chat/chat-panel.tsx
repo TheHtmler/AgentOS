@@ -1437,12 +1437,28 @@ export function ChatPanel({
       return;
     }
 
-    setTimelineSteps((current) =>
-      updateLatestThinkingStep(current, anchorId, {
-        phase: "模型返回了加密 reasoning",
-        contentMode: "encrypted",
-      }),
-    );
+    setTimelineSteps((current) => {
+      // Responses providers always attach an encrypted signature for turn
+      // continuity — even when a readable summary already streamed. Only mark
+      // the step "encrypted" when there is no readable content to show.
+      for (let index = current.length - 1; index >= 0; index -= 1) {
+        const step = current[index];
+        if (step?.kind !== "thinking" || step.afterMessageId !== anchorId) {
+          continue;
+        }
+        if (step.content.trim()) {
+          return current;
+        }
+        const next = [...current];
+        next[index] = {
+          ...step,
+          phase: "模型返回了加密 reasoning",
+          contentMode: "encrypted",
+        };
+        return next;
+      }
+      return current;
+    });
   }
 
   function handleReasoningEnd(anchorId: string, messageId: string) {

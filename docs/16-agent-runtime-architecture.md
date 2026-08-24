@@ -72,7 +72,7 @@
 
 - 事实源：PostgreSQL。`threads`/`messages`/`runs`/`run_events`（有序 append-only)/`run_message_histories`(pydantic-ai 原始消息快照，续聊与 HITL 续跑的检查点）/`interrupts`/`artifacts`/`agents`/`agent_versions`/`user_memories`（含向量）/`cases`/`case_facts`/`knowledge_*`。
 - 每个 run 记录 `input_tokens`/`output_tokens`/`model_request_count`；预算裁剪动作除服务端日志外写入 `run_events`(`context_budget`,phase=`pre_run`/`step`,best-effort,含估算 token 与动作摘要）,Ops 会话事件时间线可读。与 harness「模型可见即已记录」的差距：快照/裁剪视图本身仍不落库，可由输入确定性重推，但没有逐 step 的事件级回放。
-- Web 过程时间线对 Thinking 与工具调用显示本轮/单工具耗时；工具历史 API 从 `run_events.tool_result.duration_ms` 回放该字段。若模型通过 AG-UI 返回可读 reasoning，Web 仅在当前 SSE 回合临时展示（最多 12000 字符）；加密 reasoning 会明确标注不可读。原始 reasoning、摘要和 provider raw 内容永不写入持久化历史；为保证 Responses 续聊，服务端只保留 `id`/`signature`/`provider_name` 这组 opaque 连续性元数据。
+- Web 过程时间线对 Thinking 与工具调用显示本轮/单工具耗时；工具历史 API 从 `run_events.tool_result.duration_ms` 回放该字段。若模型通过 AG-UI 返回可读 reasoning，Web 仅在当前 SSE 回合临时展示（最多 12000 字符）;Responses provider 的同一 reasoning 总会同时携带加密签名（续聊连续性用），此时优先展示可读摘要，仅在没有可读内容时才明确标注「加密 reasoning 不可读」。原始 reasoning、摘要和 provider raw 内容永不写入持久化历史；为保证 Responses 续聊，服务端只保留 `id`/`signature`/`provider_name` 这组 opaque 连续性元数据。
 - HITL:`DeferredToolRequests` 输出 → interrupt 落库 → AG-UI 审批卡 → 携带 DeferredToolResults 从检查点续跑；超时（默认 30 分钟）自动拒绝。同一 thread 同时只允许一个 running run。续跑不再是黑盒：`hitl_resume` 复用 AG-UI 流式管线（`AGUIAdapter` + 溢出重试 + 文本增量落库），事件经进程内 per-run broker(`run_events_broker`，带 replay buffer）扇出，`GET /v1/runs/{id}/stream` 让浏览器订阅续跑过程的工具调用/Thinking/文本流；无订阅者（超时自动拒绝、断连）时 broker 空转无害，前端拿不到流时回退原有的轮询 + 历史刷新。
 
 ## 与 deepseek-harness / 主流设计的取舍
