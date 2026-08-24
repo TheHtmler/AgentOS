@@ -69,7 +69,7 @@ async def run_sandbox_exec(
             {"error": "Sandbox is not configured", "code": "sandbox_unavailable"},
             ensure_ascii=False,
         )
-    if deps.user_id is None or deps.run_id is None:
+    if deps.user_id is None or deps.run_id is None or not deps.user_account:
         return json.dumps(
             {"error": "Sandbox requires an authenticated run", "code": "sandbox_scope_missing"},
             ensure_ascii=False,
@@ -86,6 +86,7 @@ async def run_sandbox_exec(
 
     payload = {
         "user_id": str(deps.user_id),
+        "account": deps.user_account,
         "run_id": str(deps.run_id),
         "command": normalized_command,
         "cwd": normalized_cwd,

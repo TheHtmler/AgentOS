@@ -7,6 +7,7 @@ import re
 import shutil
 import time
 from pathlib import Path, PurePosixPath
+from urllib.parse import quote
 from uuid import UUID, uuid4
 
 from sandbox_manager.config import Settings
@@ -40,12 +41,46 @@ def validate_image(image: str) -> str:
     return normalized
 
 
-def workspace_path(root: Path, user_id: UUID) -> Path:
+def account_directory_name(account: str) -> str:
+    """Return a readable, filesystem-safe directory name for a normalized account."""
+
+    normalized = account.strip().casefold()
+    if not normalized:
+        raise SandboxInputError("account must not be blank")
+    directory_name = quote(normalized, safe="@._+-")
+    if directory_name in (".", "..") or len(directory_name) > 1_024:
+        raise SandboxInputError("account cannot be used as a Sandbox workspace name")
+    return directory_name
+
+
+def workspace_path(root: Path, account: str) -> Path:
+    resolved_root = root.resolve()
+    candidate = (resolved_root / account_directory_name(account)).resolve()
+    if candidate.parent != resolved_root:
+        raise SandboxInputError("Sandbox workspace escapes the configured root")
+    return candidate
+
+
+def legacy_workspace_path(root: Path, user_id: UUID) -> Path:
+    """Return the pre-account-index workspace for one user."""
+
     resolved_root = root.resolve()
     candidate = (resolved_root / str(user_id)).resolve()
     if candidate.parent != resolved_root:
         raise SandboxInputError("Sandbox workspace escapes the configured root")
     return candidate
+
+
+def user_workspace_path(root: Path, *, user_id: UUID, account: str) -> Path:
+    """Use the account directory and migrate one existing UUID directory on first access."""
+
+    current = workspace_path(root, account)
+    legacy = legacy_workspace_path(root, user_id)
+    if not current.exists() and legacy.exists():
+        if legacy.is_symlink() or not legacy.is_dir():
+            raise SandboxInputError("Legacy Sandbox workspace is not a directory")
+        legacy.rename(current)
+    return current
 
 
 def build_docker_args(
@@ -189,7 +224,11 @@ async def execute(settings: Settings, request: ExecuteRequest) -> ExecuteRespons
 
 
 async def _execute_locked(settings: Settings, request: ExecuteRequest) -> ExecuteResponse:
-    workspace = workspace_path(settings.workspace_root, request.user_id)
+    workspace = user_workspace_path(
+        settings.workspace_root,
+        user_id=request.user_id,
+        account=request.account,
+    )
     workspace.mkdir(parents=True, exist_ok=True)
     workspace.chmod(0o700)
     before_files = _snapshot_files(workspace)

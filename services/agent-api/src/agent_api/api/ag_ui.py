@@ -404,6 +404,7 @@ async def stream_ag_ui_run(
                     run_id=started.run_id,
                     case_id=case_id,
                     user_id=user.id,
+                    user_account=user.email,
                     thread_id=started.thread_id,
                     http_client=runtime.ollama_http_client,
                     sandbox_client=runtime.sandbox_http_client,

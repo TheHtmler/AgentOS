@@ -13,7 +13,7 @@ from sandbox_manager.executor import (
     SandboxInputError,
     execute,
     resolve_workspace_file,
-    workspace_path,
+    user_workspace_path,
 )
 from sandbox_manager.models import ExecuteRequest, ExecuteResponse
 
@@ -60,14 +60,19 @@ async def execute_sandbox(request: ExecuteRequest) -> ExecuteResponse:
 )
 async def get_sandbox_file(
     user_id: Annotated[UUID, Query()],
+    account: Annotated[str, Query(min_length=3, max_length=320)],
     path: Annotated[str, Query(min_length=1, max_length=512)],
     download: Annotated[bool, Query()] = False,
 ) -> FileResponse:
     """Serve one owner workspace file after the Agent API has checked the session."""
 
     settings = get_settings()
-    workspace = workspace_path(settings.workspace_root, user_id)
     try:
+        workspace = user_workspace_path(
+            settings.workspace_root,
+            user_id=user_id,
+            account=account,
+        )
         file_path = resolve_workspace_file(workspace, path)
         if file_path.stat().st_size > settings.file_max_bytes:
             raise HTTPException(status_code=413, detail="Sandbox file is too large")

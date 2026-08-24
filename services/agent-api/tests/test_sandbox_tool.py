@@ -69,6 +69,7 @@ async def test_sandbox_tool_calls_manager(monkeypatch: pytest.MonkeyPatch) -> No
             AgentDeps(
                 sandbox_client=client,  # type: ignore[arg-type]
                 user_id=uuid4(),
+                user_account="test@example.com",
                 run_id=uuid4(),
                 persist_tool_events=False,
             ),
@@ -87,4 +88,5 @@ async def test_sandbox_tool_calls_manager(monkeypatch: pytest.MonkeyPatch) -> No
     assert client.request["headers"] == {"X-AgentOS-Sandbox-Token": "token"}
     request_payload = client.request["json"]
     assert isinstance(request_payload, dict)
+    assert request_payload["account"] == "test@example.com"
     assert request_payload["cwd"] == "reports"

@@ -36,6 +36,7 @@ async def get_sandbox_file(
         "/v1/sandboxes/files",
         params={
             "user_id": str(user.id),
+            "account": user.email,
             "path": path,
             "download": "true" if download else "false",
         },

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class ExecuteRequest(BaseModel):
     user_id: UUID
+    account: str = Field(min_length=3, max_length=320)
     run_id: UUID
     command: str = Field(min_length=1, max_length=12_000)
     cwd: str = Field(default="", max_length=512)

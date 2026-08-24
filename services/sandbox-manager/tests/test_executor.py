@@ -6,9 +6,11 @@ import pytest
 from sandbox_manager.config import Settings
 from sandbox_manager.executor import (
     SandboxInputError,
+    account_directory_name,
     build_docker_args,
     normalize_cwd,
     resolve_workspace_file,
+    user_workspace_path,
 )
 from sandbox_manager.models import ExecuteRequest
 
@@ -27,6 +29,7 @@ def test_docker_command_has_execution_boundaries(tmp_path: Path) -> None:
     settings = Settings(manager_token="test-token")
     request = ExecuteRequest(
         user_id=uuid4(),
+        account="test@example.com",
         run_id=uuid4(),
         command="python -c 'print(1)'",
         cwd="work",
@@ -55,3 +58,20 @@ def test_resolve_workspace_file_rejects_escape_and_symlink(tmp_path: Path) -> No
         resolve_workspace_file(workspace, "../joke.txt")
     with pytest.raises(FileNotFoundError):
         resolve_workspace_file(workspace, "missing.txt")
+
+
+def test_account_workspace_name_migrates_legacy_uuid_directory(tmp_path: Path) -> None:
+    user_id = uuid4()
+    legacy = tmp_path / str(user_id)
+    legacy.mkdir()
+    (legacy / "joke.txt").write_text("hello", encoding="utf-8")
+
+    assert account_directory_name("Test@Example.COM") == "test@example.com"
+    current = user_workspace_path(
+        tmp_path,
+        user_id=user_id,
+        account="Test@Example.COM",
+    )
+    assert current.name == "test@example.com"
+    assert (current / "joke.txt").read_text(encoding="utf-8") == "hello"
+    assert not legacy.exists()

@@ -53,7 +53,7 @@ from agent_api.context_budget import (
 )
 from agent_api.db.agent_store import get_published_version
 from agent_api.db.chat_store import get_run, get_run_message_history, list_thread_messages
-from agent_api.db.models import Interrupt, Thread
+from agent_api.db.models import Interrupt, Thread, User
 from agent_api.db.provider_store import ModelProviderUnavailableError, resolve_model_profile
 from agent_api.db.session import session_factory
 from agent_api.hitl_pause import persist_deferred_approvals
@@ -96,6 +96,7 @@ async def continue_run_after_approval(
         run = await get_run(session, run_id=run_id, user_id=user_id)
         history_raw = await get_run_message_history(session, run_id=run_id)
         thread = await session.get(Thread, run.thread_id)
+        user = await session.get(User, user_id)
         version = (
             await get_published_version(session, thread.agent_id) if thread is not None else None
         )
@@ -250,6 +251,7 @@ async def continue_run_after_approval(
                     run_id=run_id,
                     case_id=case_id,
                     user_id=user_id,
+                    user_account=user.email if user is not None else None,
                     thread_id=run.thread_id,
                     http_client=runtime.ollama_http_client,
                     sandbox_client=runtime.sandbox_http_client,

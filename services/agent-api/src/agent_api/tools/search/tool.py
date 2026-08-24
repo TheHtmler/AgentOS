@@ -29,6 +29,7 @@ class AgentDeps:
     run_id: UUID | None = None
     case_id: UUID | None = None
     user_id: UUID | None = None
+    user_account: str | None = None
     thread_id: UUID | None = None
     persist_tool_events: bool = True
     # Shared Ollama/OpenAI-compatible client for embeddings (knowledge hybrid search).
