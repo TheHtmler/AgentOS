@@ -20,6 +20,10 @@ dev = [
 requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
 
+[tool.uv.build-backend]
+module-name = "sandbox_manager"
+module-root = "src"
+
 [tool.ruff]
 target-version = "py313"
 line-length = 100
