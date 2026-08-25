@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InvitationManager } from "@/components/auth/invitation-manager";
-import { AgentOsLogo } from "@/components/brand/agentos-logo";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PendingCaseFactsBanner } from "@/components/chat/pending-case-facts-banner";
@@ -408,7 +407,9 @@ export function ChatWorkspace({
             <span />
           </button>
 
-          <AgentOsLogo subtitle="助手工作台" />
+          <div className="agentos-mobile-codex-brand">
+            ChatGPT <strong>Codex</strong>
+          </div>
 
           <div className="ml-auto hidden items-center gap-3 lg:flex">
             <ThemeToggle compact />
@@ -434,18 +435,109 @@ export function ChatWorkspace({
 
       <div className="agentos-workspace">
         <aside className="agentos-conversation-rail hidden min-h-0 lg:flex lg:flex-col">
-          <ConversationList
-            activeThreadId={activeThreadId}
-            agents={agents}
-            selectedAgentId={selectedAgentId}
-            refreshKey={threadListVersion}
-            streamingThreadIds={streamingThreadIds}
-            awaitingApprovalThreadIds={awaitingApprovalThreadIds}
-            onNewConversation={handleNewConversation}
-            onSelectAgent={handleSelectAgent}
-            onSelectThread={handleSelectThread}
-            onThreadDeleted={handleThreadDeleted}
-          />
+          <div className="agentos-codex-sidebar">
+            <header className="agentos-codex-sidebar-header">
+              <p>
+                ChatGPT <strong>Codex</strong>
+              </p>
+              <button type="button" aria-label="搜索">
+                ⌕
+              </button>
+            </header>
+
+            <nav className="agentos-codex-primary-nav" aria-label="Codex 导航">
+              <button type="button" onClick={handleNewConversation}>
+                <span aria-hidden="true">✎</span>
+                New task
+              </button>
+              <button type="button">
+                <span aria-hidden="true">◷</span>
+                Scheduled
+                <i aria-hidden="true" />
+              </button>
+              <button type="button">
+                <span aria-hidden="true">◎</span>
+                Plugins
+              </button>
+              <button type="button">
+                <span aria-hidden="true">⊞</span>
+                Sites
+              </button>
+              <button type="button" className="is-active">
+                <span aria-hidden="true">⌕</span>
+                Chat
+              </button>
+            </nav>
+
+            <div className="agentos-codex-sidebar-section agentos-codex-pinned-section">
+              <p>Pinned</p>
+              <button type="button" onClick={handleNewConversation}>
+                <span aria-hidden="true">▱</span>
+                New task
+              </button>
+            </div>
+
+            <div className="agentos-codex-sidebar-section agentos-codex-projects-section">
+              <div className="agentos-codex-sidebar-section-heading">
+                <p>Projects</p>
+                <span aria-hidden="true">›</span>
+              </div>
+              <div className="agentos-codex-project-summary">
+                <span aria-hidden="true">▱</span>
+                <select
+                  aria-label="选择项目助手"
+                  value={selectedAgentId ?? ""}
+                  disabled={agents.length === 0}
+                  onChange={(event) => handleSelectAgent(event.target.value)}
+                >
+                  {agents.length === 0 ? <option value="">Loading...</option> : null}
+                  {agents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="agentos-codex-sidebar-section agentos-codex-tasks-section">
+              <div className="agentos-codex-sidebar-section-heading">
+                <p>Tasks</p>
+                <span aria-hidden="true">›</span>
+              </div>
+              <div className="agentos-codex-conversation-host">
+                <ConversationList
+                  activeThreadId={activeThreadId}
+                  agents={agents}
+                  selectedAgentId={selectedAgentId}
+                  refreshKey={threadListVersion}
+                  streamingThreadIds={streamingThreadIds}
+                  awaitingApprovalThreadIds={awaitingApprovalThreadIds}
+                  onNewConversation={handleNewConversation}
+                  onSelectAgent={handleSelectAgent}
+                  onSelectThread={handleSelectThread}
+                  onThreadDeleted={handleThreadDeleted}
+                />
+              </div>
+            </div>
+
+            <footer className="agentos-codex-sidebar-footer">
+              <span className="agentos-codex-account-dot" aria-hidden="true" />
+              <span className="truncate" title={userEmail}>
+                {userEmail}
+              </span>
+              {canManageInvitations ? <InvitationManager /> : null}
+              <ThemeToggle compact />
+              <button
+                type="button"
+                onClick={onLogout}
+                disabled={isLoggingOut}
+                aria-label="退出登录"
+              >
+                ↗
+              </button>
+            </footer>
+          </div>
         </aside>
 
         <section className="agentos-main-column min-h-0">

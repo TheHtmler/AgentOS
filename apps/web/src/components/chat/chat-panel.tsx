@@ -221,9 +221,10 @@ type ChatPanelProps = {
 };
 
 const STARTER_PROMPTS = [
-  "帮我梳理这个需求的目标、约束和下一步。",
-  "请给出一个可执行的实施方案，并说明主要风险。",
-  "请审查下面的思路，指出不成立的假设。",
+  "Explore and understand code",
+  "Build a new feature, app, or tool",
+  "Review code and suggest changes",
+  "Fix issues and failures",
 ];
 
 /** Re-enable follow / hide button when this close to the bottom. */
@@ -2105,20 +2106,40 @@ export function ChatPanel({
         >
           <div className="agentos-message-list mx-auto">
             {messages.length === 0 ? (
-              <div className="agentos-empty-state">
-                <p className="agentos-empty-eyebrow">Start with a task</p>
-                <p className="agentos-chat-heading">从一个任务开始</p>
-                <p className="agentos-chat-subheading">
-                  助手会实时展示处理进度、相关资料和最终回答。
-                </p>
+              <div className="agentos-empty-state agentos-codex-empty-state">
+                <span className="agentos-codex-glyph" aria-hidden="true">
+                  <svg viewBox="0 0 48 48" fill="none">
+                    <path
+                      d="M24 5.5c3.4 0 6.3 1.8 7.8 4.5 3.1-.7 6.4.2 8.8 2.6 2.4 2.4 3.3 5.7 2.6 8.8 2.7 1.5 4.5 4.4 4.5 7.8s-1.8 6.3-4.5 7.8c.7 3.1-.2 6.4-2.6 8.8-2.4 2.4-5.7 3.3-8.8 2.6-1.5 2.7-4.4 4.5-7.8 4.5s-6.3-1.8-7.8-4.5c-3.1.7-6.4-.2-8.8-2.6-2.4-2.4-3.3-5.7-2.6-8.8C2.8 35.5 1 32.6 1 29.2s1.8-6.3 4.5-7.8c-.7-3.1.2-6.4 2.6-8.8 2.4-2.4 5.7-3.3 8.8-2.6C17.7 7.3 20.6 5.5 24 5.5Z"
+                      stroke="currentColor"
+                      strokeWidth="2.8"
+                    />
+                    <path
+                      d="M18.5 23.5c-2.1 1-2.1 5.7 0 6.8M29.5 23.5c2.1 1 2.1 5.7 0 6.8M20.5 34h7"
+                      stroke="currentColor"
+                      strokeWidth="2.8"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+                <p className="agentos-chat-heading">What should we work on?</p>
                 <div className="agentos-starter-prompts">
                   {STARTER_PROMPTS.map((prompt) => (
                     <button
                       key={prompt}
                       type="button"
                       onClick={() => applyStarterPrompt(prompt)}
-                      className="agentos-starter-prompt max-w-full text-left text-sm"
+                      className="agentos-starter-prompt agentos-codex-starter-prompt max-w-full text-left text-sm"
                     >
+                      <span className="agentos-codex-starter-icon" aria-hidden="true">
+                        {prompt === STARTER_PROMPTS[0]
+                          ? "⌘"
+                          : prompt === STARTER_PROMPTS[1]
+                            ? "⌁"
+                            : prompt === STARTER_PROMPTS[2]
+                              ? "◌"
+                              : "◉"}
+                      </span>
                       {prompt}
                     </button>
                   ))}
@@ -2428,6 +2449,11 @@ export function ChatPanel({
           </p>
         ) : null}
 
+        <div className="agentos-codex-project-picker">
+          <span aria-hidden="true">▱</span>
+          <button type="button">Choose project</button>
+        </div>
+
         <textarea
           ref={textareaRef}
           aria-label="输入消息"
@@ -2445,7 +2471,7 @@ export function ChatPanel({
           placeholder={
             pendingInterrupts.length > 0
               ? "请先确认或取消上方的操作"
-              : "输入任务、问题或需要助手处理的内容"
+              : "Ask Codex anything, @ to add files, / for commands"
           }
           rows={1}
           className="agentos-composer-input block w-full resize-none outline-none disabled:cursor-not-allowed"
@@ -2472,7 +2498,7 @@ export function ChatPanel({
                 pendingInterrupts.length > 0 ||
                 uploadedArtifacts.length >= MAX_UPLOAD_FILES
               }
-              className="agentos-upload-button disabled:cursor-not-allowed disabled:opacity-40"
+              className="agentos-upload-button agentos-codex-upload-button disabled:cursor-not-allowed disabled:opacity-40"
               title={
                 supportsVision
                   ? "上传 PDF 或图片（新建会话会自动创建）"
@@ -2493,31 +2519,49 @@ export function ChatPanel({
                   d="m18.4 12.6-6.9 6.9a5 5 0 0 1-7.1-7.1l8.2-8.2a3.5 3.5 0 1 1 5 5l-8.2 8.2a2 2 0 1 1-2.8-2.8l7.5-7.5"
                 />
               </svg>
-              {isUploading ? "上传中…" : "上传"}
+              <span className="agentos-codex-upload-label">{isUploading ? "上传中…" : ""}</span>
+            </button>
+            <button type="button" className="agentos-codex-custom-button">
+              <span aria-hidden="true">⚙</span>
+              Custom
             </button>
             <span className="agentos-composer-meta">
-              {uploadedArtifacts.length}/{MAX_UPLOAD_FILES}
-              <span className="hidden sm:inline"> · {draft.length}/4000 · Shift + Enter 换行</span>
+              {uploadedArtifacts.length > 0
+                ? `${uploadedArtifacts.length}/${MAX_UPLOAD_FILES}`
+                : null}
             </span>
           </div>
 
-          <button
-            type="submit"
-            disabled={
-              isLoadingHistory ||
-              isUploading ||
-              historyLoadFailed ||
-              pendingInterrupts.length > 0 ||
-              (!isStreaming && !draft.trim() && uploadedArtifacts.length === 0)
-            }
-            className={`agentos-send-button disabled:cursor-not-allowed disabled:opacity-45 ${
-              isStreaming ? "agentos-stop-button" : ""
-            }`}
-            aria-label={isStreaming ? "停止执行" : "发送消息"}
-          >
-            <span aria-hidden="true">{isStreaming ? "■" : "↑"}</span>
-            <span>{isStreaming ? "停止执行" : "发送"}</span>
-          </button>
+          <div className="agentos-codex-composer-actions">
+            <span className="agentos-codex-model">5.6 Sol Medium⌄</span>
+            <button type="button" className="agentos-codex-voice-button" aria-label="语音输入">
+              ◉
+            </button>
+            <button
+              type="submit"
+              disabled={
+                isLoadingHistory ||
+                isUploading ||
+                historyLoadFailed ||
+                pendingInterrupts.length > 0 ||
+                (!isStreaming && !draft.trim() && uploadedArtifacts.length === 0)
+              }
+              className={`agentos-send-button agentos-codex-send-button disabled:cursor-not-allowed disabled:opacity-45 ${
+                isStreaming ? "agentos-stop-button" : ""
+              }`}
+              aria-label={isStreaming ? "停止执行" : "发送消息"}
+            >
+              <span aria-hidden="true">{isStreaming ? "■" : "↑"}</span>
+              <span>{isStreaming ? "停止执行" : "发送"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="agentos-codex-runtime-row" aria-label="运行环境">
+          <span className="is-active">Local</span>
+          <span>Worktree</span>
+          <span>Cloud</span>
+          <span className="agentos-codex-branch">⌘ main</span>
         </div>
       </form>
 
