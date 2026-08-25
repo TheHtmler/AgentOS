@@ -28,7 +28,10 @@ const NAV_GROUPS: { label: string; items: readonly NavItem[] }[] = [
   },
   {
     label: "观测",
-    items: [{ href: "/sessions", label: "会话", icon: "chat" }],
+    items: [
+      { href: "/sessions", label: "会话", icon: "chat" },
+      { href: "/memory", label: "记忆", icon: "book" },
+    ],
   },
   {
     label: "扩展",

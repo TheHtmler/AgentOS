@@ -58,6 +58,16 @@ export const USER_STATUS_LABELS: Record<string, string> = {
   disabled: "已禁用",
 };
 
+export const MEMORY_KIND_LABELS: Record<string, string> = {
+  profile: "档案",
+  note: "笔记",
+};
+
+export const MEMORY_STATUS_LABELS: Record<string, string> = {
+  active: "活跃",
+  archived: "已归档",
+};
+
 export const TOOL_DOMAIN_LABELS: Record<string, string> = {
   search: "搜索",
   fetch: "抓取",
