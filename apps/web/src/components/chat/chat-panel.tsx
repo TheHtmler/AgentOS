@@ -22,6 +22,7 @@ import {
   sandboxFilesFromValue,
   summarizeToolResultContent,
   ToolCallCard,
+  UploadPreviewPane,
   type SandboxFile,
   type ToolCallState,
 } from "@/components/chat/tool-call-card";
@@ -649,6 +650,17 @@ export function ChatPanel({
   const [pendingInterrupts, setPendingInterrupts] = useState<PendingInterrupt[]>([]);
   const [uploadedArtifacts, setUploadedArtifacts] = useState<UploadedArtifact[]>([]);
   const [selectedSandboxFile, setSelectedSandboxFile] = useState<SandboxFile | null>(null);
+  const [selectedUploadId, setSelectedUploadId] = useState<string | null>(null);
+
+  // One side preview slot: opening one kind of file closes the other.
+  const handleSandboxFileSelect = (file: SandboxFile) => {
+    setSelectedUploadId(null);
+    setSelectedSandboxFile(file);
+  };
+  const handleUploadSelect = (artifactId: string) => {
+    setSelectedSandboxFile(null);
+    setSelectedUploadId(artifactId);
+  };
   const [isUploading, setIsUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
 
@@ -2111,7 +2123,7 @@ export function ChatPanel({
                               key={step.id}
                               toolCall={step}
                               onToggle={() => toggleTimelineStep(step.id)}
-                              onFileSelect={(file) => setSelectedSandboxFile(file)}
+                              onFileSelect={handleSandboxFileSelect}
                               selectedFilePath={selectedSandboxFile?.path ?? null}
                             />
                           );
@@ -2177,13 +2189,12 @@ export function ChatPanel({
                                       aria-label="附件"
                                     >
                                       {artifactIds.map((artifactId) => (
-                                        <a
+                                        <button
                                           key={artifactId}
-                                          href={uploadContentUrl(artifactId)}
-                                          target="_blank"
-                                          rel="noreferrer"
+                                          type="button"
+                                          onClick={() => handleUploadSelect(artifactId)}
                                           className="agentos-upload-thumb block overflow-hidden"
-                                          title="查看附件"
+                                          title="预览附件"
                                         >
                                           {/* Heuristic: try image; PDF still loads as object/download via link */}
                                           <img
@@ -2205,7 +2216,7 @@ export function ChatPanel({
                                           >
                                             文件
                                           </span>
-                                        </a>
+                                        </button>
                                       ))}
                                     </div>
                                   ) : null}
@@ -2270,7 +2281,7 @@ export function ChatPanel({
                                 key={step.id}
                                 toolCall={step}
                                 onToggle={() => toggleTimelineStep(step.id)}
-                                onFileSelect={(file) => setSelectedSandboxFile(file)}
+                                onFileSelect={handleSandboxFileSelect}
                                 selectedFilePath={selectedSandboxFile?.path ?? null}
                               />
                             );
@@ -2294,6 +2305,13 @@ export function ChatPanel({
           <SandboxFilePreviewPane
             file={selectedSandboxFile}
             onClose={() => setSelectedSandboxFile(null)}
+          />
+        ) : null}
+        {selectedUploadId !== null ? (
+          <UploadPreviewPane
+            key={selectedUploadId}
+            artifactId={selectedUploadId}
+            onClose={() => setSelectedUploadId(null)}
           />
         ) : null}
       </div>

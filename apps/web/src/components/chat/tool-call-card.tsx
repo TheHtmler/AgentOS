@@ -1,9 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { ToolIcon } from "./tool-icons";
 import { toolDisplayName, toolProgressLabel } from "./tool-labels";
+
+// Shared edge-drag resizing for the right-side preview panes (sandbox files and
+// upload attachments). Width is clamped to the CSS min/max of the pane.
+function usePaneWidth() {
+  const [width, setWidth] = useState<number | null>(null);
+
+  const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const pane = event.currentTarget.closest(".agentos-file-preview-pane");
+    const startWidth = pane instanceof HTMLElement ? pane.getBoundingClientRect().width : 416;
+    const startX = event.clientX;
+    const onMove = (moveEvent: PointerEvent) => {
+      const next = Math.round(startWidth + startX - moveEvent.clientX);
+      setWidth(Math.min(720, Math.max(288, next)));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  return { width, startResize };
+}
 
 export type ToolCallStatus = "running" | "done" | "error" | "awaiting_approval";
 
@@ -163,9 +189,15 @@ export function SandboxFilePreviewPane({
 }) {
   const previewUrl = sandboxFileUrl(file);
   const textFile = isTextFile(file);
+  const { width, startResize } = usePaneWidth();
 
   return (
-    <aside className="agentos-file-preview-pane" aria-label="文件预览">
+    <aside
+      className="agentos-file-preview-pane"
+      aria-label="文件预览"
+      style={width === null ? undefined : { width }}
+    >
+      <div className="agentos-file-preview-resize" onPointerDown={startResize} aria-hidden="true" />
       <header className="agentos-file-preview-header">
         <div className="agentos-file-preview-heading">
           <strong title={file.path}>{file.path}</strong>
@@ -192,6 +224,111 @@ export function SandboxFilePreviewPane({
       </div>
       <footer className="agentos-file-preview-footer">
         <a href={sandboxFileUrl(file, true)}>下载文件</a>
+      </footer>
+    </aside>
+  );
+}
+
+type UploadPreviewState =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "text"; text: string }
+  | { kind: "binary"; objectUrl: string; mimeType: string };
+
+// History user messages carry only artifact_id lines, so the MIME type is
+// discovered from the content response headers before picking a renderer.
+export function UploadPreviewPane({
+  artifactId,
+  onClose,
+}: {
+  artifactId: string;
+  onClose: () => void;
+}) {
+  const url = `/api/uploads/${artifactId}/content`;
+  const [state, setState] = useState<UploadPreviewState>({ kind: "loading" });
+  const { width, startResize } = usePaneWidth();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    void fetch(url, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("附件暂时无法读取");
+        }
+        const mimeType = (response.headers.get("content-type") ?? "")
+          .split(";")[0]
+          .trim()
+          .toLowerCase();
+        if (
+          mimeType.startsWith("text/") ||
+          mimeType === "application/json" ||
+          mimeType === "application/xml"
+        ) {
+          setState({ kind: "text", text: await response.text() });
+          return;
+        }
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        setState({
+          kind: "binary",
+          objectUrl,
+          mimeType: mimeType || "application/octet-stream",
+        });
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setState({
+            kind: "error",
+            message: reason instanceof Error ? reason.message : "附件暂时无法读取",
+          });
+        }
+      });
+    return () => {
+      controller.abort();
+      if (objectUrl !== null) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [url]);
+
+  return (
+    <aside
+      className="agentos-file-preview-pane"
+      aria-label="附件预览"
+      style={width === null ? undefined : { width }}
+    >
+      <div className="agentos-file-preview-resize" onPointerDown={startResize} aria-hidden="true" />
+      <header className="agentos-file-preview-header">
+        <div className="agentos-file-preview-heading">
+          <strong>用户附件</strong>
+          <span>{artifactId.slice(0, 8)}…</span>
+        </div>
+        <button type="button" onClick={onClose} aria-label="关闭附件预览" title="关闭预览">
+          ×
+        </button>
+      </header>
+      <div className="agentos-file-preview-body">
+        {state.kind === "loading" ? (
+          <pre>正在读取…</pre>
+        ) : state.kind === "error" ? (
+          <p className="agentos-file-preview-unavailable">{state.message}</p>
+        ) : state.kind === "text" ? (
+          <pre>{state.text}</pre>
+        ) : state.mimeType.startsWith("image/") ? (
+          // The endpoint checks the session and owner before serving these bytes.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={state.objectUrl} alt="用户附件" />
+        ) : state.mimeType === "application/pdf" ? (
+          <iframe src={state.objectUrl} title="用户附件 PDF" sandbox="" />
+        ) : (
+          <p className="agentos-file-preview-unavailable">此文件类型暂不支持在线预览。</p>
+        )}
+      </div>
+      <footer className="agentos-file-preview-footer">
+        <a href={url} download>
+          下载附件
+        </a>
       </footer>
     </aside>
   );

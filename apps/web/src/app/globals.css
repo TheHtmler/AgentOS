@@ -1279,13 +1279,26 @@ body {
 }
 
 .agentos-file-preview-pane {
+  position: relative;
   display: flex;
+  width: 26rem;
   min-width: 18rem;
-  max-width: 30rem;
-  flex: 0 1 26rem;
+  max-width: 45rem;
+  flex: 0 0 auto;
   flex-direction: column;
   border-left: 1px solid var(--border);
   background: var(--panel-muted);
+}
+
+.agentos-file-preview-resize {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
 }
 
 .agentos-file-preview-header {
@@ -1884,6 +1897,8 @@ body {
 }
 
 .agentos-upload-thumb {
+  padding: 0;
+  cursor: pointer;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: var(--surface-elevated);
@@ -2175,6 +2190,7 @@ body {
   }
 
   .agentos-file-preview-pane {
+    width: auto;
     min-width: 0;
     max-width: none;
     flex: 0 0 min(45dvh, 28rem);
