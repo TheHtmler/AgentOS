@@ -1190,6 +1190,15 @@ body {
   word-break: break-all;
 }
 
+.agentos-tool-call-artifact > span {
+  display: inline-block;
+  margin-bottom: 0.3rem;
+}
+
+.agentos-tool-call-artifact-meta {
+  color: var(--muted);
+}
+
 .agentos-generated-files {
   display: grid;
   gap: 0.35rem;

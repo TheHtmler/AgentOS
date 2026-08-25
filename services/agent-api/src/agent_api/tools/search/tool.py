@@ -100,6 +100,7 @@ async def run_web_search(
     except ValueError as exc:
         return json.dumps({"error": str(exc), "query": normalized}, ensure_ascii=False)
 
+    raw = json.dumps(asdict(response), ensure_ascii=False)
     if deps.persist_tool_events and deps.run_id is not None:
         await _persist_tool_result(
             deps.run_id,
@@ -107,9 +108,10 @@ async def run_web_search(
             ok=True,
             summary=_summarize_response(response),
             duration_ms=round((time.monotonic() - started_at) * 1000),
+            result=raw,
         )
 
-    return json.dumps(asdict(response), ensure_ascii=False)
+    return raw
 
 
 async def web_search(
@@ -153,6 +155,7 @@ async def _persist_tool_result(
     ok: bool,
     summary: str,
     duration_ms: int | None = None,
+    result: str | None = None,
 ) -> None:
     try:
         from agent_api.db.chat_store import append_tool_result_event
@@ -167,6 +170,7 @@ async def _persist_tool_result(
                 ok=ok,
                 summary=summary,
                 duration_ms=duration_ms,
+                result=result,
             )
     except Exception:
         logger.exception("Unable to persist tool_result for run %s", run_id)

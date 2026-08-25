@@ -333,6 +333,7 @@ async def run_knowledge_search(
             "Not a clinical diagnosis; prefer source_url when explaining."
         ),
     }
+    raw = json.dumps(response, ensure_ascii=False)
     if deps.persist_tool_events and deps.run_id is not None:
         embedding_flag = "embedding:on" if query_embedding is not None else "embedding:off"
         summary = f"{len(hits)} hits ({embedding_flag})"
@@ -344,9 +345,10 @@ async def run_knowledge_search(
             ok=True,
             summary=summary[:500],
             duration_ms=duration_ms,
+            result=raw,
         )
 
-    return json.dumps(response, ensure_ascii=False)
+    return raw
 
 
 async def knowledge_search(
@@ -391,6 +393,7 @@ async def _persist_tool_result(
     ok: bool,
     summary: str,
     duration_ms: int | None = None,
+    result: str | None = None,
 ) -> None:
     try:
         from agent_api.db.chat_store import append_tool_result_event
@@ -404,6 +407,7 @@ async def _persist_tool_result(
                 ok=ok,
                 summary=summary,
                 duration_ms=duration_ms,
+                result=result,
             )
     except Exception:
         logger.exception("Unable to persist knowledge_search tool_result run=%s", run_id)

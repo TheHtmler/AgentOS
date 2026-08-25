@@ -24,6 +24,10 @@ class ThreadNotFoundError(LookupError):
     """Raised when a requested conversation does not exist."""
 
 
+# Cap for the raw tool JSON stored on tool_result events for rich history replay.
+RESULT_HISTORY_MAX_CHARS = 8_000
+
+
 class ThreadBusyError(RuntimeError):
     """Raised when a Thread already has an active model execution."""
 
@@ -72,6 +76,7 @@ class ThreadToolCallItem:
     duration_ms: int | None
     after_message_id: UUID
     files: list[dict[str, object]]
+    result: str | None = None
 
 
 async def _create_thread(
@@ -350,6 +355,8 @@ async def list_thread_tool_calls(
                     if isinstance(raw_file, dict):
                         typed_file = cast(dict[object, object], raw_file)
                         files.append({str(key): value for key, value in typed_file.items()})
+            result_value = result_payload.get("result")
+            result = result_value if isinstance(result_value, str) else None
 
             items.append(
                 ThreadToolCallItem(
@@ -362,6 +369,7 @@ async def list_thread_tool_calls(
                     duration_ms=duration_ms,
                     after_message_id=after_message_id,
                     files=files,
+                    result=result,
                 )
             )
 
@@ -695,6 +703,7 @@ async def append_tool_result_event(
     summary: str,
     duration_ms: int | None = None,
     metadata: dict[str, object] | None = None,
+    result: str | None = None,
 ) -> RunEvent:
     """Record a short tool outcome summary for debugging and audits."""
 
@@ -708,6 +717,10 @@ async def append_tool_result_event(
         payload["duration_ms"] = duration_ms
     if metadata:
         payload.update(metadata)
+    if result is not None:
+        # Bounded raw tool JSON so history replay can re-render rich cards
+        # (hits, links, artifact text) instead of the summary alone.
+        payload["result"] = result[:RESULT_HISTORY_MAX_CHARS]
     return await append_run_event(
         session,
         run_id=run_id,

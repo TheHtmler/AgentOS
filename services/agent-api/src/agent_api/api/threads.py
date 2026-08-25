@@ -79,6 +79,7 @@ class ThreadToolCallResponse(BaseModel):
     duration_ms: int | None
     after_message_id: UUID
     files: list[dict[str, object]]
+    result: str | None = None
 
 
 class ThreadLatestRunResponse(BaseModel):
@@ -283,6 +284,7 @@ async def get_thread_messages(
                 duration_ms=tool_call.duration_ms,
                 after_message_id=tool_call.after_message_id,
                 files=tool_call.files,
+                result=tool_call.result,
             )
             for tool_call in tool_calls
         ],

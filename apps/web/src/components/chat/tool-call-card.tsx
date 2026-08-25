@@ -478,6 +478,19 @@ export function ToolCallCard({
     toolCall.toolName === "fetch_url" ? stringField(toolCall.resultData ?? {}, "url") : null;
   const fetchLinkTitle =
     toolCall.toolName === "fetch_url" ? stringField(toolCall.resultData ?? {}, "title") : null;
+  // read_artifact success shape: {title, text, offset, truncated, total_chars, next_offset}.
+  // Live streams carry the full record, so the fetched window can render as readable
+  // text instead of a raw-JSON summary; history replays only have the short summary.
+  const artifactText =
+    toolCall.toolName === "read_artifact" ? stringField(toolCall.resultData ?? {}, "text") : null;
+  const artifactTitle =
+    toolCall.toolName === "read_artifact" ? stringField(toolCall.resultData ?? {}, "title") : null;
+  const artifactTotalChars =
+    toolCall.toolName === "read_artifact"
+      ? numberField(toolCall.resultData ?? {}, "total_chars")
+      : null;
+  const artifactTruncated =
+    toolCall.toolName === "read_artifact" && toolCall.resultData?.truncated === true;
   const files = toolCall.files ?? sandboxFilesFromValue(toolCall.resultData?.files);
 
   useEffect(() => {
@@ -611,7 +624,17 @@ export function ToolCallCard({
               {toolCall.provider}
             </p>
           ) : null}
-          {toolCall.resultSummary ? (
+          {artifactText !== null ? (
+            <div className="agentos-tool-call-artifact">
+              <span className="agentos-tool-call-label">正文</span>
+              <span className="agentos-tool-call-artifact-meta">
+                {artifactTitle ?? "附件"} · 共 {artifactTotalChars ?? "?"} 字符
+                {artifactTruncated ? " · 本段为截取片段" : ""}
+              </span>
+              <pre>{artifactText}</pre>
+            </div>
+          ) : null}
+          {toolCall.resultSummary && artifactText === null ? (
             <p>
               <span className="agentos-tool-call-label">
                 {toolCall.status === "error" ? "提示" : "结果"}

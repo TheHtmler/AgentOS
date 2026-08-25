@@ -175,6 +175,7 @@ async def test_list_thread_tool_calls_anchors_to_matching_user_message(
             ok=True,
             summary="duckduckgo: 2 results",
             metadata={"files": [{"path": "joke.txt", "size": 5, "mime_type": "text/plain"}]},
+            result='{"results": [{"title": "甲", "url": "https://a.example"}]}',
         )
         await complete_run(session, run_id=first.run_id, assistant_content="第一轮回答")
 
@@ -223,9 +224,11 @@ async def test_list_thread_tool_calls_anchors_to_matching_user_message(
             {"path": "joke.txt", "size": 5, "mime_type": "text/plain"},
         ]
         assert tool_calls[0].args == {"query": "第一轮搜索", "max_results": 5}
+        assert tool_calls[0].result == '{"results": [{"title": "甲", "url": "https://a.example"}]}'
         assert tool_calls[1].status == "error"
         assert tool_calls[1].provider == "tavily"
         assert tool_calls[1].after_message_id == user_ids[2]
+        assert tool_calls[1].result is None
     finally:
         await transaction.rollback()
 

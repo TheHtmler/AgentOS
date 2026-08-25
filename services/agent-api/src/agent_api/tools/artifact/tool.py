@@ -117,14 +117,16 @@ async def run_read_artifact(
         "total_chars": total,
         "next_offset": next_offset,
     }
+    raw = json.dumps(payload, ensure_ascii=False)
     if deps.persist_tool_events and deps.run_id is not None:
         await _persist_tool_result(
             deps.run_id,
             ok=True,
             summary=f"{row.title}@{start}+{len(slice_text)}/{total}"[:500],
             duration_ms=round((time.monotonic() - started_at) * 1000),
+            result=raw,
         )
-    return json.dumps(payload, ensure_ascii=False)
+    return raw
 
 
 async def read_artifact(
@@ -169,6 +171,7 @@ async def _persist_tool_result(
     ok: bool,
     summary: str,
     duration_ms: int | None = None,
+    result: str | None = None,
 ) -> None:
     try:
         from agent_api.db.chat_store import append_tool_result_event
@@ -183,6 +186,7 @@ async def _persist_tool_result(
                 ok=ok,
                 summary=summary,
                 duration_ms=duration_ms,
+                result=result,
             )
     except Exception:
         logger.exception("Unable to persist tool_result for run %s", run_id)

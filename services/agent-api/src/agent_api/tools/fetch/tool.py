@@ -77,6 +77,13 @@ async def run_fetch_url(
 
     response = await _maybe_persist_artifact(deps, response)
 
+    raw = json.dumps(
+        response.to_tool_payload(
+            artifact_preview_chars=settings.fetch_url_artifact_preview_chars,
+            artifact_outline_chars=settings.fetch_url_artifact_outline_chars,
+        ),
+        ensure_ascii=False,
+    )
     if deps.persist_tool_events and deps.run_id is not None:
         await _persist_tool_result(
             deps.run_id,
@@ -84,15 +91,10 @@ async def run_fetch_url(
             ok=True,
             summary=_summarize_response(response),
             duration_ms=round((time.monotonic() - started_at) * 1000),
+            result=raw,
         )
 
-    return json.dumps(
-        response.to_tool_payload(
-            artifact_preview_chars=settings.fetch_url_artifact_preview_chars,
-            artifact_outline_chars=settings.fetch_url_artifact_outline_chars,
-        ),
-        ensure_ascii=False,
-    )
+    return raw
 
 
 async def fetch_url(
@@ -187,6 +189,7 @@ async def _persist_tool_result(
     ok: bool,
     summary: str,
     duration_ms: int | None = None,
+    result: str | None = None,
 ) -> None:
     try:
         from agent_api.db.chat_store import append_tool_result_event
@@ -201,6 +204,7 @@ async def _persist_tool_result(
                 ok=ok,
                 summary=summary,
                 duration_ms=duration_ms,
+                result=result,
             )
     except Exception:
         logger.exception("Unable to persist tool_result for run %s", run_id)

@@ -307,10 +307,20 @@ function parseHistoryToolCalls(value: unknown): ToolCallState[] | null {
       (item.duration_ms !== undefined &&
         item.duration_ms !== null &&
         (typeof item.duration_ms !== "number" || !Number.isFinite(item.duration_ms))) ||
-      (item.provider !== undefined && item.provider !== null && typeof item.provider !== "string")
+      (item.provider !== undefined &&
+        item.provider !== null &&
+        typeof item.provider !== "string") ||
+      (item.result !== undefined && item.result !== null && typeof item.result !== "string")
     ) {
       return null;
     }
+
+    // Rich cards (knowledge hits, search links, artifact text) re-render from the
+    // bounded raw result persisted with the tool_result event when available.
+    const resultData =
+      typeof item.result === "string"
+        ? summarizeToolResultContent(item.result).resultData
+        : undefined;
 
     toolCalls.push({
       id: item.id,
@@ -318,6 +328,7 @@ function parseHistoryToolCalls(value: unknown): ToolCallState[] | null {
       argsText: JSON.stringify(item.args),
       status: item.status,
       resultSummary: item.summary,
+      resultData,
       provider: typeof item.provider === "string" ? item.provider : undefined,
       durationMs: typeof item.duration_ms === "number" ? item.duration_ms : undefined,
       expanded: false,
