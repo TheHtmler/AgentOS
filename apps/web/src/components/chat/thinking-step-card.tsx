@@ -37,6 +37,12 @@ export function ThinkingStepCard({ step }: { step: ThinkingStepState }) {
         ? `${durationMs}ms`
         : `${(durationMs / 1000).toFixed(1)}s`;
 
+  // Providers that return opaque reasoning (no streamed text) leave nothing
+  // worth showing once the step ends — hide the card instead of a placeholder.
+  if (!running && !step.content) {
+    return null;
+  }
+
   return (
     <section
       className={`agentos-reasoning ${running ? "agentos-reasoning-running" : ""}`}
@@ -51,13 +57,7 @@ export function ThinkingStepCard({ step }: { step: ThinkingStepState }) {
           ) : null}
         </span>
       </div>
-      {step.content ? (
-        <pre className="agentos-reasoning-content">{step.content}</pre>
-      ) : step.contentMode === "encrypted" ? (
-        <p className="agentos-reasoning-content">模型返回了加密 reasoning，当前无法展示文本</p>
-      ) : !running ? (
-        <p className="agentos-reasoning-content">该模型未返回可展示的 reasoning 内容</p>
-      ) : null}
+      {step.content ? <pre className="agentos-reasoning-content">{step.content}</pre> : null}
     </section>
   );
 }
