@@ -16,6 +16,7 @@ import {
 
 import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval-panel";
 import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
+import { SessionStatsBar, type LiveRunStats } from "@/components/chat/session-stats-bar";
 import { ThinkingStepCard, type ThinkingStepState } from "@/components/chat/thinking-step-card";
 import {
   SandboxFilePreviewPane,
@@ -663,6 +664,8 @@ export function ChatPanel({
   };
   const [isUploading, setIsUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  // Live status-bar facts for the in-flight run (send/approval-click → first content).
+  const [liveRunStats, setLiveRunStats] = useState<LiveRunStats | null>(null);
 
   const agentRef = useRef<HttpAgent | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
@@ -745,6 +748,9 @@ export function ChatPanel({
       const snapshot = new Map(resumeDraftContentsRef.current);
       if (snapshot.size === 0) {
         return;
+      }
+      if ([...snapshot.values()].some((content) => content.length > 0)) {
+        markFirstLiveToken();
       }
       // The resumed run's text rides into the same message list as a draft
       // assistant message; the history reload on completion replaces it with
@@ -924,6 +930,7 @@ export function ChatPanel({
     }
 
     setIsStreaming(true);
+    setLiveRunStats({ startedAt: Date.now(), firstTokenMs: null });
     setError(null);
     resumeDraftContentsRef.current = new Map();
     activeRunIdRef.current = runId;
@@ -1267,6 +1274,15 @@ export function ChatPanel({
     threadId,
   ]);
 
+  // First visible assistant content of the in-flight run → the live "首 token" figure.
+  function markFirstLiveToken() {
+    setLiveRunStats((current) =>
+      current !== null && current.firstTokenMs === null
+        ? { ...current, firstTokenMs: Date.now() - current.startedAt }
+        : current,
+    );
+  }
+
   function scheduleMessagesFlush(nextMessages: readonly Message[]) {
     pendingStreamMessagesRef.current = nextMessages;
     if (streamFlushHandleRef.current !== null) {
@@ -1278,6 +1294,16 @@ export function ChatPanel({
       pendingStreamMessagesRef.current = null;
       if (latest === null) {
         return;
+      }
+      if (
+        latest.some(
+          (message) =>
+            message.role === "assistant" &&
+            typeof message.content === "string" &&
+            message.content.length > 0,
+        )
+      ) {
+        markFirstLiveToken();
       }
       setMessages((previous) => toDisplayMessages(latest, previous));
     });
@@ -1647,6 +1673,7 @@ export function ChatPanel({
     setTimelineSteps([]);
     setLiveUserMessageId(userMessageId);
     setIsStreaming(true);
+    setLiveRunStats({ startedAt: Date.now(), firstTokenMs: null });
     autoScrollRef.current = true;
     setShowScrollToLatest(false);
     cancellationRequestedRef.current = false;
@@ -2008,6 +2035,15 @@ export function ChatPanel({
       : isStreaming
         ? "正在处理"
         : "";
+
+  const liveToolCallCount = timelineSteps.reduce(
+    (count, step) => (step.kind === "tool" ? count + 1 : count),
+    0,
+  );
+  const liveAssistantChars =
+    isStreaming && currentAssistantMessageIndex >= 0
+      ? messages[currentAssistantMessageIndex].content.length
+      : 0;
 
   return (
     <section
@@ -2484,6 +2520,15 @@ export function ChatPanel({
           </button>
         </div>
       </form>
+
+      <SessionStatsBar
+        threadId={threadId}
+        isStreaming={isStreaming}
+        refreshKey={historyRefreshKey}
+        liveStats={liveRunStats}
+        liveToolCalls={liveToolCallCount}
+        liveAssistantChars={liveAssistantChars}
+      />
     </section>
   );
 }

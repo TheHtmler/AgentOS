@@ -1975,6 +1975,58 @@ body {
   animation: agentos-run-scan 2.2s ease-in-out infinite;
 }
 
+/* ── Session stats bar (below composer) ── */
+.agentos-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.agentos-stats-line {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.agentos-stats-context {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agentos-stats-track {
+  display: inline-block;
+  overflow: hidden;
+  width: 72px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--panel-muted);
+}
+
+.agentos-stats-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.agentos-stats-fill-warn {
+  background: #d97706;
+}
+
+.agentos-stats-fill-danger {
+  background: var(--danger);
+}
+
+.agentos-stats-context-value {
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Mobile menu ── */
 .agentos-mobile-menu {
   position: fixed;

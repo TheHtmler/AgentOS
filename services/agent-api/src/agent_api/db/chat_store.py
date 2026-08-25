@@ -79,6 +79,32 @@ class ThreadToolCallItem:
     result: str | None = None
 
 
+@dataclass(frozen=True)
+class ThreadRunStats:
+    """The newest run's status-bar facts (tokens from usage, ttft/cache from events)."""
+
+    id: UUID
+    status: str
+    input_tokens: int | None
+    output_tokens: int | None
+    ttft_ms: int | None
+    cached_input_tokens: int | None
+
+
+@dataclass(frozen=True)
+class ThreadStats:
+    """Per-thread aggregates behind the chat status bar."""
+
+    runs_total: int
+    tool_calls_total: int
+    input_tokens_total: int
+    output_tokens_total: int
+    model_time_ms_total: int
+    tool_time_ms_total: int
+    ttft_ms_avg: int | None
+    last_run: ThreadRunStats | None
+
+
 async def _create_thread(
     session: AsyncSession,
     *,
@@ -255,6 +281,93 @@ async def get_thread_latest_run(
     return await session.scalar(
         select(Run).where(Run.thread_id == thread.id).order_by(Run.created_at.desc()).limit(1),
     )
+
+
+def _payload_int(payload: dict[str, object], key: str) -> int | None:
+    value = payload.get(key)
+    # bool is an int subclass; keep malformed payloads null instead of summing True.
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def aggregate_thread_stats(runs: list[Run], events: list[RunEvent]) -> ThreadStats:
+    """Fold one thread's runs and events into status-bar totals.
+
+    Pure: ``runs`` must be ordered oldest-first so the last row is the newest run.
+    """
+
+    input_tokens_total = 0
+    output_tokens_total = 0
+    for run in runs:
+        input_tokens_total += run.input_tokens or 0
+        output_tokens_total += run.output_tokens or 0
+
+    tool_calls_total = 0
+    model_time_ms_total = 0
+    tool_time_ms_total = 0
+    ttft_values: list[int] = []
+    model_step_by_run: dict[UUID, dict[str, object]] = {}
+    for event in events:
+        if event.event_type == "tool_call":
+            tool_calls_total += 1
+        elif event.event_type == "tool_result":
+            tool_time_ms_total += _payload_int(event.payload, "duration_ms") or 0
+        elif event.event_type == "model_step":
+            model_time_ms_total += _payload_int(event.payload, "duration_ms") or 0
+            ttft_ms = _payload_int(event.payload, "ttft_ms")
+            if ttft_ms is not None:
+                ttft_values.append(ttft_ms)
+            model_step_by_run[event.run_id] = event.payload
+
+    last_run: ThreadRunStats | None = None
+    if runs:
+        latest = runs[-1]
+        payload = model_step_by_run.get(latest.id, {})
+        last_run = ThreadRunStats(
+            id=latest.id,
+            status=latest.status,
+            input_tokens=latest.input_tokens,
+            output_tokens=latest.output_tokens,
+            ttft_ms=_payload_int(payload, "ttft_ms"),
+            cached_input_tokens=_payload_int(payload, "cached_input_tokens"),
+        )
+
+    return ThreadStats(
+        runs_total=len(runs),
+        tool_calls_total=tool_calls_total,
+        input_tokens_total=input_tokens_total,
+        output_tokens_total=output_tokens_total,
+        model_time_ms_total=model_time_ms_total,
+        tool_time_ms_total=tool_time_ms_total,
+        ttft_ms_avg=(round(sum(ttft_values) / len(ttft_values)) if ttft_values else None),
+        last_run=last_run,
+    )
+
+
+async def get_thread_stats(
+    session: AsyncSession,
+    *,
+    thread_id: UUID,
+    user_id: UUID,
+) -> ThreadStats:
+    """Aggregate one owned thread's run stats for the product status bar."""
+
+    thread = await _get_active_thread(session, thread_id=thread_id, user_id=user_id)
+    runs = list(
+        await session.scalars(
+            select(Run).where(Run.thread_id == thread.id).order_by(Run.created_at),
+        ),
+    )
+    events = list(
+        await session.scalars(
+            select(RunEvent)
+            .join(Run, Run.id == RunEvent.run_id)
+            .where(Run.thread_id == thread.id)
+            .order_by(RunEvent.run_id, RunEvent.seq),
+        ),
+    )
+    return aggregate_thread_stats(runs, events)
 
 
 async def list_thread_tool_calls(
@@ -736,6 +849,8 @@ async def append_model_step_event(
     duration_ms: int,
     input_tokens: int | None = None,
     output_tokens: int | None = None,
+    ttft_ms: int | None = None,
+    cached_input_tokens: int | None = None,
 ) -> RunEvent:
     """Record one run's total wall-clock + token usage in the event timeline.
 
@@ -754,6 +869,8 @@ async def append_model_step_event(
             "duration_ms": duration_ms,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            "ttft_ms": ttft_ms,
+            "cached_input_tokens": cached_input_tokens,
         },
     )
 

@@ -59,6 +59,16 @@ GET /api/threads/{threadId}/messages
 
 代理校验 UUID 形状、向 Agent API 转发请求并原样返回 JSON 状态码。浏览器不读取 `AGENT_API_BASE_URL`。
 
+### 会话统计（状态栏）
+
+```text
+GET /v1/threads/{thread_id}/stats
+```
+
+返回该 Thread 的聚合指标（`runs_total` / `tool_calls_total` / `input_tokens_total` / `output_tokens_total` / `model_time_ms_total` / `tool_time_ms_total` / `ttft_ms_avg`）与 `last_run`（id / status / token / `ttft_ms` / `cached_input_tokens` / `context_window`）。聚合在 Python 侧完成（`chat_store.get_thread_stats` + 纯函数 `aggregate_thread_stats`）：token 求和跳过 NULL；`ttft_ms_avg` 只对记录了 ttft 的 run 取平均；`context_window` 在 API 层按该 Thread Agent 发布版的 provider profile 解析，provider 绑定失效时降级为 null 而不是让整个端点失败。跨 owner 一律 404。BFF：`GET /api/threads/{threadId}/stats`。
+
+- `model_step` 事件 payload 另带 `ttft_ms`（首个文本/推理内容到达延迟，纯工具循环收尾的 run 为 null）与 `cached_input_tokens`（`usage.cache_read_tokens`，DeepSeek 兼容端点取 `details.prompt_cache_hit_tokens`；本地 Ollama 不报则为 null，前端不显示缓存命中）。
+
 ## 页面恢复
 
 - SSE 首次响应收到 `X-AgentOS-Thread-ID` 后，聊天面板通过 `history.replaceState` 写入 `?thread=<UUID>`。

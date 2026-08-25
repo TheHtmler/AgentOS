@@ -6,12 +6,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
 
 from agent_api.api.auth import get_current_user
-from agent_api.db.agent_store import AgentNotFoundError, PublishedAgentVersionNotFoundError
+from agent_api.config import get_settings
+from agent_api.db.agent_store import (
+    AgentNotFoundError,
+    PublishedAgentVersionNotFoundError,
+    get_published_version,
+)
 from agent_api.db.case_store import CaseNotFoundError
 from agent_api.db.chat_store import (
     ThreadNotFoundError,
     create_empty_thread,
     get_thread_latest_run,
+    get_thread_stats,
     list_thread_messages,
     list_thread_tool_calls,
     list_threads,
@@ -19,6 +25,7 @@ from agent_api.db.chat_store import (
     soft_delete_thread,
 )
 from agent_api.db.models import Thread, User
+from agent_api.db.provider_store import ModelProviderUnavailableError, resolve_model_profile
 from agent_api.db.session import session_factory
 
 router = APIRouter(prefix="/v1/threads", tags=["threads"])
@@ -87,6 +94,31 @@ class ThreadLatestRunResponse(BaseModel):
 
     id: UUID
     status: str
+
+
+class ThreadLastRunStatsResponse(BaseModel):
+    """Newest run's status-bar facts; context_window comes from the bound provider."""
+
+    id: UUID
+    status: str
+    input_tokens: int | None
+    output_tokens: int | None
+    ttft_ms: int | None
+    cached_input_tokens: int | None
+    context_window: int | None
+
+
+class ThreadStatsResponse(BaseModel):
+    """Aggregated per-thread run stats behind the chat status bar."""
+
+    runs_total: int
+    tool_calls_total: int
+    input_tokens_total: int
+    output_tokens_total: int
+    model_time_ms_total: int
+    tool_time_ms_total: int
+    ttft_ms_avg: int | None
+    last_run: ThreadLastRunStatsResponse | None
 
 
 class ThreadMessagesResponse(BaseModel):
@@ -291,6 +323,54 @@ async def get_thread_messages(
         latest_run=(
             ThreadLatestRunResponse(id=latest_run.id, status=latest_run.status)
             if latest_run is not None
+            else None
+        ),
+    )
+
+
+@router.get("/{thread_id}/stats", response_model=ThreadStatsResponse)
+async def get_thread_run_stats(
+    thread_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+) -> ThreadStatsResponse:
+    """Read per-thread run/token/time aggregates for the chat status bar."""
+
+    try:
+        async with session_factory() as session:
+            stats = await get_thread_stats(session, thread_id=thread_id, user_id=user.id)
+            thread = await session.get(Thread, thread_id)
+            if thread is None:
+                raise ThreadNotFoundError(thread_id)
+            context_window: int | None = None
+            try:
+                version = await get_published_version(session, thread.agent_id)
+                profile = await resolve_model_profile(session, version, get_settings())
+                context_window = profile.context_window
+            except (PublishedAgentVersionNotFoundError, ModelProviderUnavailableError):
+                # Stats stay readable when the provider binding is broken.
+                context_window = None
+    except ThreadNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Thread not found") from error
+
+    return ThreadStatsResponse(
+        runs_total=stats.runs_total,
+        tool_calls_total=stats.tool_calls_total,
+        input_tokens_total=stats.input_tokens_total,
+        output_tokens_total=stats.output_tokens_total,
+        model_time_ms_total=stats.model_time_ms_total,
+        tool_time_ms_total=stats.tool_time_ms_total,
+        ttft_ms_avg=stats.ttft_ms_avg,
+        last_run=(
+            ThreadLastRunStatsResponse(
+                id=stats.last_run.id,
+                status=stats.last_run.status,
+                input_tokens=stats.last_run.input_tokens,
+                output_tokens=stats.last_run.output_tokens,
+                ttft_ms=stats.last_run.ttft_ms,
+                cached_input_tokens=stats.last_run.cached_input_tokens,
+                context_window=context_window,
+            )
+            if stats.last_run is not None
             else None
         ),
     )

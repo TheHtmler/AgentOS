@@ -15,7 +15,12 @@ import time
 from collections.abc import AsyncIterator
 from uuid import UUID
 
-from ag_ui.core import RunAgentInput, RunErrorEvent
+from ag_ui.core import (
+    ReasoningMessageContentEvent,
+    RunAgentInput,
+    RunErrorEvent,
+    TextMessageContentEvent,
+)
 from pydantic_ai import ModelMessagesTypeAdapter
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.run import AgentRunResult
@@ -33,6 +38,7 @@ from pydantic_ai.usage import UsageLimits
 from agent_api.agent import AgentOutput, build_context_snapshot, inject_context_snapshot
 from agent_api.api.ag_ui import AGUIExecutionError, text_from_native_event
 from agent_api.api.chat import (
+    extract_cached_input_tokens,
     format_run_failure_message,
     parse_model_messages_json,
     persist_completed_run,
@@ -240,6 +246,8 @@ async def continue_run_after_approval(
     )
     adapter = AGUIAdapter(agent=agent, run_input=run_input)
     resume_started_at = time.monotonic()
+    # First content latency of the resumed stream; None when it ends tool-only.
+    ttft_ms: int | None = None
 
     async def native_events() -> AsyncIterator[NativeEvent]:
         async def start_stream(
@@ -327,6 +335,8 @@ async def continue_run_after_approval(
                 duration_ms=round((time.monotonic() - resume_started_at) * 1000),
                 input_tokens=usage.input_tokens or None,
                 output_tokens=usage.output_tokens or None,
+                ttft_ms=ttft_ms,
+                cached_input_tokens=extract_cached_input_tokens(usage),
             )
         except AGUIExecutionError:
             raise
@@ -376,6 +386,11 @@ async def continue_run_after_approval(
             native_events(),
             on_complete=persist_completed,
         ):
+            if ttft_ms is None and isinstance(
+                event,
+                (TextMessageContentEvent, ReasoningMessageContentEvent),
+            ):
+                ttft_ms = round((time.monotonic() - resume_started_at) * 1000)
             runtime.run_event_broker.publish(run_id, event)
     except asyncio.CancelledError:
         raise

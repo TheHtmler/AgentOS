@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from ag_ui.core import (
     BaseEvent,
     CustomEvent,
+    ReasoningMessageContentEvent,
     RunAgentInput,
     RunStartedEvent,
     TextMessageContentEvent,
@@ -34,6 +35,7 @@ from pydantic_ai.usage import UsageLimits
 from agent_api.agent import AgentOutput, build_context_snapshot, inject_context_snapshot
 from agent_api.api.auth import get_current_user
 from agent_api.api.chat import (
+    extract_cached_input_tokens,
     format_run_failure_message,
     load_thread_model_history,
     parse_model_messages_json,
@@ -205,6 +207,9 @@ async def stream_ag_ui_run(
         raise HTTPException(status_code=409, detail="Thread is already running") from error
 
     run_started_at = time.monotonic()
+    # First text/reasoning content latency, captured in the produce loop below;
+    # stays None for runs that end on a pure tool loop without visible output.
+    ttft_ms: int | None = None
 
     try:
         async with session_factory() as session:
@@ -501,6 +506,8 @@ async def stream_ag_ui_run(
                 duration_ms=round((time.monotonic() - run_started_at) * 1000),
                 input_tokens=usage.input_tokens or None,
                 output_tokens=usage.output_tokens or None,
+                ttft_ms=ttft_ms,
+                cached_input_tokens=extract_cached_input_tokens(usage),
             )
             # Same fire-and-forget path as classic SSE chat.
             if runtime.ollama_http_client is not None:
@@ -545,11 +552,17 @@ async def stream_ag_ui_run(
             raise AGUIExecutionError("对话记录保存失败，请稍后重试。") from error
 
     async def produce_events() -> None:
+        nonlocal ttft_ms
         try:
             async for event in adapter.transform_stream(
                 native_events(),
                 on_complete=persist_completed,
             ):
+                if ttft_ms is None and isinstance(
+                    event,
+                    (TextMessageContentEvent, ReasoningMessageContentEvent),
+                ):
+                    ttft_ms = round((time.monotonic() - run_started_at) * 1000)
                 if not client_disconnected.is_set():
                     await event_queue.put(event)
                 if emergency_category is not None and isinstance(event, RunStartedEvent):

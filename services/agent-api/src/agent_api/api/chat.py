@@ -13,6 +13,7 @@ from pydantic_ai.messages import (
     TextPart,
     UserPromptPart,
 )
+from pydantic_ai.usage import RunUsage
 
 from agent_api.config import get_settings
 from agent_api.context_budget import (
@@ -39,6 +40,17 @@ def resolve_version_tuning(version_value: int | None, env_default: int) -> int:
     """AgentVersion tuning fields are NULL-inherited from the env default."""
 
     return version_value if version_value is not None else env_default
+
+
+def extract_cached_input_tokens(usage: RunUsage) -> int | None:
+    """Cached-prefix tokens: first-class cache_read_tokens, else DeepSeek's details key.
+
+    Local Ollama reports neither; None means "provider did not report", so the
+    UI hides the cache figure instead of showing a misleading 0%.
+    """
+
+    cached = usage.cache_read_tokens or usage.details.get("prompt_cache_hit_tokens")
+    return cached or None
 
 
 def parse_model_messages_json(raw_messages: bytes) -> list[dict[str, object]]:
@@ -214,6 +226,8 @@ async def persist_model_step_event(
     duration_ms: int,
     input_tokens: int | None,
     output_tokens: int | None,
+    ttft_ms: int | None = None,
+    cached_input_tokens: int | None = None,
 ) -> None:
     """Record total run wall-clock + token usage for the Ops timeline; best-effort only.
 
@@ -233,6 +247,8 @@ async def persist_model_step_event(
                 duration_ms=duration_ms,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                ttft_ms=ttft_ms,
+                cached_input_tokens=cached_input_tokens,
             )
     except Exception:
         logger.exception("Unable to persist model_step event for run %s", run_id)
