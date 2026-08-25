@@ -2,7 +2,7 @@ import json
 
 import httpx
 import pytest
-from pydantic_ai.messages import ModelRequest, UserPromptPart
+from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 
 from agent_api.agent import (
     build_context_snapshot,
@@ -41,14 +41,18 @@ def test_instructions_exclude_volatile_blocks_and_snapshot_carries_them() -> Non
 
 
 def test_inject_context_snapshot_positions() -> None:
-    history = [ModelRequest(parts=[UserPromptPart(content="原始问题")])]
+    history: list[ModelMessage] = [ModelRequest(parts=[UserPromptPart(content="原始问题")])]
 
     end_injected = inject_context_snapshot(history, "SNAPSHOT")
-    assert end_injected[-1].parts[0].content == "SNAPSHOT"
+    end_part = end_injected[-1].parts[0]
+    assert isinstance(end_part, UserPromptPart)
+    assert end_part.content == "SNAPSHOT"
     assert len(end_injected) == 2
 
     start_injected = inject_context_snapshot(history, "SNAPSHOT", position="start")
-    assert start_injected[0].parts[0].content == "SNAPSHOT"
+    start_part = start_injected[0].parts[0]
+    assert isinstance(start_part, UserPromptPart)
+    assert start_part.content == "SNAPSHOT"
     assert len(start_injected) == 2
 
     assert inject_context_snapshot(history, None) == history
@@ -93,7 +97,7 @@ def test_upload_attachment_instructions_key_phrases() -> None:
     assert "非诊疗" in REPORT_ANALYSIS_INSTRUCTIONS or "一句" in REPORT_ANALYSIS_INSTRUCTIONS
     assert "case_slot_collect" in REPORT_ANALYSIS_INSTRUCTIONS
     assert "HITL" in REPORT_ANALYSIS_INSTRUCTIONS
-    assert "Never open a medical/report answer" in SYSTEM_INSTRUCTIONS
+    assert "Never open an answer with a multi-sentence AI/legal disclaimer" in SYSTEM_INSTRUCTIONS
 
 
 def test_build_instructions_includes_upload_guidance_for_artifact_capable_agent() -> None:
