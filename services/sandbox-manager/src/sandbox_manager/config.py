@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     max_timeout_seconds: int = 300
     max_output_chars: int = 32_000
     file_max_bytes: int = 20_000_000
+    workspace_max_bytes: int = 1_073_741_824
     max_concurrent_runs: int = 1
     port: int = 8788
 
@@ -40,6 +41,7 @@ class Settings(BaseSettings):
         "max_timeout_seconds",
         "max_output_chars",
         "file_max_bytes",
+        "workspace_max_bytes",
         "max_concurrent_runs",
     )
     @classmethod

@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,8 +10,10 @@ from sandbox_manager.executor import (
     account_directory_name,
     build_docker_args,
     normalize_cwd,
+    read_stream_bounded,
     resolve_workspace_file,
     user_workspace_path,
+    workspace_size,
 )
 from sandbox_manager.models import ExecuteRequest
 
@@ -75,3 +78,48 @@ def test_account_workspace_name_migrates_legacy_uuid_directory(tmp_path: Path) -
     assert current.name == "test@example.com"
     assert (current / "joke.txt").read_text(encoding="utf-8") == "hello"
     assert not legacy.exists()
+
+
+def test_read_stream_bounded_keeps_head_and_tail_within_limit() -> None:
+    async def scenario() -> None:
+        reader = asyncio.StreamReader()
+        reader.feed_data(b"a" * 100)
+        reader.feed_data(b"b" * 100)
+        reader.feed_eof()
+
+        text, truncated = await read_stream_bounded(reader, char_limit=10)
+
+        assert truncated
+        assert "...[output truncated]..." in text
+        assert text.startswith("a" * 20)
+        assert text.endswith("b" * 20)
+
+    asyncio.run(scenario())
+
+
+def test_read_stream_bounded_returns_short_output_in_full() -> None:
+    async def scenario() -> None:
+        reader = asyncio.StreamReader()
+        reader.feed_data("你好 sandbox".encode())
+        reader.feed_eof()
+
+        text, truncated = await read_stream_bounded(reader, char_limit=1_000)
+
+        assert not truncated
+        assert text == "你好 sandbox"
+
+    asyncio.run(scenario())
+
+
+def test_workspace_size_sums_regular_files_and_skips_symlinks(tmp_path: Path) -> None:
+    (tmp_path / "a.txt").write_bytes(b"x" * 10)
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    (nested / "b.bin").write_bytes(b"y" * 5)
+    (tmp_path / "link.txt").symlink_to(tmp_path / "a.txt")
+
+    assert workspace_size(tmp_path) == 15
+
+
+def test_settings_default_workspace_quota() -> None:
+    assert Settings.model_fields["workspace_max_bytes"].default == 1_073_741_824

@@ -131,13 +131,73 @@ def build_docker_args(
     return command
 
 
-def _truncate(value: str, limit: int) -> tuple[str, bool]:
-    if len(value) <= limit:
-        return value, False
-    head = max(1, limit // 2)
-    tail = max(1, limit - head)
-    marker = "\n...[output truncated]...\n"
-    return value[:head] + marker + value[-tail:], True
+_STREAM_CHUNK_BYTES = 65_536
+_UTF8_BYTES_PER_CHAR = 4
+_TRUNCATION_MARKER = "\n...[output truncated]...\n"
+_QUOTA_CHECK_INTERVAL_SECONDS = 2.0
+
+
+async def read_stream_bounded(
+    stream: asyncio.StreamReader | None, char_limit: int
+) -> tuple[str, bool]:
+    """Drain one stream while retaining only the head+tail window.
+
+    Commands can emit unbounded output (think `yes`), so the stream is never
+    fully buffered: only the bytes needed for head+tail truncation are kept.
+    """
+
+    byte_limit = max(2, char_limit) * _UTF8_BYTES_PER_CHAR
+    head_limit = byte_limit // 2
+    tail_limit = byte_limit - head_limit
+    head = bytearray()
+    tail = bytearray()
+    total = 0
+    if stream is not None:
+        while chunk := await stream.read(_STREAM_CHUNK_BYTES):
+            total += len(chunk)
+            if len(head) < head_limit:
+                keep = chunk[: head_limit - len(head)]
+                head.extend(keep)
+                chunk = chunk[len(keep) :]
+            if chunk:
+                tail.extend(chunk)
+                if len(tail) > tail_limit:
+                    del tail[: len(tail) - tail_limit]
+    if total <= byte_limit:
+        return bytes(head + tail).decode("utf-8", errors="replace"), False
+    head_text = bytes(head).decode("utf-8", errors="replace")
+    tail_text = bytes(tail).decode("utf-8", errors="replace")
+    return head_text + _TRUNCATION_MARKER + tail_text, True
+
+
+def workspace_size(workspace: Path) -> int:
+    """Total bytes of regular files in one workspace, skipping symlinks."""
+
+    total = 0
+    for entry in workspace.rglob("*"):
+        if entry.is_symlink() or not entry.is_file():
+            continue
+        try:
+            total += entry.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+async def _watch_workspace_quota(
+    process: asyncio.subprocess.Process,
+    workspace: Path,
+    max_bytes: int,
+    exceeded: asyncio.Event,
+) -> None:
+    """Kill the container once its workspace grows past the disk quota."""
+
+    while process.returncode is None:
+        await asyncio.sleep(_QUOTA_CHECK_INTERVAL_SECONDS)
+        if workspace_size(workspace) > max_bytes:
+            exceeded.set()
+            process.kill()
+            return
 
 
 def _snapshot_files(workspace: Path) -> dict[str, tuple[int, int]]:
@@ -244,16 +304,39 @@ async def _execute_locked(settings: Settings, request: ExecuteRequest) -> Execut
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+    quota_exceeded = asyncio.Event()
+    quota_task = asyncio.create_task(
+        _watch_workspace_quota(process, workspace, settings.workspace_max_bytes, quota_exceeded)
+    )
     timed_out = False
     try:
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            process.communicate(),
+        (stdout, stdout_truncated), (stderr, stderr_truncated) = await asyncio.wait_for(
+            asyncio.gather(
+                read_stream_bounded(process.stdout, request.max_output_chars),
+                read_stream_bounded(process.stderr, request.max_output_chars),
+            ),
             timeout=request.timeout_seconds,
         )
+        await process.wait()
     except TimeoutError:
         timed_out = True
         process.kill()
-        await process.communicate()
+        await process.wait()
+        stdout, stderr = "", "Sandbox command timed out"
+        stdout_truncated = stderr_truncated = False
+    finally:
+        quota_task.cancel()
+
+    quota_killed = not timed_out and quota_exceeded.is_set()
+    if quota_killed:
+        stdout, stderr = (
+            "",
+            "Sandbox workspace exceeded its disk quota; command was killed. "
+            "Free space before running more commands.",
+        )
+        stdout_truncated = stderr_truncated = False
+
+    if timed_out or quota_killed:
         cleanup = await asyncio.create_subprocess_exec(
             settings.docker_bin,
             "rm",
@@ -263,19 +346,10 @@ async def _execute_locked(settings: Settings, request: ExecuteRequest) -> Execut
             stderr=asyncio.subprocess.DEVNULL,
         )
         await cleanup.wait()
-        stdout_bytes, stderr_bytes = b"", b"Sandbox command timed out"
 
-    stdout, stdout_truncated = _truncate(
-        stdout_bytes.decode("utf-8", errors="replace"),
-        request.max_output_chars,
-    )
-    stderr, stderr_truncated = _truncate(
-        stderr_bytes.decode("utf-8", errors="replace"),
-        request.max_output_chars,
-    )
     return ExecuteResponse(
-        ok=not timed_out and process.returncode == 0,
-        exit_code=None if timed_out else process.returncode,
+        ok=not timed_out and not quota_killed and process.returncode == 0,
+        exit_code=None if timed_out or quota_killed else process.returncode,
         timed_out=timed_out,
         stdout=stdout,
         stderr=stderr,

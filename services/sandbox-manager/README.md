@@ -11,7 +11,7 @@ Docker container with:
 - read-only container root filesystem;
 - a read-write mount only at `/workspace`;
 - dropped Linux capabilities and `no-new-privileges`;
-- bounded memory, CPU, PIDs, output, and wall-clock time.
+- bounded memory, CPU, PIDs, wall-clock time, and workspace disk usage;
 
 The manager must not be exposed through Nginx/FRP. The Agent API should be the only
 caller. The configured image must include `/bin/sh`.

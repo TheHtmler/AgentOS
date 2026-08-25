@@ -130,7 +130,7 @@ general-agent
 
 - 初始只保留一个本地模型，推理并发设为 `1`。
 - Context 当前为 16k（qwen3-vl，KV 约 2.5GB）；升 24k 需先验证 swap，步骤见 [15](15-model-upgrade-qwen3-vl.md)。
-- 每次最多一个 Sandbox，默认内存 512MB、CPU 1 核、PID 128、超时 120 秒；容器超时自动销毁，用户工作区保留。
+- 每次最多一个 Sandbox，默认内存 512MB、CPU 1 核、PID 128、超时 120 秒、工作区容量 1 GiB；容器超时或超配额自动销毁，用户工作区保留。
 - 初期不常驻 Redis、MinIO、多 Worker 或大量 MCP Server。
 - 若 Memory Pressure 或 Swap 持续增长，先缩小模型/Context，或路由至第三方 API。
 
