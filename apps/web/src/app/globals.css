@@ -5408,3 +5408,48 @@ body {
   max-width: 100vw;
   overflow-x: hidden;
 }
+
+/* Give every conversation row an explicit title column and action column. */
+.agentos-codex-conversation-host .agentos-conversation-list-scroll,
+.agentos-mobile-conversation-host .agentos-conversation-list-scroll {
+  padding-inline: 0;
+}
+
+.agentos-codex-conversation-host .agentos-conversation-item,
+.agentos-mobile-conversation-host .agentos-conversation-item {
+  width: 100%;
+}
+
+.agentos-codex-conversation-host .agentos-conversation-row,
+.agentos-mobile-conversation-host .agentos-conversation-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) 2rem;
+  gap: 0;
+}
+
+.agentos-codex-conversation-host .agentos-conversation-button,
+.agentos-mobile-conversation-host .agentos-conversation-button {
+  display: block;
+  width: 100%;
+  max-width: none;
+  flex: none;
+}
+
+.agentos-codex-conversation-host .agentos-conversation-title-row,
+.agentos-mobile-conversation-host .agentos-conversation-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.35rem;
+}
+
+.agentos-codex-conversation-host .agentos-conversation-title,
+.agentos-mobile-conversation-host .agentos-conversation-title {
+  width: 100%;
+}
+
+.agentos-codex-conversation-host .agentos-conversation-menu-button,
+.agentos-mobile-conversation-host .agentos-conversation-menu-button {
+  width: 2rem;
+  padding-inline: 0;
+}
