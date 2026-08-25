@@ -619,7 +619,7 @@ export function ChatWorkspace({
               </button>
             </header>
 
-            <div className="min-h-0 flex-1 overflow-hidden">
+            <div className="agentos-mobile-conversation-host min-h-0 flex-1 overflow-hidden">
               <ConversationList
                 activeThreadId={activeThreadId}
                 agents={agents}
