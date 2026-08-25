@@ -43,6 +43,7 @@ from agent_api.api.chat import (
     persist_failed_run,
     persist_model_step_event,
     persist_text_delta,
+    resolve_version_tuning,
     schedule_context_budget_event,
     strip_thinking_parts,
     user_facing_run_error_message,
@@ -206,7 +207,6 @@ async def stream_ag_ui_run(
     run_started_at = time.monotonic()
 
     try:
-        history = await load_thread_model_history(started.thread_id, user_id=user.id)
         async with session_factory() as session:
             thread = await session.get(Thread, started.thread_id)
             if thread is None:
@@ -238,8 +238,14 @@ async def stream_ag_ui_run(
                         agent_id=thread.agent_id,
                         case_id=case_id,
                         message=prompt,
-                        top_k=settings.memory_recall_top_k,
-                        max_chars=settings.memory_recall_max_chars,
+                        top_k=resolve_version_tuning(
+                            version.memory_recall_top_k,
+                            settings.memory_recall_top_k,
+                        ),
+                        max_chars=resolve_version_tuning(
+                            version.memory_recall_max_chars,
+                            settings.memory_recall_max_chars,
+                        ),
                         http_client=runtime.ollama_http_client,
                     )
                     memory_block = format_memory_block(memories, exclude_keys=case_keys)
@@ -268,6 +274,15 @@ async def stream_ag_ui_run(
                 except Exception:
                     logger.exception("upload vision failed; continuing without image parts")
                     vision_parts = []
+
+        history = await load_thread_model_history(
+            started.thread_id,
+            user_id=user.id,
+            history_max_runs=resolve_version_tuning(
+                version.history_max_runs,
+                settings.history_max_runs,
+            ),
+        )
 
         async with session_factory() as session, session.begin():
             await update_run_model_name(
@@ -397,7 +412,12 @@ async def stream_ag_ui_run(
                 message_history=message_history,
                 conversation_id=str(started.thread_id),
                 run_id=str(started.run_id),
-                usage_limits=UsageLimits(request_limit=settings.agent_max_requests_per_run),
+                usage_limits=UsageLimits(
+                    request_limit=resolve_version_tuning(
+                        version.agent_max_requests_per_run,
+                        settings.agent_max_requests_per_run,
+                    ),
+                ),
                 deps=AgentDeps(
                     search_router=runtime.search_router,
                     fetch_router=runtime.fetch_router,

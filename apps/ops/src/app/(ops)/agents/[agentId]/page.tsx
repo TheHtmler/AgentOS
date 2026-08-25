@@ -18,6 +18,10 @@ type OpsAgentVersion = {
   case_enabled: boolean;
   knowledge_base_slugs: string[] | null;
   model_provider_id: string | null;
+  memory_recall_top_k: number | null;
+  memory_recall_max_chars: number | null;
+  history_max_runs: number | null;
+  agent_max_requests_per_run: number | null;
   is_published: boolean;
   created_at: string;
 };
@@ -73,6 +77,37 @@ const RISK_LABELS: Record<string, string> = {
   external: "外部访问",
 };
 
+const TUNING_FIELDS = [
+  { key: "memory_recall_top_k", label: "记忆召回条数", min: 1, max: 50 },
+  { key: "memory_recall_max_chars", label: "记忆召回字符上限", min: 200, max: 20000 },
+  { key: "history_max_runs", label: "历史窗口 Run 数", min: 1, max: 20 },
+  { key: "agent_max_requests_per_run", label: "单 Run 请求上限", min: 1, max: 50 },
+] as const;
+
+type TuningKey = (typeof TUNING_FIELDS)[number]["key"];
+type TuningDraft = Record<TuningKey, string>;
+
+const EMPTY_TUNING: TuningDraft = {
+  memory_recall_top_k: "",
+  memory_recall_max_chars: "",
+  history_max_runs: "",
+  agent_max_requests_per_run: "",
+};
+
+function parseTuningValue(text: string): number | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const value = Number(trimmed);
+  return Number.isFinite(value) ? Math.trunc(value) : null;
+}
+
+function tuningSummary(version: OpsAgentVersion): string {
+  const parts = TUNING_FIELDS.filter((field) => version[field.key] !== null).map(
+    (field) => `${field.label} ${version[field.key]}`,
+  );
+  return parts.length > 0 ? parts.join(" · ") : "继承默认";
+}
+
 export default function AgentDetailPage() {
   const params = useParams<{ agentId: string }>();
   const [agent, setAgent] = useState<OpsAgentDetail | null>(null);
@@ -87,6 +122,7 @@ export default function AgentDetailPage() {
   const [modelProviderId, setModelProviderId] = useState("");
   const [toolSpecs, setToolSpecs] = useState<OpsTool[]>([]);
   const [toolActions, setToolActions] = useState<Record<string, ToolAction>>({});
+  const [tuning, setTuning] = useState<TuningDraft>(EMPTY_TUNING);
 
   const applyVersion = useCallback((version: OpsAgentVersion | null, specs: OpsTool[]) => {
     setOverlay(version?.system_prompt_overlay ?? "");
@@ -102,6 +138,16 @@ export default function AgentDetailPage() {
     );
     setKnowledgeBaseSlugsText(version?.knowledge_base_slugs?.join(", ") ?? "");
     setModelProviderId(version?.model_provider_id ?? "");
+    setTuning(
+      Object.fromEntries(
+        TUNING_FIELDS.map((field) => [
+          field.key,
+          version?.[field.key] === null || version?.[field.key] === undefined
+            ? ""
+            : String(version[field.key]),
+        ]),
+      ) as TuningDraft,
+    );
   }, []);
 
   const load = useCallback(async () => {
@@ -161,6 +207,10 @@ export default function AgentDetailPage() {
             : null,
           knowledge_base_slugs,
           model_provider_id: modelProviderId === "" ? null : modelProviderId,
+          memory_recall_top_k: parseTuningValue(tuning.memory_recall_top_k),
+          memory_recall_max_chars: parseTuningValue(tuning.memory_recall_max_chars),
+          history_max_runs: parseTuningValue(tuning.history_max_runs),
+          agent_max_requests_per_run: parseTuningValue(tuning.agent_max_requests_per_run),
         }),
       });
       setAgent(updated);
@@ -303,6 +353,31 @@ export default function AgentDetailPage() {
                 ))}
               </select>
             </label>
+            <div className="stack">
+              <div>
+                <h3 className="section-title">运行参数</h3>
+                <p className="field-hint">可选，留空继承环境默认；随新版本固化。</p>
+              </div>
+              <div className="filter-row">
+                {TUNING_FIELDS.map((field) => (
+                  <label key={field.key}>
+                    {field.label}（{field.min}–{field.max}）
+                    <input
+                      type="number"
+                      min={field.min}
+                      max={field.max}
+                      value={tuning[field.key]}
+                      onChange={(event) =>
+                        setTuning((current) => ({
+                          ...current,
+                          [field.key]: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
             <button type="submit" disabled={saving}>
               {saving ? "发布中…" : "发布新版本"}
             </button>
@@ -322,6 +397,7 @@ export default function AgentDetailPage() {
                   <span>档案 {boolZh(version.case_enabled)}</span>
                   <span>知识库 {version.knowledge_base_slugs?.join(", ") ?? "不限制"}</span>
                   <span>模型 {providerLabel(version.model_provider_id)}</span>
+                  <span>运行参数 {tuningSummary(version)}</span>
                   <span>{formatTime(version.created_at)}</span>
                 </div>
                 <button

@@ -201,6 +201,11 @@ class AgentVersion(Base):
         ForeignKey("model_providers.id", ondelete="RESTRICT"),
         index=True,
     )
+    # Runtime tuning knobs; NULL = inherit the env default of the same name.
+    memory_recall_top_k: Mapped[int | None] = mapped_column(Integer)
+    memory_recall_max_chars: Mapped[int | None] = mapped_column(Integer)
+    history_max_runs: Mapped[int | None] = mapped_column(Integer)
+    agent_max_requests_per_run: Mapped[int | None] = mapped_column(Integer)
     is_published: Mapped[bool] = mapped_column(
         server_default=text("false"),
         nullable=False,

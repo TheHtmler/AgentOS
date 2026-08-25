@@ -136,6 +136,12 @@ async def test_ops_agent_publish_new_version(
             assert detail.status_code == 200
             assert detail.json()["id"] == str(agent.id)
 
+            rejected = await client.post(
+                f"/v1/ops/agents/{agent.id}/versions",
+                json={"memory_recall_top_k": 0},
+            )
+            assert rejected.status_code == 422
+
             published = await client.post(
                 f"/v1/ops/agents/{agent.id}/versions",
                 json={
@@ -144,6 +150,10 @@ async def test_ops_agent_publish_new_version(
                     "case_enabled": False,
                     "tool_policy_overrides": {"web_search": "ask"},
                     "knowledge_base_slugs": ["mma-pa"],
+                    "memory_recall_top_k": 12,
+                    "memory_recall_max_chars": 4000,
+                    "history_max_runs": 6,
+                    "agent_max_requests_per_run": 20,
                 },
             )
             assert published.status_code == 200
@@ -155,6 +165,10 @@ async def test_ops_agent_publish_new_version(
             # Republishing a version must not silently reset scope back to
             # unrestricted just because the field is easy to omit from a payload.
             assert body["published_version"]["knowledge_base_slugs"] == ["mma-pa"]
+            assert body["published_version"]["memory_recall_top_k"] == 12
+            assert body["published_version"]["memory_recall_max_chars"] == 4000
+            assert body["published_version"]["history_max_runs"] == 6
+            assert body["published_version"]["agent_max_requests_per_run"] == 20
             published_flags = [row["is_published"] for row in body["versions"]]
             assert published_flags.count(True) == 1
     finally:

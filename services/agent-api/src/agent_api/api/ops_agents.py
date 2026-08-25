@@ -44,6 +44,11 @@ class OpsAgentVersionOut(BaseModel):
     knowledge_base_slugs: list[str] | None
     # NULL = built-in local provider.
     model_provider_id: UUID | None
+    # Runtime tuning; None = inherit the env default.
+    memory_recall_top_k: int | None
+    memory_recall_max_chars: int | None
+    history_max_runs: int | None
+    agent_max_requests_per_run: int | None
     is_published: bool
     created_at: datetime
 
@@ -74,6 +79,11 @@ class PublishOpsAgentVersionRequest(BaseModel):
     # None = built-in local provider; a value pins this revision to one
     # ops-managed remote provider.
     model_provider_id: UUID | None = None
+    # Runtime tuning; None = inherit the env default of the same name.
+    memory_recall_top_k: int | None = Field(default=None, ge=1, le=50)
+    memory_recall_max_chars: int | None = Field(default=None, ge=200, le=20000)
+    history_max_runs: int | None = Field(default=None, ge=1, le=20)
+    agent_max_requests_per_run: int | None = Field(default=None, ge=1, le=50)
 
 
 def _to_out(agent: Agent, version: AgentVersion | None) -> OpsAgentOut:
@@ -102,6 +112,10 @@ def _version_out(version: AgentVersion) -> OpsAgentVersionOut:
         case_enabled=version.case_enabled,
         knowledge_base_slugs=version.knowledge_base_slugs,
         model_provider_id=version.model_provider_id,
+        memory_recall_top_k=version.memory_recall_top_k,
+        memory_recall_max_chars=version.memory_recall_max_chars,
+        history_max_runs=version.history_max_runs,
+        agent_max_requests_per_run=version.agent_max_requests_per_run,
         is_published=version.is_published,
         created_at=version.created_at,
     )
@@ -259,6 +273,10 @@ async def publish_ops_agent_version(
                 case_enabled=payload.case_enabled,
                 knowledge_base_slugs=payload.knowledge_base_slugs,
                 model_provider_id=payload.model_provider_id,
+                memory_recall_top_k=payload.memory_recall_top_k,
+                memory_recall_max_chars=payload.memory_recall_max_chars,
+                history_max_runs=payload.history_max_runs,
+                agent_max_requests_per_run=payload.agent_max_requests_per_run,
                 is_published=True,
             ),
         )

@@ -8,10 +8,16 @@ from pydantic_ai import ModelMessagesTypeAdapter
 
 from agent_api.api.chat import (
     persist_context_budget_event,
+    resolve_version_tuning,
     schedule_context_budget_event,
     strip_thinking_parts,
 )
 from agent_api.context_budget import BudgetReport
+
+
+def test_resolve_version_tuning_inherits_env_on_null() -> None:
+    assert resolve_version_tuning(None, 8) == 8
+    assert resolve_version_tuning(12, 8) == 12
 
 
 def test_strip_thinking_parts_removes_readable_reasoning() -> None:

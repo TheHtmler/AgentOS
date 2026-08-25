@@ -77,6 +77,11 @@ class SeedAgentVersion:
     # None = unrestricted (search every active KnowledgeBase); a non-empty
     # list scopes knowledge_search to just those slugs (vertical agents).
     knowledge_base_slugs: list[str] | None = None
+    # Runtime tuning; None = inherit the env default of the same name.
+    memory_recall_top_k: int | None = None
+    memory_recall_max_chars: int | None = None
+    history_max_runs: int | None = None
+    agent_max_requests_per_run: int | None = None
 
 
 @dataclass(frozen=True)
@@ -175,6 +180,10 @@ async def upsert_seed_agent(session: AsyncSession, spec: SeedAgent) -> None:
             memory_enabled=version_spec.memory_enabled,
             case_enabled=version_spec.case_enabled,
             knowledge_base_slugs=version_spec.knowledge_base_slugs,
+            memory_recall_top_k=version_spec.memory_recall_top_k,
+            memory_recall_max_chars=version_spec.memory_recall_max_chars,
+            history_max_runs=version_spec.history_max_runs,
+            agent_max_requests_per_run=version_spec.agent_max_requests_per_run,
             is_published=True,
         )
         session.add(version)
@@ -183,6 +192,10 @@ async def upsert_seed_agent(session: AsyncSession, spec: SeedAgent) -> None:
         version.memory_enabled = version_spec.memory_enabled
         version.case_enabled = version_spec.case_enabled
         version.knowledge_base_slugs = version_spec.knowledge_base_slugs
+        version.memory_recall_top_k = version_spec.memory_recall_top_k
+        version.memory_recall_max_chars = version_spec.memory_recall_max_chars
+        version.history_max_runs = version_spec.history_max_runs
+        version.agent_max_requests_per_run = version_spec.agent_max_requests_per_run
         # A newer revision may have been published in Ops (for example, to pin a
         # remote provider). Seed may refresh its own baseline content but must not
         # reactivate that older baseline and create two published revisions.

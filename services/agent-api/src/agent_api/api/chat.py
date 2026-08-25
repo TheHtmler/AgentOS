@@ -35,6 +35,12 @@ from agent_api.db.session import session_factory
 logger = logging.getLogger(__name__)
 
 
+def resolve_version_tuning(version_value: int | None, env_default: int) -> int:
+    """AgentVersion tuning fields are NULL-inherited from the env default."""
+
+    return version_value if version_value is not None else env_default
+
+
 def parse_model_messages_json(raw_messages: bytes) -> list[dict[str, object]]:
     """Validate the server-generated Pydantic AI JSON before it reaches PostgreSQL."""
 
@@ -128,20 +134,28 @@ def model_history_from_thread_messages(rows: list[Message]) -> list[ModelMessage
     return history
 
 
-async def load_thread_model_history(thread_id: UUID, *, user_id: UUID) -> list[ModelMessage]:
+async def load_thread_model_history(
+    thread_id: UUID,
+    *,
+    user_id: UUID,
+    history_max_runs: int | None = None,
+) -> list[ModelMessage]:
     """Load server-authored history for the next model turn.
 
     Prefer ``run_message_histories`` snapshots. If they are missing or empty (for example
     after a partial persist failure), fall back to completed user/assistant Message rows.
     Callers invoke this after ``start_run``, so the newest trailing user Message belongs to
     the in-progress turn and must be omitted from the fallback history.
+    ``history_max_runs`` is the caller-resolved window (AgentVersion tuning or env).
     """
+
+    max_runs = resolve_version_tuning(history_max_runs, get_settings().history_max_runs)
 
     async with session_factory() as session:
         snapshots = await list_completed_run_message_histories(
             session,
             thread_id=thread_id,
-            limit=get_settings().history_max_runs,
+            limit=max_runs,
             user_id=user_id,
         )
 
@@ -157,8 +171,8 @@ async def load_thread_model_history(thread_id: UUID, *, user_id: UUID) -> list[M
     if rows and rows[-1].role == "user":
         rows = rows[:-1]
 
-    # Keep the same run window as HISTORY_MAX_RUNS (each run ~= user+assistant pair).
-    max_messages = get_settings().history_max_runs * 2
+    # Keep the same run window as the resolved max_runs (each run ~= user+assistant pair).
+    max_messages = max_runs * 2
     if len(rows) > max_messages:
         rows = rows[-max_messages:]
 

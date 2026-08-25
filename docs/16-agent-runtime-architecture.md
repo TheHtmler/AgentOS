@@ -72,6 +72,7 @@
 - Sandbox Manager（`services/sandbox-manager`）是唯一控制 Docker 的进程。每次命令使用短生命周期容器，用户工作区按 `workspace_root/{normalized_account}` 持久化；UUID 仍用于请求身份、用户锁和旧目录迁移。容器使用 `--network none`、非 root UID/GID、只读根文件系统、仅挂载 `/workspace`、丢弃 capabilities、`no-new-privileges`、CPU/内存/PID/超时限制；stdout/stderr 按字节窗口流式截顶（绝不全量缓冲，`yes` 之类命令打不爆 Manager 内存），工作区容量超过 `SANDBOX_WORKSPACE_MAX_BYTES`（默认 1 GiB）时直接 kill 容器，需先清理文件再继续。同一用户串行执行，默认全局并发 1。
 - Sandbox 输出超过预览上限时写入现有 owner-scoped Artifact（`kind="sandbox"`），模型拿到预览和 `output_artifact_id`，后续通过 `read_artifact` 分页；命令执行前后发现的新增/修改文件以受限的 `path/size/mime_type` 元数据进入工具结果和 `run_events`，聊天在生成位置显示文件名，点击后通过 Agent API 的当前用户校验代理文件右侧预览/下载。Manager 只监听私有地址，不能通过 Web/FRP 暴露；文件读取拒绝绝对路径、父目录和符号链接。
 - Ops 的 Agent 版本发布页按注册表展示内置工具，并可逐项选择「继承平台默认 / 允许 / 每次审批 / 禁止」；后端拒绝未注册的工具名，发布仍创建不可变 `AgentVersion`。
+- 版本级运行参数：`agent_versions` 带 `memory_recall_top_k` / `memory_recall_max_chars` / `history_max_runs` / `agent_max_requests_per_run` 四个可空列（迁移 `q3r4s5t6u7v8`),NULL = 继承 config.py 同名 env 默认；运行时经 `api/chat.py::resolve_version_tuning` 在 AG-UI 新 run 与 HITL 续跑两条链路的记忆召回、历史加载窗口、`UsageLimits` 请求上限四处消费，Ops 发版表单可配（留空继承，范围服务端校验），版本历史显示生效值。
 
 - Ops 的工具目录支持按来源查看内建和 MCP 工具：`GET /v1/ops/tools/{tool_name}` 返回当前策略、内建工具的真实输入 JSON Schema，以及文档化的解码后输出 JSON Schema；MCP 工具的输入/输出 Schema 由远端服务器在运行时提供，页面会明确标注这一边界。旧 `/skills` 路径仅保留兼容重定向。
 
