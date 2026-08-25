@@ -52,44 +52,44 @@
 
 /* ── Design tokens: dark ── */
 [data-theme="dark"] {
-  --bg: #0b1220;
-  --bg-glow: rgba(76, 141, 255, 0.08);
-  --panel: rgba(17, 27, 46, 0.86);
-  --panel-solid: #111b2e;
-  --panel-muted: #15233b;
-  --surface-chat: #0f172a;
-  --surface-header: rgba(16, 26, 44, 0.94);
-  --surface-input: #0d1728;
-  --surface-elevated: #16233a;
-  --surface-code: #0b1220;
-  --border: rgba(148, 163, 184, 0.18);
-  --border-strong: rgba(148, 163, 184, 0.28);
-  --text: #f3f7ff;
-  --text-secondary: #d7e2f0;
-  --muted: #a7b6cc;
-  --placeholder: #7890ad;
-  --accent: #4c8dff;
-  --accent-dim: #36d6ff;
-  --accent-soft: rgba(76, 141, 255, 0.14);
-  --accent-softer: rgba(76, 141, 255, 0.08);
-  --accent-border: rgba(76, 141, 255, 0.36);
-  --accent-glow: rgba(54, 214, 255, 0.22);
+  --bg: #101311;
+  --bg-glow: rgba(57, 255, 154, 0.04);
+  --panel: rgba(24, 29, 26, 0.92);
+  --panel-solid: #181d1a;
+  --panel-muted: #171b19;
+  --surface-chat: #111412;
+  --surface-header: rgba(17, 20, 18, 0.96);
+  --surface-input: #171b19;
+  --surface-elevated: #1b201d;
+  --surface-code: #0c100e;
+  --border: rgba(219, 237, 225, 0.14);
+  --border-strong: rgba(219, 237, 225, 0.23);
+  --text: #f2f6f3;
+  --text-secondary: #d6e0d8;
+  --muted: #9eada2;
+  --placeholder: #748279;
+  --accent: #39ff9a;
+  --accent-dim: #9ce8c3;
+  --accent-soft: rgba(57, 255, 154, 0.12);
+  --accent-softer: rgba(57, 255, 154, 0.06);
+  --accent-border: rgba(57, 255, 154, 0.34);
+  --accent-glow: rgba(57, 255, 154, 0.18);
   --danger: #f07178;
   --danger-soft: rgba(240, 113, 120, 0.12);
-  --success: #36d6ff;
+  --success: #39ff9a;
   --shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.45);
   --overlay: rgba(4, 10, 22, 0.68);
-  --scrollbar: rgba(76, 141, 255, 0.32);
-  --grid-line: rgba(76, 141, 255, 0.03);
-  --send-fg: #07111f;
+  --scrollbar: rgba(57, 255, 154, 0.28);
+  --grid-line: rgba(219, 237, 225, 0.025);
+  --send-fg: #06150d;
   --message-user-bg:
-    linear-gradient(135deg, rgba(76, 141, 255, 0.18), rgba(54, 214, 255, 0.08)), #162642;
-  --message-user-fg: #e4efff;
+    linear-gradient(135deg, rgba(57, 255, 154, 0.16), rgba(57, 255, 154, 0.05)), #17211b;
+  --message-user-fg: #e1f5e8;
   --message-assistant-bg:
-    linear-gradient(110deg, rgba(76, 141, 255, 0.08), transparent 34%), #111b2e;
-  --message-assistant-fg: #e5eefb;
-  --card-soft: linear-gradient(105deg, rgba(76, 141, 255, 0.1), #111b2e 72%);
+    linear-gradient(110deg, rgba(57, 255, 154, 0.06), transparent 34%), #181d1a;
+  --message-assistant-fg: #e3ece5;
+  --card-soft: linear-gradient(105deg, rgba(57, 255, 154, 0.08), #181d1a 72%);
   --card-error: linear-gradient(105deg, rgba(255, 107, 122, 0.1), rgba(22, 16, 18, 0.78) 72%);
   --stop-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.38), rgba(234, 88, 12, 0.26));
   --stop-fg: #fff4e8;
@@ -176,15 +176,15 @@ body {
 
 [data-theme="dark"] .agentos-app .bg-zinc-900,
 [data-theme="dark"] .agentos-auth-shell .bg-zinc-900 {
-  background: var(--accent-soft);
+  background: var(--surface-elevated);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  box-shadow: inset 0 0 0 1px rgba(76, 141, 255, 0.22);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 
 [data-theme="dark"] .agentos-app .bg-zinc-950,
 [data-theme="dark"] .agentos-auth-shell .bg-zinc-950 {
-  background-color: rgba(76, 141, 255, 0.18);
+  background-color: var(--accent-soft);
 }
 
 [data-theme="dark"] .agentos-app .border-zinc-100,
@@ -259,7 +259,7 @@ body {
 
 [data-theme="dark"] .agentos-app .hover\:bg-zinc-700:hover,
 [data-theme="dark"] .agentos-auth-shell .hover\:bg-zinc-700:hover {
-  background-color: rgba(76, 141, 255, 0.16);
+  background-color: var(--accent-softer);
 }
 
 [data-theme="dark"] .agentos-app .hover\:bg-rose-50:hover,
@@ -275,7 +275,7 @@ body {
 [data-theme="dark"] .agentos-auth-shell .hover\:border-zinc-500:hover,
 [data-theme="dark"] .agentos-auth-shell .focus\:border-zinc-500:focus,
 [data-theme="dark"] .agentos-auth-shell .focus\:border-zinc-700:focus {
-  border-color: rgba(76, 141, 255, 0.42);
+  border-color: var(--accent-border);
 }
 
 [data-theme="dark"] .agentos-app .focus\:bg-white:focus,
@@ -1932,7 +1932,7 @@ body {
   border-radius: 8px;
   /* Solid fill so --send-fg (near-black) stays readable on dark theme. */
   background: linear-gradient(135deg, var(--accent), var(--accent-dim));
-  color: var(--send-fg);
+  color: var(--accent);
   font-weight: 600;
   box-shadow: 0 0 18px var(--accent-glow);
   transition:
@@ -1970,6 +1970,7 @@ body {
   width: 28%;
   height: 2px;
   background: var(--accent);
+  color: var(--send-fg);
   box-shadow: 0 0 14px var(--accent-glow);
   content: "";
   animation: agentos-run-scan 2.2s ease-in-out infinite;
@@ -2271,21 +2272,23 @@ body {
 }
 
 .agentos-topbar {
-  height: 3.75rem;
+  height: 3.5rem;
   background: var(--surface-header);
   box-shadow: 0 1px 0 var(--border);
 }
 
 .agentos-topbar-inner {
   max-width: none;
-  padding: 0 1.25rem;
+  padding: 0 1rem;
 }
 
 .agentos-logo-mark {
-  border-radius: 7px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-elevated));
   color: var(--send-fg);
-  box-shadow: 0 8px 20px var(--accent-glow);
+  box-shadow: 0 0 0 1px var(--accent-border);
 }
 
 .agentos-header-action,
@@ -2303,7 +2306,7 @@ body {
 }
 
 .agentos-workspace {
-  height: calc(100dvh - 3.75rem);
+  height: calc(100dvh - 3.5rem);
   max-width: none;
   gap: 0;
   padding: 0;
@@ -2332,7 +2335,7 @@ body {
 
 .agentos-conversation-rail {
   border-right: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--panel-muted), var(--surface-chat));
+  background: var(--panel-muted);
 }
 
 .agentos-main-column {
@@ -2516,7 +2519,7 @@ body {
 .agentos-conversation-list-header {
   flex: none;
   border-bottom: 1px solid var(--border);
-  padding: 1rem 0.85rem 0.85rem;
+  padding: 0.85rem 0.75rem 0.7rem;
 }
 
 .agentos-agent-picker {
@@ -2538,8 +2541,8 @@ body {
 
 .agentos-agent-select {
   display: block;
-  margin-top: 0.45rem;
-  padding: 0.55rem 0.65rem;
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.6rem;
   background: var(--surface-input);
   color: var(--text);
   font-size: 0.79rem;
@@ -2558,7 +2561,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-top: 1rem;
+  margin-top: 0.8rem;
 }
 
 .agentos-list-title {
@@ -2574,7 +2577,7 @@ body {
   align-items: center;
   gap: 0.3rem;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   padding: 0.38rem 0.55rem;
   color: var(--text-secondary);
@@ -2596,8 +2599,8 @@ body {
 
 .agentos-search-input {
   display: block;
-  margin-top: 0.7rem;
-  padding: 0.58rem 0.7rem;
+  margin-top: 0.6rem;
+  padding: 0.52rem 0.65rem;
   background: var(--surface-input);
   color: var(--text);
   font-size: 0.77rem;
@@ -2626,15 +2629,15 @@ body {
 }
 
 .agentos-conversation-list-scroll {
-  padding: 0.55rem;
+  padding: 0.45rem;
 }
 
 .agentos-conversation-group + .agentos-conversation-group {
-  margin-top: 0.75rem;
+  margin-top: 0.55rem;
 }
 
 .agentos-conversation-group-label {
-  padding: 0.45rem 0.4rem 0.3rem;
+  padding: 0.4rem 0.4rem 0.25rem;
   color: var(--muted);
   font-size: 0.62rem;
   font-weight: 700;
@@ -2645,18 +2648,16 @@ body {
 .agentos-conversation-item {
   position: relative;
   min-width: 0;
-  margin: 0.15rem 0;
-  border-radius: 7px;
+  margin: 0.1rem 0;
+  border-radius: 6px;
   color: var(--text-secondary);
 }
 
 .agentos-conversation-item.is-active {
-  border: 1px solid var(--accent-border);
-  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
   color: var(--text);
-  box-shadow:
-    inset 2px 0 var(--accent),
-    0 8px 18px var(--accent-softer);
+  box-shadow: inset 2px 0 var(--accent);
 }
 
 .agentos-conversation-row,
@@ -2673,7 +2674,7 @@ body {
 .agentos-conversation-button {
   min-width: 0;
   flex: 1 1 auto;
-  padding: 0.55rem 0.5rem;
+  padding: 0.5rem 0.45rem;
   color: inherit;
   text-align: left;
 }
@@ -2692,8 +2693,8 @@ body {
   min-width: 0;
   overflow: hidden;
   color: inherit;
-  font-size: 0.77rem;
-  font-weight: 650;
+  font-size: 0.75rem;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2705,7 +2706,7 @@ body {
 }
 
 .agentos-conversation-preview {
-  margin-top: 0.25rem;
+  margin-top: 0.2rem;
   overflow: hidden;
   color: var(--muted);
   font-size: 0.68rem;
@@ -2805,16 +2806,10 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 5.25rem;
+  min-height: 4.5rem;
   border-bottom: 1px solid var(--border);
-  padding: 1rem max(2rem, calc((100% - 64rem) / 2));
-  background:
-    linear-gradient(
-      100deg,
-      color-mix(in srgb, var(--accent-soft) 54%, transparent),
-      transparent 46%
-    ),
-    var(--surface-header);
+  padding: 0.8rem max(2rem, calc((100% - 64rem) / 2));
+  background: var(--surface-header);
   box-shadow: 0 1px 0 var(--accent-softer);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -2836,7 +2831,7 @@ body {
 .agentos-thread-title-row {
   flex-wrap: wrap;
   gap: 0.65rem;
-  margin-top: 0.28rem;
+  margin-top: 0.2rem;
 }
 
 .agentos-thread-title-row .agentos-chat-heading {
@@ -2897,19 +2892,19 @@ body {
 
 .agentos-empty-state {
   display: flex;
-  width: min(100%, 38rem);
+  width: min(100%, 36rem);
   min-height: 100%;
   flex-direction: column;
   justify-content: center;
   max-width: 38rem;
   margin-inline: auto;
-  padding: 2rem 0;
+  padding: 1.5rem 0;
 }
 
 .agentos-empty-state .agentos-chat-heading {
-  margin-top: 0.5rem;
+  margin-top: 0.4rem;
   color: var(--text);
-  font-size: 1.6rem;
+  font-size: 1.45rem;
   font-weight: 700;
   letter-spacing: -0.025em;
 }
@@ -2924,15 +2919,16 @@ body {
 
 .agentos-starter-prompts {
   display: grid;
-  gap: 0.5rem;
-  margin-top: 1.25rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 1.1rem;
 }
 
 .agentos-starter-prompt {
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--surface-elevated);
-  padding: 0.65rem 0.75rem;
+  padding: 0.6rem 0.7rem;
   color: var(--text-secondary);
   font-size: 0.75rem;
   text-align: left;
@@ -3032,10 +3028,10 @@ body {
 
 .agentos-composer {
   flex: none;
-  border-top: 1px solid var(--border);
-  padding: 0.75rem max(2rem, calc((100% - 64rem) / 2)) 1rem;
-  background: linear-gradient(180deg, var(--surface-header), var(--surface-chat));
-  box-shadow: 0 -1px 0 var(--accent-softer);
+  border-top: 0;
+  padding: 0.8rem max(2rem, calc((100% - 64rem) / 2)) 1.1rem;
+  background: var(--surface-chat);
+  box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -3051,10 +3047,11 @@ body {
   min-height: 3.25rem;
   max-height: 12.5rem;
   padding: 0.75rem 0.85rem;
-  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
   background: var(--surface-input);
   color: var(--text);
-  font-size: 0.82rem;
+  font-size: 0.83rem;
   line-height: 1.55;
 }
 
@@ -3098,13 +3095,13 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  min-width: 4.5rem;
+  min-width: 2.2rem;
   min-height: 2.15rem;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  background: var(--accent);
+  border: 1px solid var(--accent-border);
+  border-radius: 7px;
+  background: var(--accent-soft);
   color: var(--send-fg);
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 700;
   box-shadow: none;
   transition:
@@ -3114,8 +3111,8 @@ body {
 }
 
 .agentos-send-button:hover {
-  border-color: var(--accent-dim);
-  background: var(--accent-dim);
+  border-color: var(--accent);
+  background: var(--accent);
   box-shadow: none;
   transform: translateY(-1px);
 }
@@ -3177,7 +3174,7 @@ body {
 
   .agentos-workspace,
   .agentos-workspace.agentos-workspace-runtime-collapsed {
-    height: calc(100dvh - 3.75rem);
+    height: calc(100dvh - 3.5rem);
     grid-template-columns: minmax(0, 1fr);
     padding: 0;
   }
@@ -3283,6 +3280,10 @@ body {
 
   .agentos-composer-meta {
     max-width: 4rem;
+  }
+
+  .agentos-starter-prompts {
+    grid-template-columns: 1fr;
   }
 }
 

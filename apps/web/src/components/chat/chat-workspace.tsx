@@ -411,7 +411,7 @@ export function ChatWorkspace({
           <AgentOsLogo subtitle="助手工作台" />
 
           <div className="ml-auto hidden items-center gap-3 lg:flex">
-            <ThemeToggle />
+            <ThemeToggle compact />
             <p className="max-w-48 truncate text-sm text-zinc-600" title={userEmail}>
               {userEmail}
             </p>
