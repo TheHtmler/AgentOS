@@ -113,6 +113,7 @@
 - 知识导入切块改为标题分层 + 硬换行合并 + 900 字打包 + 150 字重叠；PDF 带页码；详情默认展示切片摘要而不再先折叠。
 - Ops 会话列表按用户过滤：`user_id` / `unassigned`，响应带有会话用户清单；点邮箱或详情用户名只看该用户。
 - Ops 记忆管理：`GET /v1/ops/memories`（用户邮箱子串 / Agent / kind / status 过滤，默认只看 active，按 `updated_at` 倒序，embedding 与 embedding_model 不出响应）+ `DELETE /v1/ops/memories/{id}` 硬删除；Ops「观测」组新增 `/memory` 页，邮箱 + 智能体 + 类型/状态筛选，两击确认删除。
+- 平台级 tool policy：`platform_tool_policies` 表（迁移 `p2q3r4s5t6u7`）接入 `tools/policy.py::evaluate`，平台层 = env ∪ DB（deny 取并集、ask 减去 deny,env 为部署底线不可放松）,DB 行只许 `ask`/`deny`、删行即继承；进程内缓存启动时 best-effort 加载、ops 写后刷新，挂载/`requires_approval`/调用拦截自动生效。Ops 工具详情页新增「平台策略」卡（`GET/PUT/DELETE /v1/ops/tool-policies` + BFF)。
 - 聊天报告上传与分析：Web 附件 UI + BFF `POST /api/uploads`；Agent API `POST /v1/uploads` 将原文件存至 `UPLOAD_ROOT`、OCR 文本写入 Artifact（`kind=upload`）；Run 注入报告预览；垂类 Agent 结合 `knowledge_search` 解读，case_enabled 路径经现有 HITL 写入 Case facts；用户报告与 `knowledge_*` 严格隔离。
 - 上下文预算可观测：run 前 / step 级裁剪动作写入 `run_events`(`context_budget`,best-effort,含估算 token、动作摘要与 `BudgetReport.summary()` 统一文案）,Ops 会话事件时间线可读；step 级经 `make_step_history_processor(on_trim=)` fire-and-forget 落库。
 - HITL 续跑正确性修复两条：续跑持久化检查点不再混入当轮上下文快照（此前违反「快照不落库」硬约束，且快照伪 run 边界会污染后续裁剪的 run 计数）;`POST /v1/runs/{id}/resume` 在行锁（`get_run(for_update=True)`）内判断谁离开 `waiting_approval`，同幂等键并发重放不再双启后台续跑。

@@ -13,6 +13,7 @@ from agent_api.api.ops_memories import router as ops_memories_router
 from agent_api.api.ops_providers import router as ops_providers_router
 from agent_api.api.ops_sessions import router as ops_sessions_router
 from agent_api.api.ops_stats import router as ops_stats_router
+from agent_api.api.ops_tool_policies import router as ops_tool_policies_router
 from agent_api.api.ops_tools import router as ops_tools_router
 from agent_api.api.runs import router as runs_router
 from agent_api.api.sandboxes import router as sandboxes_router
@@ -51,6 +52,7 @@ app.include_router(ops_providers_router)
 app.include_router(ops_agents_router)
 app.include_router(ops_sessions_router)
 app.include_router(ops_tools_router)
+app.include_router(ops_tool_policies_router)
 
 
 @app.get("/health", tags=["system"])

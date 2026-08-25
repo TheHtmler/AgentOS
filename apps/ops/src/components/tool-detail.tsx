@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/skeleton";
+import { useToast } from "@/components/toast";
 import { POLICY_ACTION_LABELS, TOOL_DOMAIN_LABELS, TOOL_RISK_LABELS, labelOf } from "@/lib/labels";
 import { opsJson } from "@/lib/ops-fetch";
 
@@ -25,6 +26,15 @@ type OpsToolDetail = {
   output_description: string;
   output_transport: string;
 };
+
+type OpsToolPolicy = {
+  name: string;
+  env_action: string | null;
+  db_action: string | null;
+  effective_platform_action: string;
+};
+
+type PolicyDraft = "inherit" | "ask" | "deny";
 
 const sourceLabels: Record<OpsToolDetail["source"], string> = {
   builtin: "内建工具",
@@ -120,8 +130,12 @@ function SchemaPanel({
 
 export function ToolDetail() {
   const params = useParams<{ toolName: string }>();
+  const toast = useToast();
   const [detail, setDetail] = useState<OpsToolDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [policy, setPolicy] = useState<OpsToolPolicy | null>(null);
+  const [policyDraft, setPolicyDraft] = useState<PolicyDraft>("inherit");
+  const [policySaving, setPolicySaving] = useState(false);
 
   useEffect(() => {
     if (!params.toolName) return;
@@ -135,6 +149,49 @@ export function ToolDetail() {
       }
     })();
   }, [params.toolName]);
+
+  const loadPolicy = useCallback(async () => {
+    if (!params.toolName) return;
+    const body = await opsJson<{ tools: OpsToolPolicy[] }>("/api/ops/tool-policies");
+    const row = body.tools.find((item) => item.name === params.toolName) ?? null;
+    setPolicy(row);
+    setPolicyDraft(
+      row?.db_action === "ask" || row?.db_action === "deny" ? row.db_action : "inherit",
+    );
+  }, [params.toolName]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        await loadPolicy();
+      } catch {
+        // The policy card stays hidden when the list cannot be loaded.
+      }
+    })();
+  }, [loadPolicy]);
+
+  async function savePolicy() {
+    if (!params.toolName) return;
+    setPolicySaving(true);
+    setError(null);
+    const encoded = encodeURIComponent(params.toolName);
+    try {
+      if (policyDraft === "inherit") {
+        await opsJson(`/api/ops/tool-policies/${encoded}`, { method: "DELETE" });
+      } else {
+        await opsJson(`/api/ops/tool-policies/${encoded}`, {
+          method: "PUT",
+          body: JSON.stringify({ action: policyDraft }),
+        });
+      }
+      await loadPolicy();
+      toast.show("平台策略已保存");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存失败");
+    } finally {
+      setPolicySaving(false);
+    }
+  }
 
   if (error) {
     return (
@@ -170,6 +227,7 @@ export function ToolDetail() {
 
   return (
     <div className="stack">
+      {toast.node}
       <PageHeader
         title={detail.name}
         lead={detail.description}
@@ -206,6 +264,51 @@ export function ToolDetail() {
           </div>
         </div>
       </section>
+
+      {policy ? (
+        <section className="panel stack">
+          <div className="section-head">
+            <h2 className="section-title">平台策略</h2>
+            <span
+              className={`badge badge--${
+                policy.effective_platform_action === "deny"
+                  ? "cancelled"
+                  : policy.effective_platform_action === "ask"
+                    ? "curated"
+                    : "completed"
+              }`}
+            >
+              {labelOf(POLICY_ACTION_LABELS, policy.effective_platform_action)}
+            </span>
+          </div>
+          <p className="hint">
+            {policy.env_action
+              ? `环境变量底线为「${labelOf(POLICY_ACTION_LABELS, policy.env_action)}」，不可被放松；此处配置只能在此基础上加严。`
+              : "未设置环境变量底线。平台策略对整个部署生效；平台无策略时才轮到 Agent 版本覆盖与工具默认值。"}
+          </p>
+          <div className="btn-row">
+            <select
+              className="status-select"
+              aria-label="平台策略"
+              value={policyDraft}
+              disabled={policySaving}
+              onChange={(event) => setPolicyDraft(event.target.value as PolicyDraft)}
+            >
+              <option value="inherit">继承默认</option>
+              <option value="ask">需要审批</option>
+              <option value="deny">禁用</option>
+            </select>
+            <button
+              type="button"
+              className="secondary"
+              disabled={policySaving}
+              onClick={() => void savePolicy()}
+            >
+              保存
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <div className="tool-schema-grid">
         <SchemaPanel

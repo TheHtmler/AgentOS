@@ -17,8 +17,42 @@ class PolicyAction(StrEnum):
     DENY = "deny"
 
 
+# Ops-managed DB rows mirrored into this process; loaded at startup and refreshed
+# on every ops write. Read-only for the runtime path so `evaluate` stays sync.
+_platform_db_policies: dict[str, PolicyAction] = {}
+
+
+def set_platform_db_policies(rows: dict[str, PolicyAction]) -> None:
+    """Replace the in-process platform (DB) policy cache."""
+
+    global _platform_db_policies
+    _platform_db_policies = dict(rows)
+
+
+def platform_db_policies() -> dict[str, PolicyAction]:
+    """Return a copy of the in-process platform (DB) policy cache."""
+
+    return dict(_platform_db_policies)
+
+
 def _parse_name_set(raw: str) -> frozenset[str]:
     return frozenset(part.strip() for part in raw.split(",") if part.strip())
+
+
+def env_policy_action(
+    tool_name: str,
+    *,
+    settings: Settings | None = None,
+) -> PolicyAction | None:
+    """Return the env-baseline action for a tool name, or None when unset."""
+
+    cfg = settings or get_settings()
+    name = tool_name.strip()
+    if name in _parse_name_set(cfg.tool_policy_deny):
+        return PolicyAction.DENY
+    if name in _parse_name_set(cfg.tool_policy_ask):
+        return PolicyAction.ASK
+    return None
 
 
 def evaluate(
@@ -29,7 +63,10 @@ def evaluate(
 ) -> PolicyAction:
     """Return the effective action for a tool name.
 
-    Precedence is env deny > env ask > agent overrides > spec.default_action.
+    Precedence is platform deny > platform ask > agent overrides > spec.default_action.
+    The platform layer is the union of the env baseline and ops-managed DB rows:
+    deny = env_deny ∪ db_deny, ask = (env_ask ∪ db_ask) − deny. Env is the deploy
+    floor and can never be relaxed; DB rows only tighten.
     Unknown (unregistered) names are denied so private/ad-hoc tools cannot slip through.
     """
 
@@ -48,16 +85,24 @@ def evaluate(
         logger.info("tool_policy deny disabled tool=%s", name)
         return PolicyAction.DENY
 
-    deny_names = _parse_name_set(cfg.tool_policy_deny)
-    ask_names = _parse_name_set(cfg.tool_policy_ask)
+    env_action = env_policy_action(name, settings=cfg)
+    db_action = _platform_db_policies.get(name)
 
-    # Env deny > env ask > agent overrides > spec.default_action.
-    if name in deny_names:
+    # Platform deny > platform ask > agent overrides > spec.default_action.
+    if env_action == PolicyAction.DENY:
         logger.info("tool_policy deny env tool=%s", name)
         return PolicyAction.DENY
 
-    if name in ask_names:
+    if db_action == PolicyAction.DENY:
+        logger.info("tool_policy deny platform-db tool=%s", name)
+        return PolicyAction.DENY
+
+    if env_action == PolicyAction.ASK:
         logger.info("tool_policy ask env tool=%s", name)
+        return PolicyAction.ASK
+
+    if db_action == PolicyAction.ASK:
+        logger.info("tool_policy ask platform-db tool=%s", name)
         return PolicyAction.ASK
 
     if overrides is not None and name in overrides:

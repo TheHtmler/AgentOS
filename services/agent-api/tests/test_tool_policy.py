@@ -1,9 +1,23 @@
+from collections.abc import Iterator
+
 import pytest
 
 from agent_api.agent import create_agent, create_ollama_http_client
 from agent_api.config import Settings
-from agent_api.tools.policy import PolicyAction, evaluate, gate_or_none
+from agent_api.tools.policy import (
+    PolicyAction,
+    evaluate,
+    gate_or_none,
+    set_platform_db_policies,
+)
 from agent_api.tools.registry import should_mount_tool
+
+
+@pytest.fixture(autouse=True)
+def reset_platform_db_policies() -> Iterator[None]:
+    set_platform_db_policies({})
+    yield
+    set_platform_db_policies({})
 
 
 def _settings(**overrides: object) -> Settings:
@@ -172,3 +186,58 @@ async def test_create_agent_omits_denied_tool(monkeypatch: pytest.MonkeyPatch) -
             for name in cast(dict[object, object], tools):
                 names.add(str(name))
     assert "web_search" not in names
+
+
+def test_db_deny_beats_version_override() -> None:
+    set_platform_db_policies({"fetch_url": PolicyAction.DENY})
+    assert (
+        evaluate(
+            "fetch_url",
+            settings=_settings(),
+            overrides={"fetch_url": PolicyAction.ALLOW},
+        )
+        == PolicyAction.DENY
+    )
+
+
+def test_db_ask_beats_version_override() -> None:
+    set_platform_db_policies({"fetch_url": PolicyAction.ASK})
+    assert (
+        evaluate(
+            "fetch_url",
+            settings=_settings(),
+            overrides={"fetch_url": PolicyAction.ALLOW},
+        )
+        == PolicyAction.ASK
+    )
+
+
+def test_env_deny_cannot_be_relaxed_by_db_or_override() -> None:
+    set_platform_db_policies({"web_search": PolicyAction.ASK})
+    settings = _settings(tool_policy_deny="web_search")
+    assert (
+        evaluate(
+            "web_search",
+            settings=settings,
+            overrides={"web_search": PolicyAction.ALLOW},
+        )
+        == PolicyAction.DENY
+    )
+
+
+def test_db_deny_beats_env_ask() -> None:
+    set_platform_db_policies({"web_search": PolicyAction.DENY})
+    settings = _settings(tool_policy_ask="web_search")
+    assert evaluate("web_search", settings=settings) == PolicyAction.DENY
+
+
+def test_removing_db_row_restores_default() -> None:
+    set_platform_db_policies({"fetch_url": PolicyAction.DENY})
+    assert evaluate("fetch_url", settings=_settings()) == PolicyAction.DENY
+    set_platform_db_policies({})
+    assert evaluate("fetch_url", settings=_settings()) == PolicyAction.ALLOW
+
+
+def test_unknown_tool_denied_with_db_policies() -> None:
+    set_platform_db_policies({"fetch_url": PolicyAction.ASK})
+    assert evaluate("not_a_real_tool", settings=_settings()) == PolicyAction.DENY

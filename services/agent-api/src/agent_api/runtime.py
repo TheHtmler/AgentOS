@@ -242,6 +242,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     except Exception:
         logger.exception("failed to sync the built-in local model provider on startup")
 
+    from agent_api.db.policy_store import refresh_platform_policy_cache
+
+    try:
+        await refresh_platform_policy_cache()
+    except Exception:
+        # Best-effort: the env baseline still applies with an empty DB cache.
+        logger.exception("failed to load platform tool policies on startup; using env-only policy")
+
     stop_hitl_timeout = asyncio.Event()
     hitl_timeout_task = asyncio.create_task(
         hitl_timeout_loop(runtime, stop_event=stop_hitl_timeout),

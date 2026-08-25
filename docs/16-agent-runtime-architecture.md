@@ -58,7 +58,8 @@
 
 ## 工具系统
 
-- 注册表（`tools/registry.py`）按 settings + 策略覆盖 + Case 绑定状态计算挂载集合；`deny`/`ask` 策略两级（环境变量 + Agent 版本覆盖）。
+- 注册表（`tools/registry.py`）按 settings + 策略覆盖 + Case 绑定状态计算挂载集合；`deny`/`ask` 策略分平台层（环境变量底线 ∪ Ops DB 行）与 Agent 版本覆盖两级，平台层优先且只能加严。
+- 平台级策略：`platform_tool_policies` 表（`tool_name` 唯一；action 仅 `ask`/`deny`，删行即继承）由 `db/policy_store.py` 读入 `tools/policy.py` 的进程内缓存（启动时 best-effort 加载，DB 不可用退化为仅 env；ops 每次写入后刷新）。合并语义：deny = env ∪ DB,ask = (env ∪ DB) − deny——env 是部署底线，Ops 不能放松。Ops 工具详情页经 `GET / PUT / DELETE /v1/ops/tool-policies` 配置；运行链路的挂载过滤、`requires_approval` 与调用时拦截全部走 `evaluate`，接入平台层后自动生效。
 - 外部能力走 provider 路由：`web_search`(Tavily→DuckDuckGo)、`fetch_url`(Firecrawl→local)，降级对内透明。
 - 超长结果外溢：`fetch_url`/上传文本持久化为 Artifact，模型只见预览 + 用 `read_artifact` 分页（等价 harness 的 spill 模式）。
 - Case 写入一律经 HITL(`case_slot_collect` 表单 / `case_attribution_confirm`)，禁止静默覆盖档案。`case/extract.py::apply_attribution_policy` 的 `already_approved` 参数是这条约束的强制点：只有真正走过 HITL 审批的调用（`case_attribution_confirm`）才能传 `already_approved=True` 写 `confirmed`；后台无监督抽取（`schedule_case_extract`，每轮对话后自动调度）即使判定 `attribution=="self"` 也只写 `proposed`，不能绕过审批。

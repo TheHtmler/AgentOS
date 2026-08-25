@@ -952,3 +952,25 @@ class Artifact(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+
+class PlatformToolPolicy(Base):
+    """Ops-managed platform tool policy; rows can only tighten the env baseline."""
+
+    __tablename__ = "platform_tool_policies"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('ask', 'deny')",
+            name="ck_platform_tool_policies_action",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tool_name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    action: Mapped[str] = mapped_column(String(8), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
