@@ -43,6 +43,7 @@
 - 正常完成会原子写入助手消息、`completed` 状态与 `run_completed` 事件。
 - 模型错误和浏览器取消会分别写入 `failed` 或 `cancelled` 终态，避免 Run 永远停留在 `running`。
 - 响应通过 `X-AgentOS-Thread-ID` 返回当前 Thread ID；路由测试使用真实 PostgreSQL，并在结束时删除测试数据。
+- `GET /v1/threads/{thread_id}/messages` 返回 Thread 标题、消息、工具调用和最新 Run 状态，Web 用同一份历史数据恢复会话标题与执行步骤。
 
 ## 认证后的边界
 

@@ -126,6 +126,7 @@ class ThreadMessagesResponse(BaseModel):
 
     thread_id: UUID
     agent_id: UUID
+    title: str | None
     messages: list[ThreadMessageResponse]
     tool_calls: list[ThreadToolCallResponse] = []
     latest_run: ThreadLatestRunResponse | None = None
@@ -296,6 +297,7 @@ async def get_thread_messages(
     return ThreadMessagesResponse(
         thread_id=thread_id,
         agent_id=thread.agent_id,
+        title=thread.title,
         messages=[
             ThreadMessageResponse(
                 id=message.id,

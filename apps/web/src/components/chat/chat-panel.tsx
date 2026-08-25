@@ -73,6 +73,7 @@ type ResumeStreamEvent = {
 type ThreadHistory = {
   thread_id: string;
   agent_id: string;
+  title: string | null;
   messages: ChatMessage[];
   toolCalls: ToolCallState[];
   latestRun: ThreadLatestRun | null;
@@ -206,6 +207,7 @@ async function loadRunApprovalState(runId: string): Promise<{
 type ChatPanelProps = {
   selectedThreadId: string | null | undefined;
   agentId: string | null;
+  agentName: string;
   agentLoadError: string | null;
   /** False when the selected agent's model cannot take image input; upload stays disabled. */
   supportsVision?: boolean;
@@ -221,10 +223,10 @@ type ChatPanelProps = {
 };
 
 const STARTER_PROMPTS = [
-  "Explore and understand code",
-  "Build a new feature, app, or tool",
-  "Review code and suggest changes",
-  "Fix issues and failures",
+  "阅读并理解代码",
+  "构建新功能、应用或工具",
+  "审查代码并提出修改建议",
+  "修复问题与故障",
 ];
 
 /** Re-enable follow / hide button when this close to the bottom. */
@@ -357,6 +359,10 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
 
   const messages: ChatMessage[] = [];
 
+  if (value.title !== undefined && value.title !== null && typeof value.title !== "string") {
+    return null;
+  }
+
   for (const message of value.messages) {
     if (
       !isRecord(message) ||
@@ -397,6 +403,7 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
   return {
     thread_id: value.thread_id,
     agent_id: value.agent_id,
+    title: typeof value.title === "string" ? value.title : null,
     messages,
     toolCalls,
     latestRun,
@@ -624,6 +631,7 @@ async function loadRunDurationLabel(runId: string): Promise<string | null> {
 export function ChatPanel({
   selectedThreadId,
   agentId,
+  agentName,
   agentLoadError,
   supportsVision = true,
   isActive = true,
@@ -637,6 +645,7 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [threadTitle, setThreadTitle] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -1221,6 +1230,7 @@ export function ChatPanel({
           agentRef.current = createAgent(history.thread_id, history.messages, agentId);
           setMessages(history.messages);
           setThreadId(history.thread_id);
+          setThreadTitle(history.title);
           setTimelineSteps([]);
           setHistoryToolCalls(history.toolCalls);
           setLiveUserMessageId(null);
@@ -1882,6 +1892,7 @@ export function ChatPanel({
 
       agentRef.current = createAgent(createdId, messages, createdAgentId);
       setThreadId(createdId);
+      setThreadTitle(null);
       updateThreadInUrl(createdId);
       onThreadChanged(createdId, createdAgentId ?? undefined);
       return createdId;
@@ -2045,6 +2056,13 @@ export function ChatPanel({
     isStreaming && currentAssistantMessageIndex >= 0
       ? messages[currentAssistantMessageIndex].content.length
       : 0;
+  const fallbackTitle = messages
+    .find((message) => message.role === "user")
+    ?.content.replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 48);
+  const displayThreadTitle =
+    threadTitle?.trim() || fallbackTitle || (threadId === null ? "新建会话" : "未命名会话");
 
   return (
     <section
@@ -2054,9 +2072,9 @@ export function ChatPanel({
     >
       <header className="agentos-chat-header">
         <div className="agentos-thread-heading">
-          <p className="agentos-thread-kicker">通用助手</p>
+          <p className="agentos-thread-kicker">{agentName}</p>
           <div className="agentos-thread-title-row">
-            <h1 className="agentos-chat-heading">{threadId === null ? "新建会话" : "当前会话"}</h1>
+            <h1 className="agentos-chat-heading">{displayThreadTitle}</h1>
             {statusLabel ? (
               <p aria-live="polite" className="agentos-chat-status">
                 <span aria-hidden="true" />
@@ -2065,7 +2083,7 @@ export function ChatPanel({
             ) : null}
           </div>
           <p className="agentos-chat-subheading">
-            {threadId === null ? "准备开始新的任务" : "已恢复这个会话"}
+            {threadId === null ? "准备开始新的任务" : "AgentOS 会话"}
           </p>
         </div>
 
@@ -2215,6 +2233,11 @@ export function ChatPanel({
                           : "agentos-message-wrap-assistant"
                       }`}
                     >
+                      {message.role === "assistant" && processChildren.length > 0 ? (
+                        <div className="agentos-message-process agentos-codex-turn-steps">
+                          {processChildren}
+                        </div>
+                      ) : null}
                       <article
                         className={`agentos-message ${
                           message.role === "user"
@@ -2226,10 +2249,6 @@ export function ChatPanel({
                               }`
                         }`}
                       >
-                        {processChildren.length > 0 ? (
-                          <div className="agentos-message-process">{processChildren}</div>
-                        ) : null}
-
                         {message.content ? (
                           message.role === "assistant" ? (
                             <AssistantMarkdown content={message.content} />
@@ -2327,8 +2346,8 @@ export function ChatPanel({
                     </div>
 
                     {orphanLiveSteps.length > 0 ? (
-                      <article className="agentos-message agentos-message-assistant agentos-message-streaming">
-                        <div className="agentos-message-process">
+                      <div className="agentos-message-wrap agentos-message-wrap-assistant agentos-tool-only-turn">
+                        <div className="agentos-message-process agentos-codex-turn-steps">
                           {orphanLiveSteps.map((step) => {
                             if (step.kind === "thinking") {
                               return <ThinkingStepCard key={step.id} step={step} />;
@@ -2347,7 +2366,7 @@ export function ChatPanel({
                         <p aria-live="polite" className="agentos-chat-subheading">
                           继续生成中…
                         </p>
-                      </article>
+                      </div>
                     ) : null}
                   </Fragment>
                 );
@@ -2449,9 +2468,9 @@ export function ChatPanel({
           </p>
         ) : null}
 
-        <div className="agentos-codex-project-picker">
+        <div className="agentos-codex-agent-picker">
           <span aria-hidden="true">▱</span>
-          <button type="button">Choose project</button>
+          <button type="button">{agentName}</button>
         </div>
 
         <textarea
@@ -2471,7 +2490,7 @@ export function ChatPanel({
           placeholder={
             pendingInterrupts.length > 0
               ? "请先确认或取消上方的操作"
-              : "Ask Codex anything, @ to add files, / for commands"
+              : "输入任务，@ 添加文件，/ 使用命令"
           }
           rows={1}
           className="agentos-composer-input block w-full resize-none outline-none disabled:cursor-not-allowed"
@@ -2523,7 +2542,7 @@ export function ChatPanel({
             </button>
             <button type="button" className="agentos-codex-custom-button">
               <span aria-hidden="true">⚙</span>
-              Custom
+              自定义
             </button>
             <span className="agentos-composer-meta">
               {uploadedArtifacts.length > 0
@@ -2533,7 +2552,7 @@ export function ChatPanel({
           </div>
 
           <div className="agentos-codex-composer-actions">
-            <span className="agentos-codex-model">5.6 Sol Medium⌄</span>
+            <span className="agentos-codex-model">模型⌄</span>
             <button type="button" className="agentos-codex-voice-button" aria-label="语音输入">
               ◉
             </button>
@@ -2558,10 +2577,10 @@ export function ChatPanel({
         </div>
 
         <div className="agentos-codex-runtime-row" aria-label="运行环境">
-          <span className="is-active">Local</span>
-          <span>Worktree</span>
-          <span>Cloud</span>
-          <span className="agentos-codex-branch">⌘ main</span>
+          <span className="is-active">本地</span>
+          <span>工作树</span>
+          <span>云端</span>
+          <span className="agentos-codex-branch">⌘ main 分支</span>
         </div>
       </form>
 

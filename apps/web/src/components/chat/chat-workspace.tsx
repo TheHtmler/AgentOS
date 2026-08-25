@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InvitationManager } from "@/components/auth/invitation-manager";
+import { AgentOsLogo } from "@/components/brand/agentos-logo";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PendingCaseFactsBanner } from "@/components/chat/pending-case-facts-banner";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { parseAgentSummaries, type AgentSummary } from "@/lib/agents";
+import { displayAgentName, parseAgentSummaries, type AgentSummary } from "@/lib/agents";
 import type { Conversation } from "@/components/chat/conversation-list";
 
 type ChatWorkspaceProps = {
@@ -391,6 +392,10 @@ export function ChatWorkspace({
     [focusSlot],
   );
 
+  const selectedAgentName =
+    agents.find((agent) => agent.id === selectedAgentId)?.name ?? "默认助手";
+  const selectedAgentLabel = displayAgentName(selectedAgentName);
+
   return (
     <>
       <header className="agentos-topbar">
@@ -407,9 +412,7 @@ export function ChatWorkspace({
             <span />
           </button>
 
-          <div className="agentos-mobile-codex-brand">
-            ChatGPT <strong>Codex</strong>
-          </div>
+          <AgentOsLogo className="agentos-mobile-agentos-brand" />
 
           <div className="ml-auto hidden items-center gap-3 lg:flex">
             <ThemeToggle compact />
@@ -437,72 +440,70 @@ export function ChatWorkspace({
         <aside className="agentos-conversation-rail hidden min-h-0 lg:flex lg:flex-col">
           <div className="agentos-codex-sidebar">
             <header className="agentos-codex-sidebar-header">
-              <p>
-                ChatGPT <strong>Codex</strong>
-              </p>
+              <AgentOsLogo className="agentos-codex-brand" />
               <button type="button" aria-label="搜索">
                 ⌕
               </button>
             </header>
 
-            <nav className="agentos-codex-primary-nav" aria-label="Codex 导航">
+            <nav className="agentos-codex-primary-nav" aria-label="主导航">
               <button type="button" onClick={handleNewConversation}>
                 <span aria-hidden="true">✎</span>
-                New task
+                新建任务
               </button>
               <button type="button">
                 <span aria-hidden="true">◷</span>
-                Scheduled
+                计划任务
                 <i aria-hidden="true" />
               </button>
               <button type="button">
                 <span aria-hidden="true">◎</span>
-                Plugins
+                插件
               </button>
               <button type="button">
                 <span aria-hidden="true">⊞</span>
-                Sites
+                站点
               </button>
               <button type="button" className="is-active">
                 <span aria-hidden="true">⌕</span>
-                Chat
+                聊天
               </button>
             </nav>
 
             <div className="agentos-codex-sidebar-section agentos-codex-pinned-section">
-              <p>Pinned</p>
+              <p>已固定</p>
               <button type="button" onClick={handleNewConversation}>
                 <span aria-hidden="true">▱</span>
-                New task
+                新建任务
               </button>
             </div>
 
-            <div className="agentos-codex-sidebar-section agentos-codex-projects-section">
+            <div className="agentos-codex-sidebar-section agentos-codex-agent-section">
               <div className="agentos-codex-sidebar-section-heading">
-                <p>Projects</p>
-                <span aria-hidden="true">›</span>
+                <p>助手</p>
+                <span aria-hidden="true">⌄</span>
               </div>
-              <div className="agentos-codex-project-summary">
+              <label className="agentos-codex-agent-summary">
                 <span aria-hidden="true">▱</span>
                 <select
-                  aria-label="选择项目助手"
+                  aria-label="选择助手"
                   value={selectedAgentId ?? ""}
                   disabled={agents.length === 0}
                   onChange={(event) => handleSelectAgent(event.target.value)}
                 >
-                  {agents.length === 0 ? <option value="">Loading...</option> : null}
+                  {agents.length === 0 ? <option value="">正在加载助手…</option> : null}
                   {agents.map((agent) => (
                     <option key={agent.id} value={agent.id}>
-                      {agent.name}
+                      {displayAgentName(agent.name)}
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
             </div>
 
             <div className="agentos-codex-sidebar-section agentos-codex-tasks-section">
               <div className="agentos-codex-sidebar-section-heading">
-                <p>Tasks</p>
+                <p>会话</p>
                 <span aria-hidden="true">›</span>
               </div>
               <div className="agentos-codex-conversation-host">
@@ -561,6 +562,7 @@ export function ChatWorkspace({
                     <ChatPanel
                       selectedThreadId={slot.threadId}
                       agentId={selectedAgentId}
+                      agentName={selectedAgentLabel}
                       agentLoadError={agentLoadError}
                       supportsVision={
                         agents.find((agent) => agent.id === selectedAgentId)?.supports_vision ??

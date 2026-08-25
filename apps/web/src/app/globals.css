@@ -4578,7 +4578,7 @@ body {
 .agentos-codex-sidebar-header,
 .agentos-codex-sidebar-section-heading,
 .agentos-codex-sidebar-footer,
-.agentos-codex-project-summary,
+.agentos-codex-agent-summary,
 .agentos-codex-primary-nav button,
 .agentos-codex-sidebar-section button {
   display: flex;
@@ -4591,7 +4591,8 @@ body {
 }
 
 .agentos-codex-sidebar-header p,
-.agentos-mobile-codex-brand {
+.agentos-codex-brand p,
+.agentos-mobile-agentos-brand p {
   color: var(--codex-copy);
   font-size: 0.9rem;
   font-weight: 600;
@@ -4599,7 +4600,7 @@ body {
 }
 
 .agentos-codex-sidebar-header strong,
-.agentos-mobile-codex-brand strong {
+.agentos-mobile-agentos-brand strong {
   color: var(--codex-purple);
   font-weight: 600;
 }
@@ -4646,7 +4647,7 @@ body {
 
 .agentos-codex-primary-nav button > span,
 .agentos-codex-sidebar-section button > span,
-.agentos-codex-project-summary > span:first-child {
+.agentos-codex-agent-summary > span:first-child {
   display: inline-grid;
   width: 1rem;
   place-items: center;
@@ -4689,7 +4690,7 @@ body {
   font-size: 1.15rem;
 }
 
-.agentos-codex-project-summary {
+.agentos-codex-agent-summary {
   gap: 0.62rem;
   min-height: 2rem;
   padding: 0.35rem 0.52rem;
@@ -4698,11 +4699,11 @@ body {
   font-size: 0.78rem;
 }
 
-.agentos-codex-project-summary:hover {
+.agentos-codex-agent-summary:hover {
   background: var(--codex-sidebar-hover);
 }
 
-.agentos-codex-project-summary select {
+.agentos-codex-agent-summary select {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -4988,7 +4989,7 @@ body {
   box-shadow: none;
 }
 
-.agentos-codex-project-picker,
+.agentos-codex-agent-picker,
 .agentos-composer-input,
 .agentos-composer-toolbar {
   border-right: 1px solid var(--codex-line);
@@ -4996,7 +4997,7 @@ body {
   background: var(--codex-control);
 }
 
-.agentos-codex-project-picker {
+.agentos-codex-agent-picker {
   display: flex;
   align-items: center;
   gap: 0.38rem;
@@ -5008,7 +5009,7 @@ body {
   font-size: 0.72rem;
 }
 
-.agentos-codex-project-picker button {
+.agentos-codex-agent-picker button {
   color: var(--codex-copy);
   font-size: inherit;
 }
@@ -5143,7 +5144,7 @@ body {
   color: var(--codex-faint);
 }
 
-.agentos-mobile-codex-brand {
+.agentos-mobile-agentos-brand {
   display: none;
 }
 
@@ -5159,7 +5160,7 @@ body {
     padding: 0 0.75rem;
   }
 
-  .agentos-mobile-codex-brand {
+  .agentos-mobile-agentos-brand {
     display: block;
   }
 
@@ -5205,5 +5206,124 @@ body {
     max-width: 7rem;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+}
+
+/* Keep the conversation column and execution steps on the same sender axis. */
+.agentos-codex-brand {
+  min-width: 0;
+  flex: 1;
+}
+
+.agentos-codex-brand .agentos-logo-mark,
+.agentos-mobile-agentos-brand .agentos-logo-mark {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--codex-purple) 18%, var(--codex-control));
+  color: var(--codex-purple);
+  box-shadow: none;
+}
+
+.agentos-codex-conversation-host .agentos-conversation-title-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+}
+
+.agentos-codex-conversation-host .agentos-conversation-title {
+  display: block;
+  min-width: 0;
+  flex: 1;
+}
+
+.agentos-codex-conversation-host .agentos-conversation-time {
+  display: block;
+}
+
+.agentos-message-list {
+  width: min(100%, 60rem);
+  max-width: 60rem;
+  gap: 1.1rem;
+}
+
+.agentos-message-wrap,
+.agentos-message-wrap-user,
+.agentos-message-wrap-assistant {
+  width: 100%;
+  max-width: none;
+}
+
+.agentos-message-wrap-user {
+  align-items: flex-end;
+}
+
+.agentos-message-wrap-assistant {
+  align-items: flex-start;
+}
+
+.agentos-message-wrap-user .agentos-message {
+  max-width: min(72%, 42rem);
+}
+
+.agentos-message-wrap-assistant .agentos-message {
+  max-width: min(100%, 54rem);
+}
+
+.agentos-message-assistant {
+  border: 0;
+  background: transparent;
+  padding: 0.15rem 0;
+}
+
+.agentos-message-assistant::before {
+  display: none;
+}
+
+.agentos-codex-turn-steps {
+  width: min(100%, 54rem);
+  margin: 0 0 0.2rem;
+  padding-left: 0.8rem;
+  border-left: 1px solid var(--codex-line);
+}
+
+.agentos-codex-turn-steps::before {
+  display: block;
+  margin: 0 0 0.35rem;
+  color: var(--codex-muted);
+  content: "执行步骤";
+  font-size: 0.68rem;
+  line-height: 1.2;
+}
+
+.agentos-codex-turn-steps .agentos-tool-call,
+.agentos-codex-turn-steps .agentos-reasoning {
+  border-color: var(--codex-line);
+  border-radius: 0.45rem;
+  background: transparent;
+}
+
+.agentos-codex-turn-steps .agentos-tool-call-toggle,
+.agentos-codex-turn-steps .agentos-reasoning-head {
+  padding: 0.48rem 0.62rem;
+}
+
+.agentos-codex-turn-steps .agentos-tool-call-content {
+  border-top-color: var(--codex-line);
+  background: color-mix(in srgb, var(--codex-control) 64%, transparent);
+}
+
+.agentos-tool-only-turn .agentos-chat-subheading {
+  margin-top: 0.25rem;
+  padding-left: 0.8rem;
+}
+
+@media (max-width: 639px) {
+  .agentos-message-wrap-user .agentos-message {
+    max-width: 88%;
+  }
+
+  .agentos-codex-turn-steps {
+    padding-left: 0.55rem;
   }
 }
