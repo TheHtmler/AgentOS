@@ -178,6 +178,11 @@ deploy_frontend() {
   local prev_dir="$app_dir/.next.prev"
 
   rm -rf "$new_dir"
+  # tsconfig include pulls `.next/types/**` into the build-time type check; the
+  # running build may still reference routes deleted since the last deploy and
+  # fail the new build. These dirs are TS declarations only — the running
+  # service never reads them — so prune them before building.
+  rm -rf "$next_dir/types" "$next_dir/dev/types"
   if [[ "$cache_mode" == "reuse" && -d "$next_dir/cache" ]]; then
     mkdir -p "$new_dir"
     cp -a "$next_dir/cache" "$new_dir/cache"
