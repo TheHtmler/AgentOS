@@ -4,6 +4,8 @@ import { HttpAgent, type Message } from "@ag-ui/client";
 import {
   ArrowUp,
   BookOpen,
+  Check,
+  Copy,
   FileSearch,
   Hammer,
   Paperclip,
@@ -2234,6 +2236,7 @@ export function ChatPanel({
                         )),
                       ]
                     : [];
+                const hasMessageMeta = Boolean(message.createdAt || message.durationLabel);
 
                 // Edge case: tools/thinking arrived before the assistant placeholder exists.
                 // Keep a temporary stack under the live user message so the turn is not blank.
@@ -2333,37 +2336,58 @@ export function ChatPanel({
                         ) : null}
                       </article>
 
-                      {message.role === "assistant" && message.content ? (
-                        <div className="agentos-message-toolbar">
-                          <button
-                            type="button"
-                            onClick={() => void copyAssistantMessage(message)}
-                            className="agentos-copy-button"
-                          >
-                            {copiedMessageId === message.id ? "已复制" : "复制"}
-                          </button>
+                      {message.role === "assistant" && (message.content || hasMessageMeta) ? (
+                        <div className="agentos-message-meta">
+                          {message.content ? (
+                            <div className="agentos-message-toolbar">
+                              <button
+                                type="button"
+                                onClick={() => void copyAssistantMessage(message)}
+                                className="agentos-copy-button"
+                                aria-label={
+                                  copiedMessageId === message.id ? "已复制回复" : "复制回复"
+                                }
+                                title={copiedMessageId === message.id ? "已复制" : "复制回复"}
+                              >
+                                {copiedMessageId === message.id ? (
+                                  <Check aria-hidden="true" className="size-3.5" />
+                                ) : (
+                                  <Copy aria-hidden="true" className="size-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          ) : null}
+                          {hasMessageMeta ? (
+                            <div className="agentos-message-time agentos-message-time-assistant">
+                              {message.createdAt ? (
+                                <time dateTime={message.createdAt}>
+                                  {formatMessageTimestamp(message.createdAt)}
+                                </time>
+                              ) : null}
+                              {message.durationLabel ? (
+                                <span>
+                                  {message.createdAt ? " · " : ""}
+                                  {message.durationLabel}
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
-
-                      {message.createdAt || message.durationLabel ? (
-                        <div
-                          className={`agentos-message-time ${
-                            message.role === "user"
-                              ? "agentos-message-time-user"
-                              : "agentos-message-time-assistant"
-                          }`}
-                        >
-                          {message.createdAt ? (
-                            <time dateTime={message.createdAt}>
-                              {formatMessageTimestamp(message.createdAt)}
-                            </time>
-                          ) : null}
-                          {message.durationLabel ? (
-                            <span>
-                              {message.createdAt ? " · " : ""}
-                              {message.durationLabel}
-                            </span>
-                          ) : null}
+                      ) : message.role === "user" && hasMessageMeta ? (
+                        <div className="agentos-message-meta agentos-message-meta-user">
+                          <div className="agentos-message-time agentos-message-time-user">
+                            {message.createdAt ? (
+                              <time dateTime={message.createdAt}>
+                                {formatMessageTimestamp(message.createdAt)}
+                              </time>
+                            ) : null}
+                            {message.durationLabel ? (
+                              <span>
+                                {message.createdAt ? " · " : ""}
+                                {message.durationLabel}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                       ) : null}
                     </div>

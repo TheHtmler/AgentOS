@@ -41,10 +41,7 @@ export function ProcessGroup({
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className={cn(
-        "w-full max-w-[42rem] self-start overflow-hidden rounded-[10px] border border-border bg-secondary",
-        isActive && "border-[var(--accent-border)]",
-      )}
+      className={cn("agentos-process-group", isActive && "is-active")}
     >
       <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-3.5 py-2 text-left">
         <span className="flex min-w-0 items-center gap-2 text-[0.78rem] font-semibold text-foreground">
