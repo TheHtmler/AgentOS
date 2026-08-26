@@ -22,6 +22,7 @@ from agent_api.db.chat_store import (
     list_thread_tool_calls,
     list_threads,
     rename_thread,
+    set_thread_pinned,
     soft_delete_thread,
 )
 from agent_api.db.models import Thread, User
@@ -37,6 +38,7 @@ class ThreadSummaryResponse(BaseModel):
     id: UUID
     agent_id: UUID
     title: str | None
+    is_pinned: bool
     latest_message_content: str | None
     updated_at: datetime
 
@@ -133,9 +135,10 @@ class ThreadMessagesResponse(BaseModel):
 
 
 class ThreadUpdateRequest(BaseModel):
-    """Rename or clear the display title for one Thread."""
+    """Update the display title or pinned state for one Thread."""
 
     title: str | None = Field(default=None)
+    is_pinned: bool | None = Field(default=None)
 
     @field_validator("title")
     @classmethod
@@ -154,10 +157,11 @@ class ThreadUpdateRequest(BaseModel):
 
 
 class ThreadUpdateResponse(BaseModel):
-    """Updated Thread summary fields after a rename."""
+    """Updated Thread summary fields after a metadata change."""
 
     id: UUID
     title: str | None
+    is_pinned: bool
     updated_at: datetime
 
 
@@ -183,6 +187,7 @@ async def get_threads(
                 id=thread.id,
                 agent_id=thread.agent_id,
                 title=thread.title,
+                is_pinned=thread.is_pinned,
                 latest_message_content=thread.latest_message_content,
                 updated_at=thread.updated_at,
             )
@@ -232,19 +237,36 @@ async def patch_thread(
     body: ThreadUpdateRequest,
     user: Annotated[User, Depends(get_current_user)],
 ) -> ThreadUpdateResponse:
-    """Rename a Thread owned by the current user."""
+    """Update metadata on a Thread owned by the current user."""
 
     try:
         async with session_factory() as session, session.begin():
-            thread = await rename_thread(
-                session,
-                thread_id=thread_id,
-                user_id=user.id,
-                title=body.title,
-            )
+            thread: Thread | None = None
+            if "title" in body.model_fields_set:
+                thread = await rename_thread(
+                    session,
+                    thread_id=thread_id,
+                    user_id=user.id,
+                    title=body.title,
+                )
+            if "is_pinned" in body.model_fields_set:
+                thread = await set_thread_pinned(
+                    session,
+                    thread_id=thread_id,
+                    user_id=user.id,
+                    is_pinned=body.is_pinned is True,
+                )
+            if thread is None:
+                thread = await rename_thread(
+                    session,
+                    thread_id=thread_id,
+                    user_id=user.id,
+                    title=None,
+                )
             return ThreadUpdateResponse(
                 id=thread.id,
                 title=thread.title,
+                is_pinned=thread.is_pinned,
                 updated_at=thread.updated_at,
             )
     except ThreadNotFoundError as error:

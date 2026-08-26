@@ -7,7 +7,6 @@ import {
   LayoutGrid,
   LogOut,
   MessageSquare,
-  Plus,
   Puzzle,
   Search,
   SquarePen,
@@ -353,6 +352,10 @@ export function ChatWorkspace({
     setThreadListVersion((current) => current + 1);
   }, []);
 
+  const handleThreadListChanged = useCallback(() => {
+    setThreadListVersion((current) => current + 1);
+  }, []);
+
   const handleThreadDeleted = useCallback(
     (threadId: string) => {
       setThreadListVersion((current) => current + 1);
@@ -482,11 +485,22 @@ export function ChatWorkspace({
             </nav>
 
             <div className="agentos-codex-sidebar-section agentos-codex-pinned-section">
-              <p>已固定</p>
-              <button type="button" onClick={handleNewConversation}>
-                <Plus aria-hidden="true" className="size-4" />
-                新建任务
-              </button>
+              <div className="agentos-codex-sidebar-section-heading">
+                <p>已固定</p>
+              </div>
+              <div className="agentos-codex-pinned-host">
+                <ConversationList
+                  activeThreadId={activeThreadId}
+                  refreshKey={threadListVersion}
+                  streamingThreadIds={streamingThreadIds}
+                  awaitingApprovalThreadIds={awaitingApprovalThreadIds}
+                  onNewConversation={handleNewConversation}
+                  onSelectThread={handleSelectThread}
+                  onThreadDeleted={handleThreadDeleted}
+                  onThreadListChanged={handleThreadListChanged}
+                  pinnedOnly
+                />
+              </div>
             </div>
 
             <div className="agentos-codex-sidebar-section agentos-codex-tasks-section">
@@ -503,6 +517,7 @@ export function ChatWorkspace({
                   onNewConversation={handleNewConversation}
                   onSelectThread={handleSelectThread}
                   onThreadDeleted={handleThreadDeleted}
+                  onThreadListChanged={handleThreadListChanged}
                 />
               </div>
             </div>
@@ -615,6 +630,7 @@ export function ChatWorkspace({
                 onNewConversation={handleNewConversation}
                 onSelectThread={handleSelectThread}
                 onThreadDeleted={handleThreadDeleted}
+                onThreadListChanged={handleThreadListChanged}
               />
             </div>
 

@@ -4206,6 +4206,176 @@ body {
   white-space: nowrap;
 }
 
+/* Keep the sidebar scroll track flush with the outer rail edge. */
+.agentos-codex-conversation-host .agentos-conversation-list-scroll {
+  width: calc(100% + 0.65rem);
+  max-width: none;
+  padding-right: 0.65rem;
+}
+
+/* Keep the inline editor stable when the rail is narrow. */
+.agentos-codex-conversation-host .agentos-rename-form,
+.agentos-codex-pinned-host .agentos-rename-form,
+.agentos-mobile-conversation-host .agentos-rename-form {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.25rem;
+  padding: 0.3rem 0.35rem;
+}
+
+.agentos-codex-conversation-host .agentos-rename-input,
+.agentos-codex-pinned-host .agentos-rename-input,
+.agentos-mobile-conversation-host .agentos-rename-input {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentos-codex-conversation-host .agentos-rename-action,
+.agentos-codex-pinned-host .agentos-rename-action,
+.agentos-mobile-conversation-host .agentos-rename-action {
+  min-width: 2.15rem;
+  padding: 0.35rem 0.2rem;
+  white-space: nowrap;
+}
+
+/* The fixed list is a compact, data-backed group above the full conversation list. */
+.agentos-codex-pinned-section {
+  flex: none;
+  margin-top: 0.9rem;
+}
+
+.agentos-codex-pinned-host {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.agentos-codex-pinned-host .agentos-conversation-list {
+  height: auto;
+}
+
+.agentos-codex-pinned-host .agentos-conversation-list-scroll {
+  max-height: 9rem;
+  padding: 0 0.65rem 0 0;
+  overflow-y: auto;
+}
+
+.agentos-codex-pinned-host .agentos-conversation-group-label,
+.agentos-codex-pinned-host .agentos-conversation-preview {
+  display: none;
+}
+
+.agentos-codex-pinned-host .agentos-conversation-item {
+  margin: 0.08rem 0;
+  border-radius: 5px;
+}
+
+.agentos-codex-pinned-host .agentos-conversation-item.is-active {
+  border: 0;
+  background: var(--codex-sidebar-active);
+  box-shadow: none;
+}
+
+.agentos-codex-pinned-host .agentos-conversation-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) 2rem;
+  gap: 0;
+}
+
+.agentos-codex-pinned-host .agentos-conversation-button {
+  display: block;
+  width: 100%;
+  padding: 0.42rem 0.45rem;
+}
+
+.agentos-codex-pinned-host .agentos-conversation-title-row {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.35rem;
+}
+
+.agentos-codex-pinned-host .agentos-conversation-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--codex-copy);
+  font-size: 0.74rem;
+  font-weight: 450;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentos-codex-pinned-host .agentos-conversation-time {
+  color: var(--codex-muted);
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+
+.agentos-codex-pinned-host .agentos-conversation-menu-button {
+  width: 2rem;
+  padding-inline: 0;
+  color: var(--codex-muted);
+}
+
+.agentos-codex-pinned-host .agentos-list-feedback {
+  padding: 0.2rem 0.45rem 0.1rem;
+  color: var(--codex-faint);
+  font-size: 0.68rem;
+}
+
+/* Keep the confirmation action legible while using the shared AlertDialog primitive. */
+.agentos-delete-dialog {
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+
+.agentos-delete-dialog [data-slot="alert-dialog-title"] {
+  color: var(--text);
+}
+
+.agentos-delete-dialog [data-slot="alert-dialog-description"] {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.agentos-delete-dialog-cancel,
+.agentos-delete-dialog-action {
+  min-height: 2.2rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.75rem;
+}
+
+.agentos-delete-dialog-cancel {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.agentos-delete-dialog-cancel:hover {
+  background: var(--accent-softer);
+  color: var(--text);
+}
+
+.agentos-delete-dialog-action {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: var(--danger);
+  color: #fff;
+}
+
+.agentos-delete-dialog-action:hover {
+  filter: brightness(1.08);
+}
+
 .agentos-process-group > [data-slot="collapsible-trigger"] {
   width: fit-content;
   max-width: 100%;

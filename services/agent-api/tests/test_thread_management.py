@@ -42,17 +42,29 @@ async def test_rename_and_soft_delete_thread_via_api(authenticated_api_user: UUI
         )
         assert rename_response.status_code == 200
         assert rename_response.json()["title"] == "我的计划"
+        assert rename_response.json()["is_pinned"] is False
+
+        pin_response = await client.patch(
+            f"/v1/threads/{thread_id}",
+            json={"is_pinned": True},
+        )
+        assert pin_response.status_code == 200
+        assert pin_response.json()["title"] == "我的计划"
+        assert pin_response.json()["is_pinned"] is True
 
         list_response = await client.get("/v1/threads")
         assert list_response.status_code == 200
         assert any(
-            item["id"] == str(thread_id) and item["title"] == "我的计划"
+            item["id"] == str(thread_id)
+            and item["title"] == "我的计划"
+            and item["is_pinned"] is True
             for item in list_response.json()["threads"]
         )
 
         clear_response = await client.patch(f"/v1/threads/{thread_id}", json={"title": "   "})
         assert clear_response.status_code == 200
         assert clear_response.json()["title"] is None
+        assert clear_response.json()["is_pinned"] is True
 
         too_long = await client.patch(
             f"/v1/threads/{thread_id}",

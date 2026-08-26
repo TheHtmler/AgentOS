@@ -25,7 +25,7 @@
 1. 本轮 Run 以**步骤卡片时间线**展示：`Thinking → Tool → Thinking → 回答`，段间有序、可折叠。
 2. 助手气泡正确渲染 Markdown（GFM）；用户气泡保持纯文本。
 3. 消息显示时间戳；本轮助手回答旁显示 Run 总耗时。
-4. Thread 支持重命名与软删除（含 API + 列表交互）。
+4. Thread 支持重命名、软删除与固定（含 API + 列表交互）。
 5. 完成深色科技风视觉改版与 AgentOS Logo（词标 + 几何标）。
 
 ## 非目标
@@ -41,11 +41,11 @@
 
 ## 交付策略（方案 1：功能先、皮肤后）
 
-| 竖切   | 内容                                              | 依赖                          |
-| ------ | ------------------------------------------------- | ----------------------------- |
-| **P0** | 步骤时间线 + 助手 MD + 消息时间戳 + Run 总耗时    | 前端为主；耗时读现有 Run API  |
-| **P1** | Thread `PATCH` 重命名 + `DELETE` 软删除 + 列表 UI | Alembic：`threads.deleted_at` |
-| **P2** | 深色科技风 token / 布局收束 + Logo / favicon      | P0/P1 结构稳定后换皮          |
+| 竖切   | 内容                                                   | 依赖                                               |
+| ------ | ------------------------------------------------------ | -------------------------------------------------- |
+| **P0** | 步骤时间线 + 助手 MD + 消息时间戳 + Run 总耗时         | 前端为主；耗时读现有 Run API                       |
+| **P1** | Thread `PATCH` 重命名/固定 + `DELETE` 软删除 + 列表 UI | Alembic：`threads.deleted_at`、`threads.is_pinned` |
+| **P2** | 深色科技风 token / 布局收束 + Logo / favicon           | P0/P1 结构稳定后换皮                               |
 
 P0/P1 实现时应优先使用 CSS 变量承载颜色，便于 P2 一次切换。
 
@@ -147,17 +147,19 @@ type TimelineStep =
 
 ### 数据
 
-- 迁移增加 `threads.deleted_at TIMESTAMPTZ NULL`。
+- 迁移增加 `threads.deleted_at TIMESTAMPTZ NULL` 与 `threads.is_pinned BOOLEAN NOT NULL DEFAULT false`。
 - 软删后保留 messages / runs / events（不物理级联删），便于将来恢复；**本轮不提供恢复 API/UI**。
 
 ### API（均校验 Thread 归属当前用户）
 
-| 方法     | 路径                                       | 行为                                                                                                             |
-| -------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `PATCH`  | `/v1/threads/{thread_id}`                  | `{ "title": string \| null }`；string 经 trim 后长度 1–80；`null` 或空表示清除自定义标题，列表回退到最新消息预览 |
-| `DELETE` | `/v1/threads/{thread_id}`                  | 设置 `deleted_at = now()`；幂等：已删除再删仍 `204`/`200`                                                        |
-| `GET`    | `/v1/threads`                              | 仅 `deleted_at IS NULL`                                                                                          |
-| `GET`    | `/v1/threads/{id}/messages` 及续聊 / AG-UI | 已软删 Thread → `404`                                                                                            |
+| 方法     | 路径                                       | 行为                                                                                                                                      |
+| -------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `PATCH`  | `/v1/threads/{thread_id}`                  | `{ "title": string \| null, "is_pinned": boolean }`；标题经 trim 后长度 1–80；`null` 或空表示清除自定义标题，`is_pinned` 更新侧栏固定分组 |
+| `DELETE` | `/v1/threads/{thread_id}`                  | 设置 `deleted_at = now()`；幂等：已删除再删仍 `204`/`200`                                                                                 |
+| `GET`    | `/v1/threads`                              | 仅 `deleted_at IS NULL`                                                                                                                   |
+| `GET`    | `/v1/threads/{id}/messages` 及续聊 / AG-UI | 已软删 Thread → `404`                                                                                                                     |
+
+固定会话单独展示在侧栏“已固定”分组，普通“会话”列表仍展示全部未删除会话；“新建任务”只属于主导航，不放入固定分组。
 
 Next.js：`PATCH` / `DELETE` `/api/threads/{threadId}` 原样代理。
 
@@ -215,7 +217,8 @@ Next.js：`PATCH` / `DELETE` `/api/threads/{threadId}` 原样代理。
 
 5. 可重命名会话，刷新后标题保持。
 6. 可软删会话，列表消失；直链该 Thread 得到不存在/错误，且不误创新 Thread。
-7. 相关 API 测试与迁移通过。
+7. 可固定/取消固定会话；固定项出现在“已固定”分组，“新建任务”不出现在该分组。
+8. 相关 API 测试与迁移通过。
 
 ### P2
 

@@ -59,6 +59,7 @@ class ThreadListItem:
     id: UUID
     agent_id: UUID
     title: str | None
+    is_pinned: bool
     latest_message_content: str | None
     updated_at: datetime
 
@@ -522,6 +523,7 @@ async def list_threads(
             id=thread.id,
             agent_id=thread.agent_id,
             title=thread.title,
+            is_pinned=thread.is_pinned,
             latest_message_content=message_content,
             updated_at=thread.updated_at,
         )
@@ -540,6 +542,22 @@ async def rename_thread(
 
     thread = await _get_active_thread(session, thread_id=thread_id, user_id=user_id)
     thread.title = title
+    thread.updated_at = datetime.now(UTC)
+    await session.flush()
+    return thread
+
+
+async def set_thread_pinned(
+    session: AsyncSession,
+    *,
+    thread_id: UUID,
+    user_id: UUID,
+    is_pinned: bool,
+) -> Thread:
+    """Set a Thread's pinned state for the owning user."""
+
+    thread = await _get_active_thread(session, thread_id=thread_id, user_id=user_id)
+    thread.is_pinned = is_pinned
     thread.updated_at = datetime.now(UTC)
     await session.flush()
     return thread

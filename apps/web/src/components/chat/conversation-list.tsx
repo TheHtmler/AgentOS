@@ -1,12 +1,24 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import { MoreHorizontal, Plus } from "lucide-react";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export type Conversation = {
   id: string;
   agent_id: string;
   title: string | null;
+  is_pinned: boolean;
   latest_message_content: string | null;
   updated_at: string;
 };
@@ -19,6 +31,8 @@ type ConversationListProps = {
   onNewConversation: () => void;
   onSelectThread: (conversation: Conversation) => void;
   onThreadDeleted: (threadId: string) => void;
+  onThreadListChanged: () => void;
+  pinnedOnly?: boolean;
 };
 
 type ConversationGroup = {
@@ -36,6 +50,7 @@ function isConversation(value: unknown): value is Conversation {
     typeof value.id === "string" &&
     typeof value.agent_id === "string" &&
     (typeof value.title === "string" || value.title === null) &&
+    typeof value.is_pinned === "boolean" &&
     (typeof value.latest_message_content === "string" || value.latest_message_content === null) &&
     typeof value.updated_at === "string"
   );
@@ -125,6 +140,8 @@ export function ConversationList({
   onNewConversation,
   onSelectThread,
   onThreadDeleted,
+  onThreadListChanged,
+  pinnedOnly = false,
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -134,6 +151,7 @@ export function ConversationList({
   const [renamingThreadId, setRenamingThreadId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [busyThreadId, setBusyThreadId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -200,8 +218,10 @@ export function ConversationList({
         })
       : conversations;
 
-    return groupConversations(filtered);
-  }, [conversations, query]);
+    return groupConversations(
+      pinnedOnly ? filtered.filter((conversation) => conversation.is_pinned) : filtered,
+    );
+  }, [conversations, pinnedOnly, query]);
 
   function beginRename(conversation: Conversation) {
     setMenuThreadId(null);
@@ -246,6 +266,7 @@ export function ConversationList({
       );
       setRenamingThreadId(null);
       setError(null);
+      onThreadListChanged();
     } catch (caughtError: unknown) {
       setError(caughtError instanceof Error ? caughtError.message : "重命名失败，请稍后重试。");
     } finally {
@@ -253,25 +274,73 @@ export function ConversationList({
     }
   }
 
-  async function deleteThread(threadId: string) {
+  async function togglePinned(conversation: Conversation) {
     setMenuThreadId(null);
+    setBusyThreadId(conversation.id);
 
-    if (!window.confirm("删除后会话将从列表中隐藏，确定删除？")) {
+    try {
+      const response = await fetch(`/api/threads/${conversation.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_pinned: !conversation.is_pinned }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          conversation.is_pinned ? "取消固定失败，请稍后重试。" : "固定失败，请稍后重试。",
+        );
+      }
+
+      const payload: unknown = await response.json();
+      if (!isRecord(payload) || typeof payload.is_pinned !== "boolean") {
+        throw new Error("固定状态响应无效。");
+      }
+
+      setConversations((current) =>
+        current.map((item) =>
+          item.id === conversation.id ? { ...item, is_pinned: payload.is_pinned as boolean } : item,
+        ),
+      );
+      setError(null);
+      onThreadListChanged();
+    } catch (caughtError: unknown) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : conversation.is_pinned
+            ? "取消固定失败，请稍后重试。"
+            : "固定失败，请稍后重试。",
+      );
+    } finally {
+      setBusyThreadId(null);
+    }
+  }
+
+  function requestDeleteThread(conversation: Conversation) {
+    setMenuThreadId(null);
+    setDeleteTarget(conversation);
+  }
+
+  async function deleteThread(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const conversation = deleteTarget;
+    if (conversation === null) {
       return;
     }
 
-    setBusyThreadId(threadId);
+    setBusyThreadId(conversation.id);
 
     try {
-      const response = await fetch(`/api/threads/${threadId}`, { method: "DELETE" });
+      const response = await fetch(`/api/threads/${conversation.id}`, { method: "DELETE" });
 
       if (!response.ok) {
         throw new Error("删除失败，请稍后重试。");
       }
 
-      setConversations((current) => current.filter((item) => item.id !== threadId));
+      setConversations((current) => current.filter((item) => item.id !== conversation.id));
+      setDeleteTarget(null);
       setError(null);
-      onThreadDeleted(threadId);
+      onThreadDeleted(conversation.id);
     } catch (caughtError: unknown) {
       setError(caughtError instanceof Error ? caughtError.message : "删除失败，请稍后重试。");
     } finally {
@@ -281,26 +350,28 @@ export function ConversationList({
 
   return (
     <section className="agentos-conversation-list">
-      <header className="agentos-conversation-list-header">
-        <div className="agentos-conversation-toolbar">
-          <p className="agentos-list-title">会话</p>
-          <button
-            type="button"
-            onClick={onNewConversation}
-            className="agentos-list-new-button disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Plus aria-hidden="true" className="size-3.5" />
-            新建
-          </button>
-        </div>
-        <input
-          aria-label="搜索已加载会话"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索会话"
-          className="agentos-search-input"
-        />
-      </header>
+      {!pinnedOnly ? (
+        <header className="agentos-conversation-list-header">
+          <div className="agentos-conversation-toolbar">
+            <p className="agentos-list-title">会话</p>
+            <button
+              type="button"
+              onClick={onNewConversation}
+              className="agentos-list-new-button disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus aria-hidden="true" className="size-3.5" />
+              新建
+            </button>
+          </div>
+          <input
+            aria-label="搜索已加载会话"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索会话"
+            className="agentos-search-input"
+          />
+        </header>
+      ) : null}
 
       {currentError ? (
         <p role="alert" className="agentos-list-feedback is-error">
@@ -310,8 +381,10 @@ export function ConversationList({
         <p className="agentos-list-feedback">读取会话中…</p>
       ) : groups.length === 0 ? (
         <div className="agentos-list-feedback">
-          <p>{query.trim() ? "没有匹配的已加载会话。" : "暂无会话。"}</p>
-          {!query.trim() ? (
+          <p>
+            {query.trim() ? "没有匹配的已加载会话。" : pinnedOnly ? "暂无固定会话。" : "暂无会话。"}
+          </p>
+          {!pinnedOnly && !query.trim() ? (
             <button
               type="button"
               onClick={onNewConversation}
@@ -432,8 +505,15 @@ export function ConversationList({
                         </button>
                         <button
                           type="button"
+                          className="agentos-conversation-menu-action"
+                          onClick={() => void togglePinned(conversation)}
+                        >
+                          {conversation.is_pinned ? "取消固定" : "固定会话"}
+                        </button>
+                        <button
+                          type="button"
                           className="agentos-conversation-menu-action is-danger"
-                          onClick={() => void deleteThread(conversation.id)}
+                          onClick={() => requestDeleteThread(conversation)}
                         >
                           删除
                         </button>
@@ -446,6 +526,41 @@ export function ConversationList({
           ))}
         </nav>
       )}
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && busyThreadId === null) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="agentos-delete-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除会话？</AlertDialogTitle>
+            <AlertDialogDescription>
+              “{deleteTarget === null ? "当前会话" : conversationLabel(deleteTarget)}
+              ”删除后将从会话列表中移除，无法恢复。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={busyThreadId !== null}
+              onClick={() => setDeleteTarget(null)}
+              className="agentos-delete-dialog-cancel"
+            >
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={busyThreadId !== null}
+              onClick={(event) => void deleteThread(event)}
+              className="agentos-delete-dialog-action"
+            >
+              {busyThreadId !== null ? "删除中…" : "删除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }
