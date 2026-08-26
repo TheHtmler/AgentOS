@@ -19,7 +19,12 @@ import { ChatPanel } from "@/components/chat/chat-panel";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PendingCaseFactsBanner } from "@/components/chat/pending-case-facts-banner";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { displayAgentName, parseAgentSummaries, type AgentSummary } from "@/lib/agents";
+import {
+  displayAgentName,
+  parseAgentSummaries,
+  resolveSelectedAgentId,
+  type AgentSummary,
+} from "@/lib/agents";
 import type { Conversation } from "@/components/chat/conversation-list";
 
 type ChatWorkspaceProps = {
@@ -95,7 +100,7 @@ export function ChatWorkspace({
 }: ChatWorkspaceProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState(() => resolveSelectedAgentId(null, []));
   const [agentLoadError, setAgentLoadError] = useState<string | null>(null);
   const [agentLoadAttempt, setAgentLoadAttempt] = useState(0);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -142,12 +147,7 @@ export function ChatWorkspace({
         }
 
         setAgents(nextAgents);
-        setSelectedAgentId((current) => {
-          if (current !== null && nextAgents.some((agent) => agent.id === current)) {
-            return current;
-          }
-          return nextAgents.find((agent) => agent.is_default)?.id ?? nextAgents[0]?.id ?? null;
-        });
+        setSelectedAgentId((current) => resolveSelectedAgentId(current, nextAgents));
       } catch (error: unknown) {
         if (isCurrent && !controller.signal.aborted) {
           setAgentLoadError(error instanceof Error ? error.message : "无法加载助手列表。");

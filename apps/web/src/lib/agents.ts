@@ -10,6 +10,9 @@ export type AgentSummary = {
   supports_vision: boolean;
 };
 
+/** 后端内置 General 的稳定 ID，避免首屏在助手列表返回前出现空选择。 */
+export const GENERAL_AGENT_ID = "00000000-0000-0000-0000-000000000001";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -43,6 +46,22 @@ export function parseAgentSummaries(value: unknown): AgentSummary[] | null {
   }
 
   return agents;
+}
+
+export function resolveSelectedAgentId(
+  currentAgentId: string | null,
+  agents: AgentSummary[],
+): string {
+  if (currentAgentId !== null && agents.some((agent) => agent.id === currentAgentId)) {
+    return currentAgentId;
+  }
+
+  return (
+    agents.find((agent) => agent.slug === "general")?.id ??
+    agents.find((agent) => agent.is_default)?.id ??
+    agents[0]?.id ??
+    GENERAL_AGENT_ID
+  );
 }
 
 export function displayAgentName(name: string): string {
