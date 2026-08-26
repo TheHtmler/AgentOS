@@ -2168,7 +2168,7 @@ export function ChatPanel({
                     />
                   </svg>
                 </span>
-                <p className="agentos-chat-heading">What should we work on?</p>
+                <p className="agentos-chat-heading">准备开始什么任务？</p>
                 <div className="agentos-starter-prompts">
                   {STARTER_PROMPTS.map((prompt) => (
                     <button
@@ -2587,6 +2587,7 @@ export function ChatPanel({
                 uploadedArtifacts.length >= MAX_UPLOAD_FILES
               }
               className="agentos-upload-button agentos-codex-upload-button disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label={isUploading ? "上传中" : "上传附件"}
               title={
                 supportsVision
                   ? "上传 PDF 或图片（新建会话会自动创建）"
@@ -2594,7 +2595,7 @@ export function ChatPanel({
               }
             >
               <Paperclip aria-hidden="true" className="size-4" />
-              {isUploading ? "上传中…" : "上传"}
+              <span className="agentos-codex-upload-label">{isUploading ? "上传中…" : "上传"}</span>
             </button>
             <span className="agentos-composer-meta">
               {uploadedArtifacts.length > 0

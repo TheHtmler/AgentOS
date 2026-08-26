@@ -13,7 +13,6 @@ export type Conversation = {
 
 type ConversationListProps = {
   activeThreadId: string | null;
-  selectedAgentId: string | null;
   refreshKey: number;
   streamingThreadIds: ReadonlySet<string>;
   awaitingApprovalThreadIds?: ReadonlySet<string>;
@@ -120,7 +119,6 @@ function groupConversations(conversations: Conversation[]): ConversationGroup[] 
 
 export function ConversationList({
   activeThreadId,
-  selectedAgentId,
   refreshKey,
   streamingThreadIds,
   awaitingApprovalThreadIds = new Set<string>(),
@@ -130,7 +128,6 @@ export function ConversationList({
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadedAgentId, setLoadedAgentId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [menuThreadId, setMenuThreadId] = useState<string | null>(null);
@@ -142,18 +139,9 @@ export function ConversationList({
     const controller = new AbortController();
     let isCurrent = true;
 
-    if (selectedAgentId === null) {
-      return () => {
-        isCurrent = false;
-        controller.abort();
-      };
-    }
-
-    const agentId = selectedAgentId;
-
     void (async () => {
       try {
-        const query = new URLSearchParams({ limit: "20", agent_id: agentId });
+        const query = new URLSearchParams({ limit: "50" });
         const response = await fetch(`/api/threads?${query}`, {
           cache: "no-store",
           signal: controller.signal,
@@ -172,7 +160,6 @@ export function ConversationList({
         if (isCurrent) {
           setConversations(parsed);
           setError(null);
-          setLoadedAgentId(agentId);
           setIsLoading(false);
         }
       } catch (caughtError: unknown) {
@@ -181,7 +168,6 @@ export function ConversationList({
         }
 
         setError(caughtError instanceof Error ? caughtError.message : "无法读取最近会话。");
-        setLoadedAgentId(agentId);
       } finally {
         if (isCurrent) {
           setIsLoading(false);
@@ -193,10 +179,10 @@ export function ConversationList({
       isCurrent = false;
       controller.abort();
     };
-  }, [refreshKey, selectedAgentId]);
+  }, [refreshKey]);
 
-  const isLoadingCurrentAgent = isLoading || selectedAgentId !== loadedAgentId;
-  const currentError = selectedAgentId === loadedAgentId ? error : null;
+  const isLoadingCurrentAgent = isLoading;
+  const currentError = error;
 
   const groups = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -301,7 +287,6 @@ export function ConversationList({
           <button
             type="button"
             onClick={onNewConversation}
-            disabled={selectedAgentId === null}
             className="agentos-list-new-button disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus aria-hidden="true" className="size-3.5" />
@@ -330,7 +315,6 @@ export function ConversationList({
             <button
               type="button"
               onClick={onNewConversation}
-              disabled={selectedAgentId === null}
               className="agentos-list-empty-action disabled:cursor-not-allowed disabled:opacity-50"
             >
               新建会话

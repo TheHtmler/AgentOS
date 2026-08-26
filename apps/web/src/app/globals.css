@@ -4158,7 +4158,7 @@ body {
 
 /* Keep the reply, process history, metadata, and actions on one Codex-style axis. */
 .agentos-message-list {
-  --agentos-message-axis: min(100%, 54rem);
+  --agentos-message-axis: min(100%, 38rem);
   width: min(100%, 60rem);
   max-width: 60rem;
   min-width: 0;
@@ -4199,6 +4199,11 @@ body {
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+.agentos-codex-upload-button {
+  flex: none;
+  white-space: nowrap;
 }
 
 .agentos-process-group > [data-slot="collapsible-trigger"] {
@@ -4310,6 +4315,7 @@ body {
 
 .agentos-composer {
   box-sizing: border-box;
+  width: min(100% - 2rem, 38rem);
 }
 
 .agentos-composer > div:first-child,
@@ -4338,7 +4344,7 @@ body {
   .agentos-message-list {
     --agentos-message-axis: 100%;
     gap: 0.85rem;
-    padding: 1rem 0.75rem 1.5rem;
+    padding: 1rem 0.5rem 1.5rem;
   }
 
   .agentos-message-wrap-user .agentos-message {

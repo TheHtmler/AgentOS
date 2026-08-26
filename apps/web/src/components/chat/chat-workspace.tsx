@@ -497,7 +497,6 @@ export function ChatWorkspace({
               <div className="agentos-codex-conversation-host">
                 <ConversationList
                   activeThreadId={activeThreadId}
-                  selectedAgentId={selectedAgentId}
                   refreshKey={threadListVersion}
                   streamingThreadIds={streamingThreadIds}
                   awaitingApprovalThreadIds={awaitingApprovalThreadIds}
@@ -610,7 +609,6 @@ export function ChatWorkspace({
             <div className="agentos-mobile-conversation-host min-h-0 flex-1 overflow-hidden">
               <ConversationList
                 activeThreadId={activeThreadId}
-                selectedAgentId={selectedAgentId}
                 refreshKey={threadListVersion}
                 streamingThreadIds={streamingThreadIds}
                 awaitingApprovalThreadIds={awaitingApprovalThreadIds}
