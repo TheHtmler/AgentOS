@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { ToolIcon } from "./tool-icons";
 import { toolDisplayName, toolProgressLabel } from "./tool-labels";
@@ -676,7 +677,11 @@ export function ToolCallCard({
           </span>
         </span>
         <span className="agentos-tool-call-state" aria-hidden="true">
-          {toolCall.expanded ? "▾" : "▸"}
+          {toolCall.expanded ? (
+            <ChevronDown className="size-3.5" />
+          ) : (
+            <ChevronRight className="size-3.5" />
+          )}
         </span>
       </button>
 

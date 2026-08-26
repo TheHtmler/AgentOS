@@ -75,14 +75,15 @@
 - Tool Registry + Policy：按能力域登记工具；裁决顺序 deny → ask → allow；`TOOL_POLICY_DENY` / `TOOL_POLICY_ASK`；ask 工具以 `Tool(requires_approval=True)` 挂载（Pydantic AI Deferred Tools）。
 - HITL 闭环：`waiting_approval` Run 状态、`interrupts` 表、checkpoint 历史、`POST /v1/runs/{id}/resume`（幂等）、取消 waiting、超时自动 deny 续跑（`HITL_APPROVAL_TIMEOUT_SECONDS`，默认 1800）；前端审批卡 + 侧栏「待审批」。
 - 自动会话标题：首轮 Run 成功后后台用模型生成短标题；仅 `title IS NULL` 时写入；`AUTO_THREAD_TITLE_*` 配置；侧栏靠既有 run finalize 刷新拉取。
-- 聊天过程组 UI（Codex 风格）：Thinking + 工具收入「处理中 / 已处理」可折叠组；紧凑工具行；邀请弹窗移动端自适应；深色次要文字对比抬高。
+- 聊天过程组 UI（Codex 风格）：Thinking + 工具收入助手正文外独立的「处理中… / 已处理 {时长}」可折叠过程组（`process-group.tsx`，shadcn `Collapsible` 实现；运行中展开、结束自动折叠）；紧凑工具行；邀请弹窗移动端自适应；深色次要文字对比抬高。
 - Thinking UI 实时显示阶段进度并自动跟随消息区滚动；模型返回可读 reasoning 时仅在当前回合临时展示，未返回或仅返回加密 reasoning 时明确标注。原始 reasoning、摘要和 provider raw 内容不写入历史；Responses 续聊只保留 opaque 的 `id`/`signature` 元数据，摘要可在 Ops 的 Provider 配置中显式选择。
 - 多 Agent 数据模型：`agents`、`agent_versions`、`user_memories` 表；`threads.agent_id` 创建后不可变；迁移 `d8e9f0a1b2c3` 种子后经 `seed_agents.py` 收敛为 `general`（默认、记忆关）与 `imd` /「遗传代谢」（垂类、记忆开；合并原 parenting + mma-pa）。
 - `GET /v1/agents` 与 Web BFF `/api/agents`：返回可选 Agent 列表及 published 版本的 `memory_enabled`。
 - Thread 绑定与过滤：新建 Thread 经 `start_run` + `X-AgentOS-Agent-Id` 绑定当前 Agent（非 `POST /v1/threads`）；`GET /v1/threads?agent_id=` 按 Agent 过滤；既有 Thread 忽略客户端 agent 头。
 - Run 时按 Agent published 版本拼装 `system_prompt_overlay`、工具策略覆盖；`memory_enabled` 时关键词/标签 Top-K 召回注入 instructions。
 - 用户记忆升级为 Profile + Notes：`user_memories.kind/key`；档案槽（身高/体重/性别/生日/月龄）结构化抽取后**每次 Run 必注入**；笔记走关键词∪embedding hybrid（`MEMORY_EMBEDDING_*`，Ollama `/embeddings`）；迁移 `f1a2b3c4d5e6`。
-- 前端侧栏 Agent 切换、按 Agent 过滤会话列表、新建对话转发 `X-AgentOS-Agent-Id`；打开 Thread 同步选中 Agent；深链 `?thread=` 从消息 API 恢复 `agent_id`。
+- 前端 Agent 切换位于 composer 顶行（shadcn `Select`），按 Agent 过滤会话列表、新建对话转发 `X-AgentOS-Agent-Id`；打开 Thread 同步选中 Agent；深链 `?thread=` 从消息 API 恢复 `agent_id`。
+- 前端 UI 基础设施统一为 shadcn/ui + Tailwind：web 已有 `components/ui`（button/select/collapsible）、`cn()`、`components.json`；shadcn token 桥接既有 CSS 变量，`[data-theme="dark"]` 经 `@custom-variant` 适配；ops 从零接入 Tailwind v4 + shadcn（仅基础设施与 `button` 基元，页面逐批重写）；图标统一 lucide-react（手写 SVG 与文本字符图标已清除）；`/design-demo` 静态设计稿路由及其 1220 行专属 CSS 已删除。
 - 运维：`scripts/seed_agents.py` 可重复 upsert 内置 Agent 配置。
 - Case 档案（平台通用）：`cases` / `case_memberships` / `case_facts` / `user_agent_default_cases`；`threads.case_id`；`agent_versions.case_enabled`（`imd` 开启）；迁移 `f2a3b4c5d6e7`。
 - Case 读写：新建 Thread 自动绑定默认 Case；Run 注入 confirmed facts；`case_context_read`；完成后异步抽取（`self`→confirmed，`other`/`hypothetical` 不写，`unknown`→proposed）；`case_attribution_confirm`（ASK/HITL）。

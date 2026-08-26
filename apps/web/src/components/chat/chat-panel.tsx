@@ -2,12 +2,25 @@
 
 import { HttpAgent, type Message } from "@ag-ui/client";
 import {
+  ArrowUp,
+  BookOpen,
+  FileSearch,
+  Hammer,
+  Paperclip,
+  Plus,
+  Sparkles,
+  Square,
+  Wrench,
+  X,
+} from "lucide-react";
+import {
   ChangeEvent,
   FormEvent,
   Fragment,
   KeyboardEvent,
   TouchEvent,
   WheelEvent,
+  createElement,
   useCallback,
   useEffect,
   useRef,
@@ -16,6 +29,7 @@ import {
 
 import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval-panel";
 import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
+import { ProcessGroup } from "@/components/chat/process-group";
 import { SessionStatsBar, type LiveRunStats } from "@/components/chat/session-stats-bar";
 import { ThinkingStepCard, type ThinkingStepState } from "@/components/chat/thinking-step-card";
 import {
@@ -27,7 +41,15 @@ import {
   type SandboxFile,
   type ToolCallState,
 } from "@/components/chat/tool-call-card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatMessageTimestamp, formatRunDurationLabel } from "@/lib/format-time";
+import { displayAgentName, type AgentSummary } from "@/lib/agents";
 import { isActiveRunStatus, isLikelyTransportDisconnect } from "@/lib/run-recovery";
 
 type ChatMessage = {
@@ -208,12 +230,14 @@ type ChatPanelProps = {
   selectedThreadId: string | null | undefined;
   agentId: string | null;
   agentName: string;
+  agents: AgentSummary[];
   agentLoadError: string | null;
   /** False when the selected agent's model cannot take image input; upload stays disabled. */
   supportsVision?: boolean;
   /** When false, this panel stays mounted for background runs but must not own the URL/inspector. */
   isActive?: boolean;
   onRetryAgentLoad: () => void;
+  onSelectAgent: (agentId: string) => void;
   onNewConversation: () => void;
   onRunStarted: (runId: string) => void;
   onStreamingChanged: (isStreaming: boolean) => void;
@@ -223,11 +247,11 @@ type ChatPanelProps = {
 };
 
 const STARTER_PROMPTS = [
-  "阅读并理解代码",
-  "构建新功能、应用或工具",
-  "审查代码并提出修改建议",
-  "修复问题与故障",
-];
+  { label: "阅读并理解代码", icon: BookOpen },
+  { label: "构建新功能、应用或工具", icon: Hammer },
+  { label: "审查代码并提出修改建议", icon: FileSearch },
+  { label: "修复问题与故障", icon: Wrench },
+] as const;
 
 /** Re-enable follow / hide button when this close to the bottom. */
 const AUTO_SCROLL_THRESHOLD = 96;
@@ -632,10 +656,12 @@ export function ChatPanel({
   selectedThreadId,
   agentId,
   agentName,
+  agents,
   agentLoadError,
   supportsVision = true,
   isActive = true,
   onRetryAgentLoad,
+  onSelectAgent,
   onNewConversation,
   onRunStarted,
   onStreamingChanged,
@@ -2094,7 +2120,7 @@ export function ChatPanel({
             disabled={isLoadingHistory}
             className="agentos-new-chat-button disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <span aria-hidden="true">＋</span>
+            <Plus aria-hidden="true" className="size-4" />
             新建对话
           </button>
         </div>
@@ -2144,21 +2170,15 @@ export function ChatPanel({
                 <div className="agentos-starter-prompts">
                   {STARTER_PROMPTS.map((prompt) => (
                     <button
-                      key={prompt}
+                      key={prompt.label}
                       type="button"
-                      onClick={() => applyStarterPrompt(prompt)}
+                      onClick={() => applyStarterPrompt(prompt.label)}
                       className="agentos-starter-prompt agentos-codex-starter-prompt max-w-full text-left text-sm"
                     >
                       <span className="agentos-codex-starter-icon" aria-hidden="true">
-                        {prompt === STARTER_PROMPTS[0]
-                          ? "⌘"
-                          : prompt === STARTER_PROMPTS[1]
-                            ? "⌁"
-                            : prompt === STARTER_PROMPTS[2]
-                              ? "◌"
-                              : "◉"}
+                        {createElement(prompt.icon, { className: "size-4" })}
                       </span>
-                      {prompt}
+                      {prompt.label}
                     </button>
                   ))}
                 </div>
@@ -2226,6 +2246,14 @@ export function ChatPanel({
 
                 return (
                   <Fragment key={message.id}>
+                    {processChildren.length > 0 ? (
+                      <ProcessGroup
+                        isActive={isStreaming && liveSteps.length > 0}
+                        durationLabel={message.durationLabel}
+                      >
+                        {processChildren}
+                      </ProcessGroup>
+                    ) : null}
                     <div
                       className={`agentos-message-wrap ${
                         message.role === "user"
@@ -2233,11 +2261,6 @@ export function ChatPanel({
                           : "agentos-message-wrap-assistant"
                       }`}
                     >
-                      {message.role === "assistant" && processChildren.length > 0 ? (
-                        <div className="agentos-message-process agentos-codex-turn-steps">
-                          {processChildren}
-                        </div>
-                      ) : null}
                       <article
                         className={`agentos-message ${
                           message.role === "user"
@@ -2346,8 +2369,8 @@ export function ChatPanel({
                     </div>
 
                     {orphanLiveSteps.length > 0 ? (
-                      <div className="agentos-message-wrap agentos-message-wrap-assistant agentos-tool-only-turn">
-                        <div className="agentos-message-process agentos-codex-turn-steps">
+                      <>
+                        <ProcessGroup isActive={true}>
                           {orphanLiveSteps.map((step) => {
                             if (step.kind === "thinking") {
                               return <ThinkingStepCard key={step.id} step={step} />;
@@ -2362,11 +2385,11 @@ export function ChatPanel({
                               />
                             );
                           })}
-                        </div>
+                        </ProcessGroup>
                         <p aria-live="polite" className="agentos-chat-subheading">
                           继续生成中…
                         </p>
-                      </div>
+                      </>
                     ) : null}
                   </Fragment>
                 );
@@ -2422,6 +2445,33 @@ export function ChatPanel({
       ) : null}
 
       <form onSubmit={handleSubmit} className="agentos-composer">
+        <div className="flex items-center justify-between gap-3 pb-1.5">
+          <Select
+            value={agentId ?? ""}
+            onValueChange={onSelectAgent}
+            disabled={agents.length === 0 || isStreaming || pendingInterrupts.length > 0}
+          >
+            <SelectTrigger
+              size="sm"
+              aria-label="选择助手"
+              className="h-7 w-auto max-w-56 gap-1.5 border-transparent bg-transparent px-1.5 text-xs font-semibold shadow-none hover:bg-accent focus-visible:ring-ring/40"
+            >
+              <Sparkles aria-hidden="true" className="size-3.5 text-[var(--accent)]" />
+              <SelectValue placeholder="正在加载助手…" />
+            </SelectTrigger>
+            <SelectContent>
+              {agents.map((agent) => (
+                <SelectItem key={agent.id} value={agent.id}>
+                  {displayAgentName(agent.name)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="hidden shrink-0 text-[0.65rem] text-muted-foreground sm:inline">
+            Enter 发送 · Shift + Enter 换行
+          </span>
+        </div>
+
         {uploadedArtifacts.length > 0 ? (
           <div className="agentos-upload-pending-list" aria-label="待发送附件">
             {uploadedArtifacts.map((artifact) => (
@@ -2455,7 +2505,7 @@ export function ChatPanel({
                     )
                   }
                 >
-                  ×
+                  <X aria-hidden="true" className="size-3" />
                 </button>
               </div>
             ))}
@@ -2467,11 +2517,6 @@ export function ChatPanel({
             {uploadNotice}
           </p>
         ) : null}
-
-        <div className="agentos-codex-agent-picker">
-          <span aria-hidden="true">▱</span>
-          <button type="button">{agentName}</button>
-        </div>
 
         <textarea
           ref={textareaRef}
@@ -2490,7 +2535,7 @@ export function ChatPanel({
           placeholder={
             pendingInterrupts.length > 0
               ? "请先确认或取消上方的操作"
-              : "输入任务，@ 添加文件，/ 使用命令"
+              : "输入任务、问题或需要助手处理的内容"
           }
           rows={1}
           className="agentos-composer-input block w-full resize-none outline-none disabled:cursor-not-allowed"
@@ -2524,38 +2569,18 @@ export function ChatPanel({
                   : "当前模型以文本方式读取附件（不看图），结论以 OCR 文本为准"
               }
             >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                className="h-4 w-4"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="m18.4 12.6-6.9 6.9a5 5 0 0 1-7.1-7.1l8.2-8.2a3.5 3.5 0 1 1 5 5l-8.2 8.2a2 2 0 1 1-2.8-2.8l7.5-7.5"
-                />
-              </svg>
-              <span className="agentos-codex-upload-label">{isUploading ? "上传中…" : ""}</span>
-            </button>
-            <button type="button" className="agentos-codex-custom-button">
-              <span aria-hidden="true">⚙</span>
-              自定义
+              <Paperclip aria-hidden="true" className="size-4" />
+              {isUploading ? "上传中…" : "上传"}
             </button>
             <span className="agentos-composer-meta">
               {uploadedArtifacts.length > 0
                 ? `${uploadedArtifacts.length}/${MAX_UPLOAD_FILES}`
                 : null}
+              <span className="hidden sm:inline"> · {draft.length}/4000</span>
             </span>
           </div>
 
           <div className="agentos-codex-composer-actions">
-            <span className="agentos-codex-model">模型⌄</span>
-            <button type="button" className="agentos-codex-voice-button" aria-label="语音输入">
-              ◉
-            </button>
             <button
               type="submit"
               disabled={
@@ -2570,17 +2595,14 @@ export function ChatPanel({
               }`}
               aria-label={isStreaming ? "停止执行" : "发送消息"}
             >
-              <span aria-hidden="true">{isStreaming ? "■" : "↑"}</span>
+              {isStreaming ? (
+                <Square aria-hidden="true" className="size-3.5 fill-current" />
+              ) : (
+                <ArrowUp aria-hidden="true" className="size-4" />
+              )}
               <span>{isStreaming ? "停止执行" : "发送"}</span>
             </button>
           </div>
-        </div>
-
-        <div className="agentos-codex-runtime-row" aria-label="运行环境">
-          <span className="is-active">本地</span>
-          <span>工作树</span>
-          <span>云端</span>
-          <span className="agentos-codex-branch">⌘ main 分支</span>
         </div>
       </form>
 

@@ -1,6 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CalendarClock,
+  ChevronRight,
+  LayoutGrid,
+  LogOut,
+  MessageSquare,
+  Plus,
+  Puzzle,
+  Search,
+  SquarePen,
+} from "lucide-react";
 
 import { InvitationManager } from "@/components/auth/invitation-manager";
 import { AgentOsLogo } from "@/components/brand/agentos-logo";
@@ -442,30 +453,30 @@ export function ChatWorkspace({
             <header className="agentos-codex-sidebar-header">
               <AgentOsLogo className="agentos-codex-brand" />
               <button type="button" aria-label="搜索">
-                ⌕
+                <Search aria-hidden="true" className="size-4" />
               </button>
             </header>
 
             <nav className="agentos-codex-primary-nav" aria-label="主导航">
               <button type="button" onClick={handleNewConversation}>
-                <span aria-hidden="true">✎</span>
+                <SquarePen aria-hidden="true" className="size-4" />
                 新建任务
               </button>
               <button type="button">
-                <span aria-hidden="true">◷</span>
+                <CalendarClock aria-hidden="true" className="size-4" />
                 计划任务
                 <i aria-hidden="true" />
               </button>
               <button type="button">
-                <span aria-hidden="true">◎</span>
+                <Puzzle aria-hidden="true" className="size-4" />
                 插件
               </button>
               <button type="button">
-                <span aria-hidden="true">⊞</span>
+                <LayoutGrid aria-hidden="true" className="size-4" />
                 站点
               </button>
               <button type="button" className="is-active">
-                <span aria-hidden="true">⌕</span>
+                <MessageSquare aria-hidden="true" className="size-4" />
                 聊天
               </button>
             </nav>
@@ -473,49 +484,24 @@ export function ChatWorkspace({
             <div className="agentos-codex-sidebar-section agentos-codex-pinned-section">
               <p>已固定</p>
               <button type="button" onClick={handleNewConversation}>
-                <span aria-hidden="true">▱</span>
+                <Plus aria-hidden="true" className="size-4" />
                 新建任务
               </button>
-            </div>
-
-            <div className="agentos-codex-sidebar-section agentos-codex-agent-section">
-              <div className="agentos-codex-sidebar-section-heading">
-                <p>助手</p>
-                <span aria-hidden="true">⌄</span>
-              </div>
-              <label className="agentos-codex-agent-summary">
-                <span aria-hidden="true">▱</span>
-                <select
-                  aria-label="选择助手"
-                  value={selectedAgentId ?? ""}
-                  disabled={agents.length === 0}
-                  onChange={(event) => handleSelectAgent(event.target.value)}
-                >
-                  {agents.length === 0 ? <option value="">正在加载助手…</option> : null}
-                  {agents.map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {displayAgentName(agent.name)}
-                    </option>
-                  ))}
-                </select>
-              </label>
             </div>
 
             <div className="agentos-codex-sidebar-section agentos-codex-tasks-section">
               <div className="agentos-codex-sidebar-section-heading">
                 <p>会话</p>
-                <span aria-hidden="true">›</span>
+                <ChevronRight aria-hidden="true" className="size-3.5" />
               </div>
               <div className="agentos-codex-conversation-host">
                 <ConversationList
                   activeThreadId={activeThreadId}
-                  agents={agents}
                   selectedAgentId={selectedAgentId}
                   refreshKey={threadListVersion}
                   streamingThreadIds={streamingThreadIds}
                   awaitingApprovalThreadIds={awaitingApprovalThreadIds}
                   onNewConversation={handleNewConversation}
-                  onSelectAgent={handleSelectAgent}
                   onSelectThread={handleSelectThread}
                   onThreadDeleted={handleThreadDeleted}
                 />
@@ -535,7 +521,7 @@ export function ChatWorkspace({
                 disabled={isLoggingOut}
                 aria-label="退出登录"
               >
-                ↗
+                <LogOut aria-hidden="true" className="size-4" />
               </button>
             </footer>
           </div>
@@ -563,6 +549,7 @@ export function ChatWorkspace({
                       selectedThreadId={slot.threadId}
                       agentId={selectedAgentId}
                       agentName={selectedAgentLabel}
+                      agents={agents}
                       agentLoadError={agentLoadError}
                       supportsVision={
                         agents.find((agent) => agent.id === selectedAgentId)?.supports_vision ??
@@ -570,6 +557,7 @@ export function ChatWorkspace({
                       }
                       isActive={isActive}
                       onRetryAgentLoad={retryAgentLoad}
+                      onSelectAgent={handleSelectAgent}
                       onNewConversation={handleNewConversation}
                       onRunStarted={ignoreRunStarted}
                       onStreamingChanged={(isStreaming) =>
@@ -622,13 +610,11 @@ export function ChatWorkspace({
             <div className="agentos-mobile-conversation-host min-h-0 flex-1 overflow-hidden">
               <ConversationList
                 activeThreadId={activeThreadId}
-                agents={agents}
                 selectedAgentId={selectedAgentId}
                 refreshKey={threadListVersion}
                 streamingThreadIds={streamingThreadIds}
                 awaitingApprovalThreadIds={awaitingApprovalThreadIds}
                 onNewConversation={handleNewConversation}
-                onSelectAgent={handleSelectAgent}
                 onSelectThread={handleSelectThread}
                 onThreadDeleted={handleThreadDeleted}
               />

@@ -1,8 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-
-import { displayAgentName, type AgentSummary } from "@/lib/agents";
+import { MoreHorizontal, Plus } from "lucide-react";
 
 export type Conversation = {
   id: string;
@@ -14,13 +13,11 @@ export type Conversation = {
 
 type ConversationListProps = {
   activeThreadId: string | null;
-  agents: AgentSummary[];
   selectedAgentId: string | null;
   refreshKey: number;
   streamingThreadIds: ReadonlySet<string>;
   awaitingApprovalThreadIds?: ReadonlySet<string>;
   onNewConversation: () => void;
-  onSelectAgent: (agentId: string) => void;
   onSelectThread: (conversation: Conversation) => void;
   onThreadDeleted: (threadId: string) => void;
 };
@@ -123,13 +120,11 @@ function groupConversations(conversations: Conversation[]): ConversationGroup[] 
 
 export function ConversationList({
   activeThreadId,
-  agents,
   selectedAgentId,
   refreshKey,
   streamingThreadIds,
   awaitingApprovalThreadIds = new Set<string>(),
   onNewConversation,
-  onSelectAgent,
   onSelectThread,
   onThreadDeleted,
 }: ConversationListProps) {
@@ -301,23 +296,6 @@ export function ConversationList({
   return (
     <section className="agentos-conversation-list">
       <header className="agentos-conversation-list-header">
-        <label className="agentos-agent-picker">
-          <span>当前助手</span>
-          <select
-            aria-label="选择助手"
-            value={selectedAgentId ?? ""}
-            disabled={agents.length === 0}
-            onChange={(event) => onSelectAgent(event.target.value)}
-            className="agentos-agent-select disabled:cursor-wait disabled:opacity-60"
-          >
-            {agents.length === 0 ? <option value="">正在加载助手…</option> : null}
-            {agents.map((agent) => (
-              <option key={agent.id} value={agent.id}>
-                {displayAgentName(agent.name)}
-              </option>
-            ))}
-          </select>
-        </label>
         <div className="agentos-conversation-toolbar">
           <p className="agentos-list-title">会话</p>
           <button
@@ -326,7 +304,7 @@ export function ConversationList({
             disabled={selectedAgentId === null}
             className="agentos-list-new-button disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span aria-hidden="true">＋</span>
+            <Plus aria-hidden="true" className="size-3.5" />
             新建
           </button>
         </div>
@@ -454,7 +432,7 @@ export function ConversationList({
                           }
                           className="agentos-conversation-menu-button disabled:opacity-40"
                         >
-                          ⋯
+                          <MoreHorizontal aria-hidden="true" className="size-4" />
                         </button>
                       </div>
                     )}

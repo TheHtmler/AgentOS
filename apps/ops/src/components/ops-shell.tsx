@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
+import { BookOpen, Bot, Cpu, LayoutGrid, MessageSquare, Plug, Wrench } from "lucide-react";
 
 type NavIconName = "grid" | "book" | "bot" | "chat" | "tool" | "plug" | "chip";
 
@@ -42,72 +43,26 @@ const NAV_GROUPS: { label: string; items: readonly NavItem[] }[] = [
 const FLAT_NAV = NAV_GROUPS.flatMap((group) => group.items);
 
 function NavIcon({ name }: { name: NavIconName }) {
-  const common = {
-    width: 16,
-    height: 16,
-    viewBox: "0 0 16 16",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.6,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-  };
+  const cls = "size-4";
   if (name === "grid") {
-    return (
-      <svg {...common} aria-hidden>
-        <rect x="2" y="2" width="5" height="5" rx="1" />
-        <rect x="9" y="2" width="5" height="5" rx="1" />
-        <rect x="2" y="9" width="5" height="5" rx="1" />
-        <rect x="9" y="9" width="5" height="5" rx="1" />
-      </svg>
-    );
+    return <LayoutGrid className={cls} aria-hidden="true" />;
   }
   if (name === "book") {
-    return (
-      <svg {...common} aria-hidden>
-        <path d="M3 3.5h5.5A2.5 2.5 0 0 1 11 6v7H5.5A2.5 2.5 0 0 0 3 10.5V3.5Z" />
-        <path d="M11 6h2v7.5H6" />
-      </svg>
-    );
+    return <BookOpen className={cls} aria-hidden="true" />;
   }
   if (name === "bot") {
-    return (
-      <svg {...common} aria-hidden>
-        <rect x="3" y="5" width="10" height="8" rx="2" />
-        <path d="M8 5V3" />
-        <circle cx="6.2" cy="9" r="0.7" fill="currentColor" stroke="none" />
-        <circle cx="9.8" cy="9" r="0.7" fill="currentColor" stroke="none" />
-      </svg>
-    );
+    return <Bot className={cls} aria-hidden="true" />;
   }
   if (name === "chat") {
-    return (
-      <svg {...common} aria-hidden>
-        <path d="M3 4.5h10v7H6.5L3 13.5V4.5Z" />
-      </svg>
-    );
+    return <MessageSquare className={cls} aria-hidden="true" />;
   }
   if (name === "tool") {
-    return (
-      <svg {...common} aria-hidden>
-        <path d="M9.5 3.2a3 3 0 0 0 3.3 3.9l-4.9 4.9a1.4 1.4 0 1 1-2-2l4.9-4.9a3 3 0 0 0-3.9-3.3l1.8 1.8-1.4 1.4-1.8-1.8a3 3 0 0 0 3.9 3.3" />
-      </svg>
-    );
+    return <Wrench className={cls} aria-hidden="true" />;
   }
   if (name === "chip") {
-    return (
-      <svg {...common} aria-hidden>
-        <rect x="4" y="4" width="8" height="8" rx="1.5" />
-        <path d="M6 1.5v1.5M10 1.5v1.5M6 13v1.5M10 13v1.5M1.5 6H3M1.5 10H3M13 6h1.5M13 10h1.5" />
-      </svg>
-    );
+    return <Cpu className={cls} aria-hidden="true" />;
   }
-  return (
-    <svg {...common} aria-hidden>
-      <circle cx="8" cy="8" r="2.2" />
-      <path d="M8 3v1.4M8 11.6V13M3 8h1.4M11.6 8H13M4.4 4.4l1 1M10.6 10.6l1 1M11.6 4.4l-1 1M5.4 10.6l-1 1" />
-    </svg>
-  );
+  return <Plug className={cls} aria-hidden="true" />;
 }
 
 function BrandMark({ subtitle }: { subtitle?: string }) {

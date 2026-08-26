@@ -1,3 +1,32 @@
+@import "tailwindcss";
+
+/* shadcn tokens bridged onto the existing ops variables (no visual change) */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--panel);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-ink);
+  --color-secondary: var(--line);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--line);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--line);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--danger);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--focus);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-ops-sans), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+}
+
 :root {
   color-scheme: light;
   --bg: #f3f4f6;

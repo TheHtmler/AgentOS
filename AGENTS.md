@@ -51,6 +51,7 @@ pnpm format                      # Prettier(md/ts/tsx 都要过)
 - **`MODEL_CONTEXT_WINDOW` 必须与 Ollama Modelfile 的 `num_ctx` 一致**；改任一个必须同步另一个。远程 provider 的 `context_window` 同理必须配成端点模型的真实窗口——预算护栏按各 provider 取值，配错即裁剪错。
 - **provider 的 api_key 写进读出掩码**：不进入任何 API 响应（只回 `sk-...xxxx` 预览），也不进 git；后台任务（自动标题/记忆/Case 抽取）与 embedding 固定走本地模型，不随 Agent 的 provider 变化。
 - **不引入插件框架/事件总线/摘要压缩/通用模型路由**——`docs/16` 的取舍表是当前共识，改动前先读它；provider 是发布级静态绑定，禁止做静默 fallback 换模型。
+- **前端新 UI 一律 shadcn/ui + Tailwind + lucide-react**:两个 app 都已接入(`components.json`、`cn()`、token 桥接既有 CSS 变量)；新组件优先复用 `components/ui/*` 基元，图标只用 lucide,禁止新增手写 SVG 图标和大段自定义 CSS;web 的主题是 `[data-theme="dark"]` 属性(经 `@custom-variant dark` 适配),不要引入 `.dark` class 机制;存量 `agentos-*`/ops 手写样式随页面重写逐批替换，不要一次性推倒。
 - **`.env` 不进 git**；新增配置项同步 `.env.example` + `config.py` 默认值 + 对应测试断言。
 
 ## 已知坑
