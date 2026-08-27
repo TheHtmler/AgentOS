@@ -1,16 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  CalendarClock,
-  ChevronRight,
-  LayoutGrid,
-  LogOut,
-  MessageSquare,
-  Puzzle,
-  Search,
-  SquarePen,
-} from "lucide-react";
+import { ChevronRight, LogOut, MessageSquare, SquarePen } from "lucide-react";
 
 import { InvitationManager } from "@/components/auth/invitation-manager";
 import { AgentOsLogo } from "@/components/brand/agentos-logo";
@@ -455,28 +446,12 @@ export function ChatWorkspace({
           <div className="agentos-codex-sidebar">
             <header className="agentos-codex-sidebar-header">
               <AgentOsLogo className="agentos-codex-brand" />
-              <button type="button" aria-label="搜索">
-                <Search aria-hidden="true" className="size-4" />
-              </button>
             </header>
 
             <nav className="agentos-codex-primary-nav" aria-label="主导航">
               <button type="button" onClick={handleNewConversation}>
                 <SquarePen aria-hidden="true" className="size-4" />
                 新建任务
-              </button>
-              <button type="button">
-                <CalendarClock aria-hidden="true" className="size-4" />
-                计划任务
-                <i aria-hidden="true" />
-              </button>
-              <button type="button">
-                <Puzzle aria-hidden="true" className="size-4" />
-                插件
-              </button>
-              <button type="button">
-                <LayoutGrid aria-hidden="true" className="size-4" />
-                站点
               </button>
               <button type="button" className="is-active">
                 <MessageSquare aria-hidden="true" className="size-4" />

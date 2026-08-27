@@ -51,7 +51,7 @@ function RegisterPageContent() {
 
         if (!response.ok || !isInvitationInspectionResponse(payload)) {
           setState("failed");
-          setError("This invitation is invalid, expired, or already used.");
+          setError("邀请链接无效、已过期或已被使用。");
           return;
         }
 
@@ -64,7 +64,7 @@ function RegisterPageContent() {
       } catch {
         if (!controller.signal.aborted) {
           setState("failed");
-          setError("Unable to validate the invitation. Please try again later.");
+          setError("暂时无法验证邀请，请稍后重试。");
         }
       }
     })();
@@ -77,7 +77,7 @@ function RegisterPageContent() {
 
     if (token === null) {
       setState("failed");
-      setError("The invitation is no longer available. Please reopen the invitation link.");
+      setError("邀请已失效，请重新打开邀请链接。");
       return;
     }
 
@@ -87,13 +87,13 @@ function RegisterPageContent() {
 
     if (typeof password !== "string" || typeof confirmation !== "string") {
       setState("failed");
-      setError("Please enter and confirm your password.");
+      setError("请输入并确认密码。");
       return;
     }
 
     if (password !== confirmation) {
       setState("failed");
-      setError("The passwords do not match.");
+      setError("两次输入的密码不一致。");
       return;
     }
 
@@ -110,7 +110,7 @@ function RegisterPageContent() {
 
       if (!response.ok) {
         setState("failed");
-        setError("Registration could not be completed. The invitation may have expired.");
+        setError("无法完成注册，邀请可能已过期。");
         return;
       }
 
@@ -118,7 +118,7 @@ function RegisterPageContent() {
       window.location.replace("/");
     } catch {
       setState("failed");
-      setError("Unable to complete registration. Please try again later.");
+      setError("暂时无法完成注册，请稍后重试。");
     }
   }
 
@@ -130,9 +130,9 @@ function RegisterPageContent() {
         </div>
         <section className="agentos-auth-card w-full max-w-md p-6 sm:p-8">
           <p className="text-sm font-medium text-zinc-500">AgentOS</p>
-          <h1 className="mt-2 text-xl font-semibold text-zinc-950">Create your account</h1>
+          <h1 className="mt-2 text-xl font-semibold text-zinc-950">创建账号</h1>
           <p role="alert" className="mt-4 text-sm text-rose-700">
-            Please use the registration link sent by an administrator.
+            请使用管理员发送的注册链接。
           </p>
         </section>
       </main>
@@ -146,16 +146,14 @@ function RegisterPageContent() {
       </div>
       <section className="agentos-auth-card w-full max-w-md p-6 sm:p-8">
         <p className="text-sm font-medium text-zinc-500">AgentOS</p>
-        <h1 className="mt-2 text-xl font-semibold text-zinc-950">Create your account</h1>
+        <h1 className="mt-2 text-xl font-semibold text-zinc-950">创建账号</h1>
 
-        {state === "checking" ? (
-          <p className="mt-4 text-sm text-zinc-600">Validating invitation...</p>
-        ) : null}
+        {state === "checking" ? <p className="mt-4 text-sm text-zinc-600">正在验证邀请…</p> : null}
 
         {state !== "checking" && email !== null ? (
           <form onSubmit={(event) => void submit(event)}>
             <label className="mt-6 block text-sm font-medium text-zinc-800">
-              Email
+              邮箱
               <input
                 readOnly
                 value={email}
@@ -164,7 +162,7 @@ function RegisterPageContent() {
             </label>
 
             <label className="mt-4 block text-sm font-medium text-zinc-800">
-              Password
+              密码
               <input
                 required
                 minLength={8}
@@ -176,7 +174,7 @@ function RegisterPageContent() {
             </label>
 
             <label className="mt-4 block text-sm font-medium text-zinc-800">
-              Confirm password
+              确认密码
               <input
                 required
                 minLength={8}
@@ -198,7 +196,7 @@ function RegisterPageContent() {
               disabled={state === "submitting"}
               className="agentos-auth-submit mt-6 w-full px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {state === "submitting" ? "Creating account..." : "Create account"}
+              {state === "submitting" ? "正在创建账号…" : "创建账号"}
             </button>
           </form>
         ) : null}
