@@ -30,7 +30,12 @@ import httpx
 from pydantic_ai.messages import ToolCallPart
 from pydantic_ai.tools import DeferredToolRequests
 
-from agent_api.agent import create_agent, create_ollama_http_client
+from agent_api.agent import (
+    create_agent,
+    create_background_http_client,
+    create_ollama_http_client,
+)
+from agent_api.config import get_settings
 from agent_api.tools.search.tool import AgentDeps
 
 SCENARIOS_DIR = Path(__file__).resolve().parent.parent / "eval" / "scenarios"
@@ -69,7 +74,11 @@ def load_scenarios(only: str | None = None) -> list[Scenario]:
     return scenarios
 
 
-async def run_scenario(scenario: Scenario, http_client: httpx.AsyncClient) -> list[str]:
+async def run_scenario(
+    scenario: Scenario,
+    http_client: httpx.AsyncClient,
+    background_http_client: httpx.AsyncClient,
+) -> list[str]:
     """Run one scenario against the real model; return failure messages."""
 
     failures: list[str] = []
@@ -78,11 +87,11 @@ async def run_scenario(scenario: Scenario, http_client: httpx.AsyncClient) -> li
         AgentDeps(
             case_id=uuid4(),
             user_id=uuid4(),
-            http_client=http_client,
+            http_client=background_http_client,
             persist_tool_events=False,
         )
         if scenario.case_bound
-        else AgentDeps(http_client=http_client, persist_tool_events=False)
+        else AgentDeps(http_client=background_http_client, persist_tool_events=False)
     )
 
     async with agent:
@@ -145,11 +154,14 @@ async def main() -> int:
         return 1
 
     exit_code = 0
-    async with create_ollama_http_client() as http_client:
+    async with (
+        create_ollama_http_client() as http_client,
+        create_background_http_client(get_settings()) as background_http_client,
+    ):
         for scenario in scenarios:
             print(f"--- {scenario.id}: {scenario.description}")
             try:
-                failures = await run_scenario(scenario, http_client)
+                failures = await run_scenario(scenario, http_client, background_http_client)
             except Exception as exc:  # noqa: BLE001 — report and keep going
                 failures = [f"scenario raised {type(exc).__name__}: {exc}"]
             if failures:
