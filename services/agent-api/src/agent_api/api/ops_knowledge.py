@@ -30,6 +30,7 @@ from agent_api.knowledge.ocr_client import OcrError, ocr_image_bytes
 from agent_api.knowledge.pdf_extract import extract_pdf_text
 from agent_api.knowledge.types import ChunkSpec, DocumentSpec
 from agent_api.knowledge.url_extract import fetch_url_text
+from agent_api.runtime import AgentRuntime
 
 router = APIRouter(prefix="/v1/ops/knowledge", tags=["ops-knowledge"])
 
@@ -177,6 +178,23 @@ def _slug_from_filename(filename: str | None) -> str:
     return slug or "imported-document"
 
 
+def _background_http_client(request: Request) -> httpx.AsyncClient | None:
+    """Return the app-wide authenticated embeddings client, if the runtime is up.
+
+    OCR/URL-fetch calls use their own short-lived, differently-authenticated
+    ``httpx.AsyncClient`` — only ``runtime.background_http_client`` carries the
+    ``Authorization: Bearer`` header the embeddings endpoint needs. Missing runtime
+    (e.g. import-route tests that don't set ``app.state.runtime``) degrades to no
+    embeddings rather than failing the import, matching ``knowledge_embedding_enabled``'s
+    existing graceful fallback to keyword-only search.
+    """
+
+    runtime = getattr(request.app.state, "runtime", None)
+    if isinstance(runtime, AgentRuntime):
+        return runtime.background_http_client
+    return None
+
+
 async def _persist_import(
     specs: list[DocumentSpec],
     *,
@@ -210,7 +228,11 @@ async def _persist_import(
     return ImportResponse(documents=documents)
 
 
-async def _import_json_body(payload: dict[str, Any], subject: str) -> ImportResponse:
+async def _import_json_body(
+    request: Request,
+    payload: dict[str, Any],
+    subject: str,
+) -> ImportResponse:
     mode = _required_text(payload, "mode")
     base_slug = str(payload.get("base") or "mma-pa")
     if mode == "json":
@@ -218,14 +240,24 @@ async def _import_json_body(payload: dict[str, Any], subject: str) -> ImportResp
         if not isinstance(document_payload, dict):
             raise ValueError("payload must be an object")
         specs = normalize_json_payload(cast(dict[str, Any], document_payload))
-        return await _persist_import(specs, base_slug=base_slug, created_by=subject)
+        return await _persist_import(
+            specs,
+            base_slug=base_slug,
+            created_by=subject,
+            http_client=_background_http_client(request),
+        )
     if mode == "text":
         spec = normalize_plain_text(
             slug=_required_text(payload, "slug"),
             title=_required_text(payload, "title"),
             body=_required_text(payload, "body"),
         )
-        return await _persist_import([spec], base_slug=base_slug, created_by=subject)
+        return await _persist_import(
+            [spec],
+            base_slug=base_slug,
+            created_by=subject,
+            http_client=_background_http_client(request),
+        )
     if mode == "url":
         url = _required_text(payload, "url")
         slug = _required_text(payload, "slug")
@@ -248,7 +280,7 @@ async def _import_json_body(payload: dict[str, Any], subject: str) -> ImportResp
                 [spec],
                 base_slug=base_slug,
                 created_by=subject,
-                http_client=client,
+                http_client=_background_http_client(request),
             )
     raise ValueError(f"unsupported import mode: {mode}")
 
@@ -288,7 +320,7 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
                 [spec],
                 base_slug=base_slug,
                 created_by=subject,
-                http_client=client,
+                http_client=_background_http_client(request),
                 ocr_pages=1,
             )
 
@@ -304,7 +336,7 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
                 [spec],
                 base_slug=base_slug,
                 created_by=subject,
-                http_client=client,
+                http_client=_background_http_client(request),
                 text_layer_pages=text_layer_pages,
                 ocr_pages=ocr_pages,
             )
@@ -312,12 +344,22 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
     if is_json:
         payload = cast(dict[str, Any], json.loads(data.decode("utf-8")))
         specs = normalize_json_payload(payload)
-        return await _persist_import(specs, base_slug=base_slug, created_by=subject)
+        return await _persist_import(
+            specs,
+            base_slug=base_slug,
+            created_by=subject,
+            http_client=_background_http_client(request),
+        )
 
     if is_text or suffix == "":
         body = data.decode("utf-8")
         spec = normalize_plain_text(slug=slug, title=title, body=body)
-        return await _persist_import([spec], base_slug=base_slug, created_by=subject)
+        return await _persist_import(
+            [spec],
+            base_slug=base_slug,
+            created_by=subject,
+            http_client=_background_http_client(request),
+        )
 
     raise ValueError("仅支持 txt、md、json、pdf、jpg、png、webp")
 
@@ -333,7 +375,7 @@ async def import_knowledge(
             payload = await request.json()
             if not isinstance(payload, dict):
                 raise ValueError("request body must be an object")
-            return await _import_json_body(cast(dict[str, Any], payload), subject)
+            return await _import_json_body(request, cast(dict[str, Any], payload), subject)
         if content_type.startswith("multipart/form-data"):
             return await _import_multipart(request, subject)
         raise ValueError("content type must be application/json or multipart/form-data")

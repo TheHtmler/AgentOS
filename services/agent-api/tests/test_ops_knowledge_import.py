@@ -1,12 +1,16 @@
 """Ops knowledge import API."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 from pwdlib import PasswordHash
+from pydantic_ai import Agent
+from pydantic_ai.models.test import TestModel
 from sqlalchemy import func, select
 
 from agent_api.api import ops_auth as ops_auth_api
@@ -15,6 +19,7 @@ from agent_api.db.models import KnowledgeDocumentSnapshot
 from agent_api.db.ops_store import create_ops_session
 from agent_api.db.session import close_database, session_factory
 from agent_api.main import app
+from agent_api.runtime import AgentRuntime
 
 PASSWORD_HASHER = PasswordHash.recommended()
 
@@ -96,6 +101,57 @@ async def test_ops_import_text_and_overwrite(monkeypatch: pytest.MonkeyPatch) ->
             .where(KnowledgeDocumentSnapshot.document_id == UUID(first_document["id"])),
         )
     assert snapshot_count == 1
+
+
+@pytest.mark.anyio
+async def test_ops_import_text_embeds_with_the_authenticated_background_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Embedding must use runtime.background_http_client, not a bare OCR/fetch client.
+
+    Reusing an unauthenticated client here previously sent every embeddings
+    request without the Bearer header the remote endpoint requires, so every
+    Ops-imported chunk silently ended up with embedding=None (401, swallowed).
+    """
+
+    seen_clients: list[httpx.AsyncClient] = []
+
+    async def fake_embed_text(
+        text: str,
+        http_client: httpx.AsyncClient,
+        **_kwargs: object,
+    ) -> list[float]:
+        seen_clients.append(http_client)
+        return [0.1, 0.2, 0.3]
+
+    monkeypatch.setattr("agent_api.db.knowledge_store.embed_text", fake_embed_text)
+
+    background_client = httpx.AsyncClient()
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel()),
+        model_semaphore=asyncio.Semaphore(1),
+        background_http_client=background_client,
+    )
+    try:
+        slug = f"ops-import-embed-{uuid4().hex}"
+        token = await _ops_cookie(monkeypatch)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            client.cookies.set("ops_session", token)
+            response = await client.post(
+                "/v1/ops/knowledge/import",
+                json={
+                    "mode": "text",
+                    "slug": slug,
+                    "title": "向量化校验",
+                    "body": "用于校验 embedding 走认证客户端的正文内容。",
+                },
+            )
+    finally:
+        await background_client.aclose()
+
+    assert response.status_code == 200
+    assert seen_clients == [background_client]
 
 
 @pytest.mark.anyio
