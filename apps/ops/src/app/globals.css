@@ -24,7 +24,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --font-sans: var(--font-ops-sans), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+  --font-sans:
+    "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", ui-sans-serif, system-ui,
+    sans-serif;
 }
 
 :root {
@@ -45,7 +47,9 @@
   --ok-soft: #ecfdf3;
   --tap: 32px;
   --radius: 6px;
-  --font-sans: var(--font-ops-sans), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+  --font-sans:
+    "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", ui-sans-serif, system-ui,
+    sans-serif;
   font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.45;
