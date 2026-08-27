@@ -262,30 +262,6 @@ if [[ "$DO_API" -eq 1 ]]; then
   # Idempotent upserts: refresh built-in agents (incl. prompt overlays) every deploy.
   log "seed agents"
   uv run --directory "$ROOT/services/agent-api" python scripts/seed_agents.py
-  # Core knowledge doc is seeded only when absent so Ops-side edits are not clobbered;
-  # after changing seed/knowledge/mma_pa_chunks.json, re-run scripts/seed_knowledge.py manually.
-  log "seed core knowledge (skip when present)"
-  if ! uv run --directory "$ROOT/services/agent-api" python -c "
-import asyncio, sys
-from sqlalchemy import select
-from agent_api.db.models import KnowledgeDocument
-from agent_api.db.session import close_database, session_factory
-
-async def main() -> int:
-    async with session_factory() as session:
-        doc = await session.scalar(
-            select(KnowledgeDocument).where(KnowledgeDocument.slug == 'mma-pa-core-v1')
-        )
-    await close_database()
-    return 0 if doc is not None else 1
-
-sys.exit(asyncio.run(main()))
-"; then
-    uv run --directory "$ROOT/services/agent-api" python scripts/seed_knowledge.py ||
-      warn "knowledge seed failed (background embedding endpoint down?) — run scripts/seed_knowledge.py manually"
-  else
-    log "core knowledge doc already present, skip"
-  fi
   ensure_upload_root
   kick "$API_LABEL" || true
 fi

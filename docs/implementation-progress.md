@@ -98,7 +98,7 @@
 - 工具纪律强化：缺公开标准/图表/指南时先 `web_search`/`fetch_url`，禁止让用户代查或用长免责声明代替作答；育儿 Agent overlay 要求主动对照权威生长标准并附来源。
 - 调研笔记：`docs/13-mma-knowledge-and-mcp-inventory.md`（MMA/PA 知识分层 + 候选 MCP/Skills）。
 - 内建 `growth_assess`：WHO 2006（`anthro`）z 分数/百分位；`GROWTH_ASSESS_ENABLED`；育儿 overlay 优先调用；无需 search/fetch router。
-- 知识库表：`knowledge_bases` / `knowledge_documents` / `knowledge_chunks`（基础迁移 `e9f0a1b2c3d4`，来源治理迁移 `k7l8m9n0o1p2`）；`scripts/seed_knowledge.py` 写入 MMA/PA 中文教育摘要（带亚型 tags + 来源指针）。
+- 知识库表：`knowledge_bases` / `knowledge_documents` / `knowledge_chunks`（基础迁移 `e9f0a1b2c3d4`，来源治理迁移 `k7l8m9n0o1p2`）；内容与向量改为完全走 Ops 导入管理（`POST /v1/ops/knowledge/import`），部署链路不再自动播种；`scripts/seed_knowledge.py` 已下线，`seed/knowledge/mma_pa_chunks.json` 仅作 `test_knowledge_evaluation.py` 等测试的夹具留存。
 - 内建 `knowledge_search`：关键词 + tags overlap + 可选 Ollama embedding 混合召回；结果返回来源、版本、审核状态和章节；`KNOWLEDGE_SEARCH_ENABLED`；垂类 Agent「遗传代谢」(`imd`) 优先使用。
 - MMA/PA P0 检索评测集：`seed/knowledge/mma_pa_eval.json`，覆盖分型、C3 筛查、急症、饮食边界、监测和证据限制。
 - 平台 util 工具：`ToolDomain.UTIL` 下 `time_diff`（可注入 now、日历月/年）与 `calculate`（白名单 AST）；`UTIL_TOOLS_ENABLED`；挂载时注入 `UTIL_INSTRUCTIONS`。

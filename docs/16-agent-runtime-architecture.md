@@ -62,7 +62,7 @@
 - api_key 写进读出掩码（响应只有 `sk-...xxxx` 预览）;provider 管理只在 Ops 后台，产品端 API 不暴露。
 - `supports_vision=false` 的 provider：运行链路跳过图片/PDF 渲染加载（OCR/文本预览块仍在），产品端 agents 列表透出 `supports_vision` 供 UI 禁用附件按钮。
 - `supports_tools`（默认 true）：端点模型是否接受原生工具调用。`false` 的 provider 被绑定后，AG-UI 链路在模型调用前直接 409、HITL 续跑直接置 failed（「失败要响」），而不是等端点在运行中炸出原始报错；Ops 表单可配，不做「自动不挂工具」的静默降级。
-- 后台任务（自动标题 / 记忆抽取 / Case 抽取）与 embedding 固定走独立配置的后台端点（`BACKGROUND_BASE_URL` / `BACKGROUND_API_KEY` / `BACKGROUND_CHAT_MODEL` / `BACKGROUND_EMBEDDING_MODEL`,空值回落本地 Ollama 配置），不随 Agent 的 provider 变化——换聊天模型不会悄悄改变患者数据的去向；后台端点的 api_key 只在 env，不进 DB 与任何 API 响应。embedding 模型切换后需重跑 `scripts/seed_knowledge.py` 重建知识向量（`embedding_model` 不匹配的 chunk 不参与向量分）。
+- 后台任务（自动标题 / 记忆抽取 / Case 抽取）与 embedding 固定走独立配置的后台端点（`BACKGROUND_BASE_URL` / `BACKGROUND_API_KEY` / `BACKGROUND_CHAT_MODEL` / `BACKGROUND_EMBEDDING_MODEL`,空值回落本地 Ollama 配置），不随 Agent 的 provider 变化——换聊天模型不会悄悄改变患者数据的去向；后台端点的 api_key 只在 env，不进 DB 与任何 API 响应。embedding 模型切换后，旧 chunk 的向量不会被误用（`embedding_model` 不匹配的 chunk 直接跳过向量分，退化成关键词检索，见 `tools/knowledge/tool.py` 的 `model_mismatches` 守卫），但也不会自动刷新——知识库内容与向量全部通过 Ops 导入（`POST /v1/ops/knowledge/import`）管理，没有生产播种脚本；要让某篇文档吃到新模型的向量，需要在 Ops 上重新导入那篇文档（`seed/knowledge/mma_pa_chunks.json` 仅作测试夹具留存，不接入部署链路）。
 - 刻意不做：通用模型路由（按请求内容动态选模型、自动 fallback 链、负载均衡）——provider 是发布级静态绑定，失败要响，不要悄悄换模型。
 
 ## 工具系统
