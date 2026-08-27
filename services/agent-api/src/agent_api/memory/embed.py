@@ -1,4 +1,8 @@
-"""Embedding helpers for note-memory hybrid recall (OpenAI-compatible / Ollama)."""
+"""Embedding helpers for memory/knowledge vectors via the background endpoint.
+
+The endpoint is fixed by ``background_*`` settings (falling back to local Ollama)
+and never follows an Agent's chat provider — see config.py.
+"""
 
 from __future__ import annotations
 
@@ -48,7 +52,7 @@ async def embed_text(
         enabled = cfg.memory_embedding_enabled
     if not enabled:
         return None
-    model = cfg.memory_embedding_model.strip()
+    model = cfg.resolved_background_embedding_model.strip()
     if not model:
         return None
     normalized = text.strip()
@@ -57,7 +61,7 @@ async def embed_text(
 
     try:
         response = await http_client.post(
-            cfg.ollama_base_url.rstrip("/") + "/embeddings",
+            cfg.resolved_background_base_url + "/embeddings",
             json={"model": model, "input": normalized[:4_000]},
             timeout=cfg.memory_extract_timeout_seconds,
         )
@@ -75,9 +79,7 @@ async def embed_text(
         embedding = first.get("embedding")
         if not isinstance(embedding, list) or not embedding:
             return None
-        return [
-            float(cast(int | float, value)) for value in cast(list[object], embedding)
-        ]
+        return [float(cast(int | float, value)) for value in cast(list[object], embedding)]
     except Exception:
         logger.exception("embedding request failed")
         return None

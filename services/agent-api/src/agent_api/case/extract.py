@@ -321,12 +321,12 @@ def parse_case_extract_payload(raw: object) -> ExtractedCasePayload:
     return ExtractedCasePayload(attribution=attribution, updates=updates)
 
 
-async def extract_case_via_ollama(
+async def extract_case_via_background(
     user_message: str,
     assistant_content: str,
     http_client: httpx.AsyncClient,
 ) -> ExtractedCasePayload:
-    """Ask Ollama for Case updates + attribution; empty on bad output."""
+    """Ask the background endpoint for Case updates + attribution; empty on bad output."""
 
     settings = get_settings()
     prompt = (
@@ -360,9 +360,9 @@ async def extract_case_via_ollama(
         f"User:\n{user_message[:2_000]}\n\nAssistant:\n{assistant_content[:2_000]}"
     )
     response = await http_client.post(
-        settings.ollama_base_url.rstrip("/") + "/chat/completions",
+        settings.resolved_background_base_url + "/chat/completions",
         json={
-            "model": settings.ollama_model,
+            "model": settings.resolved_background_chat_model,
             "messages": [
                 {
                     "role": "system",
@@ -374,8 +374,8 @@ async def extract_case_via_ollama(
             ],
             "max_tokens": 768,
             "temperature": 0,
-            # Force valid JSON from the small local model; without this a prose
-            # preamble makes json.loads fail and the turn's facts are silently lost.
+            # Force valid JSON; without this a prose preamble makes json.loads
+            # fail and the turn's facts are silently lost.
             "response_format": {"type": "json_object"},
         },
         timeout=settings.case_extract_timeout_seconds,
@@ -539,7 +539,7 @@ def schedule_case_extract(
     if not assistant_text and not slot_hints_from_user_message(user_text):
         return
     _inflight.add(run_id)
-    extractor = extract_case or extract_case_via_ollama
+    extractor = extract_case or extract_case_via_background
 
     async def _run() -> None:
         try:

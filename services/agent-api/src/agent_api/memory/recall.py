@@ -222,5 +222,5 @@ async def load_relevant_memories(
         top_k=top_k,
         max_chars=max_chars,
         query_embedding=query_embedding,
-        current_embedding_model=settings.memory_embedding_model,
+        current_embedding_model=settings.resolved_background_embedding_model,
     )

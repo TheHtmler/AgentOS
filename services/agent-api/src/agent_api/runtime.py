@@ -13,6 +13,7 @@ from pydantic_ai.toolsets import AbstractToolset
 from agent_api.agent import (
     AgentOutput,
     create_agent,
+    create_background_http_client,
     create_ollama_http_client,
     warm_up_ollama_model,
 )
@@ -40,6 +41,7 @@ class AgentRuntime:
         search_router: SearchRouter | None = None,
         fetch_router: FetchRouter | None = None,
         ollama_http_client: httpx.AsyncClient | None = None,
+        background_http_client: httpx.AsyncClient | None = None,
         sandbox_http_client: httpx.AsyncClient | None = None,
         mcp_toolsets: list[AbstractToolset[AgentDeps]] | None = None,
     ) -> None:
@@ -47,8 +49,10 @@ class AgentRuntime:
         self.model_semaphore = model_semaphore
         self.search_router = search_router
         self.fetch_router = fetch_router
-        # Shared with background auto-title jobs (same process lifetime as the agent).
         self.ollama_http_client = ollama_http_client
+        # Background jobs (auto-title / memory & case extraction) and embeddings
+        # use this fixed endpoint, decoupled from any Agent's chat provider.
+        self.background_http_client = background_http_client
         self.sandbox_http_client = sandbox_http_client
         self.mcp_toolsets = mcp_toolsets or []
         self._run_tasks: dict[UUID, asyncio.Task[None]] = {}
@@ -158,6 +162,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     settings = get_settings()
     http_client = create_ollama_http_client()
+    background_http_client = create_background_http_client(settings)
     # Fire-and-forget: starts loading the model into Ollama immediately so it's warm
     # by the time the first real user request arrives, without delaying app startup.
     warmup_task = asyncio.create_task(
@@ -219,6 +224,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         search_router=search_router if settings.search_enabled else None,
         fetch_router=fetch_router if settings.fetch_url_enabled else None,
         ollama_http_client=http_client,
+        background_http_client=background_http_client,
         sandbox_http_client=sandbox_http_client,
         mcp_toolsets=mcp_toolsets,
     )
@@ -300,6 +306,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             if sandbox_http_client is not None:
                 await sandbox_http_client.aclose()
             await search_http_client.aclose()
+            await background_http_client.aclose()
             await http_client.aclose()
 
 

@@ -116,6 +116,16 @@ class Settings(BaseSettings):
     memory_embedding_model: str = "nomic-embed-text"
     # Knowledge chunk hybrid search (reuses memory_embedding_model + ollama_base_url).
     knowledge_embedding_enabled: bool = True
+    # Fixed endpoint for background jobs (auto thread titles, memory/case
+    # extraction) and embedding calls. Deliberately decoupled from any Agent's
+    # chat provider: republishing an Agent must never silently reroute where
+    # patient data is sent. Empty values fall back to the local Ollama settings,
+    # so existing deployments keep working unchanged. The api_key lives only in
+    # env — never in the DB or any API response.
+    background_base_url: str = ""
+    background_api_key: str = ""
+    background_chat_model: str = ""
+    background_embedding_model: str = ""
     # Read-only MCP (stdio). Default off; enable after reviewing allowlist.
     mcp_enabled: bool = False
     # Empty command → built-in PubMed readonly server module.
@@ -292,6 +302,24 @@ class Settings(BaseSettings):
             raise ValueError("upload_max_files_per_message must be at least 1")
 
         return value
+
+    @property
+    def resolved_background_base_url(self) -> str:
+        """Background endpoint URL; falls back to the local Ollama URL."""
+
+        return (self.background_base_url.strip() or self.ollama_base_url).rstrip("/")
+
+    @property
+    def resolved_background_chat_model(self) -> str:
+        """Chat model for background extraction/title jobs; falls back to ollama_model."""
+
+        return self.background_chat_model.strip() or self.ollama_model
+
+    @property
+    def resolved_background_embedding_model(self) -> str:
+        """Embedding model for memory/knowledge vectors; falls back to memory_embedding_model."""
+
+        return self.background_embedding_model.strip() or self.memory_embedding_model
 
     @property
     def admin_emails(self) -> frozenset[str]:

@@ -8,6 +8,7 @@ from agent_api.agent import (
     build_context_snapshot,
     build_instructions,
     create_agent,
+    create_background_http_client,
     create_ollama_http_client,
     inject_context_snapshot,
     warm_up_ollama_model,
@@ -176,6 +177,55 @@ def test_default_settings() -> None:
     assert settings.tool_policy_ask == ""
     assert settings.auto_thread_title_enabled is True
     assert settings.auto_thread_title_timeout_seconds == 30.0
+
+
+def test_background_endpoint_defaults_fall_back_to_local_ollama() -> None:
+    """Empty background_* settings must reproduce the pre-remote behavior exactly."""
+
+    settings = Settings.model_validate(
+        {
+            "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
+        },
+    )
+
+    assert settings.background_base_url == ""
+    assert settings.background_api_key == ""
+    assert settings.background_chat_model == ""
+    assert settings.background_embedding_model == ""
+    assert settings.resolved_background_base_url == "http://127.0.0.1:11434/v1"
+    assert settings.resolved_background_chat_model == "agentos-qwen3vl:16k"
+    assert settings.resolved_background_embedding_model == "nomic-embed-text"
+
+
+def test_background_endpoint_overrides() -> None:
+    settings = Settings.model_validate(
+        {
+            "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
+            "background_base_url": "https://gateway.example.com/v1/",
+            "background_api_key": "sk-test",
+            "background_chat_model": "cheap-chat",
+            "background_embedding_model": "text-embedding-3-large",
+        },
+    )
+
+    # Trailing slash is stripped so call sites can append paths directly.
+    assert settings.resolved_background_base_url == "https://gateway.example.com/v1"
+    assert settings.resolved_background_chat_model == "cheap-chat"
+    assert settings.resolved_background_embedding_model == "text-embedding-3-large"
+
+
+@pytest.mark.anyio
+async def test_background_http_client_sends_auth_only_when_configured() -> None:
+    base = {
+        "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
+    }
+    no_key = Settings.model_validate(base)
+    async with create_background_http_client(no_key) as client:
+        assert "authorization" not in client.headers
+
+    with_key = Settings.model_validate({**base, "background_api_key": " sk-test "})
+    async with create_background_http_client(with_key) as client:
+        assert client.headers["authorization"] == "Bearer sk-test"
 
 
 @pytest.mark.parametrize("temperature", [-0.1, 2.1])

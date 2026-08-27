@@ -90,12 +90,12 @@ def parse_extracted_payload(raw: object) -> ExtractedMemoryPayload:
     )
 
 
-async def extract_memory_via_ollama(
+async def extract_memory_via_background(
     user_message: str,
     assistant_content: str,
     http_client: httpx.AsyncClient,
 ) -> ExtractedMemoryPayload:
-    """Ask Ollama for profile slots + notes; empty payload on bad output."""
+    """Ask the background endpoint for profile slots + notes; empty payload on bad output."""
 
     settings = get_settings()
     prompt = (
@@ -119,9 +119,9 @@ async def extract_memory_via_ollama(
         f"User:\n{user_message[:2_000]}\n\nAssistant:\n{assistant_content[:2_000]}"
     )
     response = await http_client.post(
-        settings.ollama_base_url.rstrip("/") + "/chat/completions",
+        settings.resolved_background_base_url + "/chat/completions",
         json={
-            "model": settings.ollama_model,
+            "model": settings.resolved_background_chat_model,
             "messages": [
                 {
                     "role": "system",
@@ -131,8 +131,8 @@ async def extract_memory_via_ollama(
             ],
             "max_tokens": 768,
             "temperature": 0,
-            # Force valid JSON from the small local model; without this a prose
-            # preamble makes json.loads fail and the turn's facts are silently lost.
+            # Force valid JSON; without this a prose preamble makes json.loads
+            # fail and the turn's facts are silently lost.
             "response_format": {"type": "json_object"},
         },
         timeout=settings.memory_extract_timeout_seconds,
@@ -224,7 +224,7 @@ async def upsert_note_facts(
 
     created = 0
     embedding_map = embeddings or {}
-    embedding_model = get_settings().memory_embedding_model
+    embedding_model = get_settings().resolved_background_embedding_model
     for note in _valid_notes(notes):
         content = cast(str, note["content"])
         tags = cast(list[str], note["tags"])
@@ -385,7 +385,7 @@ def schedule_memory_extract(
     if not user_message.strip() or not assistant_content.strip():
         return
     _inflight.add(run_id)
-    extractor = extract_memory or extract_facts or extract_memory_via_ollama
+    extractor = extract_memory or extract_facts or extract_memory_via_background
 
     async def _run() -> None:
         try:

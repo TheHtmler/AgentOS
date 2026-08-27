@@ -374,6 +374,24 @@ def create_ollama_http_client() -> httpx.AsyncClient:
     )
 
 
+def create_background_http_client(settings: Settings) -> httpx.AsyncClient:
+    """Create the client for background jobs (title/memory/case extraction + embeddings).
+
+    Same no-proxy policy as the Ollama client, plus an Authorization header when
+    ``background_api_key`` is configured (remote endpoints); local Ollama needs none.
+    """
+
+    headers: dict[str, str] = {}
+    api_key = settings.background_api_key.strip()
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(timeout=180.0, connect=5.0),
+        trust_env=False,
+        headers=headers,
+    )
+
+
 async def warm_up_ollama_model(
     http_client: httpx.AsyncClient,
     settings: Settings,

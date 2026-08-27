@@ -183,7 +183,9 @@ async def _upsert_knowledge_document(
                 section_label=chunk.section_label,
                 tags=list(chunk.tags),
                 embedding=embedding,
-                embedding_model=settings.memory_embedding_model if embedding is not None else None,
+                embedding_model=(
+                    settings.resolved_background_embedding_model if embedding is not None else None
+                ),
             ),
         )
 

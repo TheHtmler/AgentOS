@@ -251,7 +251,7 @@ async def stream_ag_ui_run(
                             version.memory_recall_max_chars,
                             settings.memory_recall_max_chars,
                         ),
-                        http_client=runtime.ollama_http_client,
+                        http_client=runtime.background_http_client,
                     )
                     memory_block = format_memory_block(memories, exclude_keys=case_keys)
                 except Exception:
@@ -431,7 +431,7 @@ async def stream_ag_ui_run(
                     user_id=user.id,
                     user_account=user.email,
                     thread_id=started.thread_id,
-                    http_client=runtime.ollama_http_client,
+                    http_client=runtime.background_http_client,
                     sandbox_client=runtime.sandbox_http_client,
                     knowledge_base_slugs=version.knowledge_base_slugs,
                 ),
@@ -512,13 +512,13 @@ async def stream_ag_ui_run(
                 cached_input_tokens=extract_cached_input_tokens(usage),
             )
             # Same fire-and-forget path as classic SSE chat.
-            if runtime.ollama_http_client is not None:
+            if runtime.background_http_client is not None:
                 schedule_auto_thread_title(
                     thread_id=started.thread_id,
                     user_message=prompt,
                     assistant_content=assistant_content,
                     model_semaphore=runtime.model_semaphore,
-                    http_client=runtime.ollama_http_client,
+                    http_client=runtime.background_http_client,
                 )
                 schedule_memory_extract(
                     user_id=user.id,
@@ -528,7 +528,7 @@ async def stream_ag_ui_run(
                     user_message=prompt,
                     assistant_content=assistant_content,
                     model_semaphore=runtime.model_semaphore,
-                    http_client=runtime.ollama_http_client,
+                    http_client=runtime.background_http_client,
                     memory_enabled=version.memory_enabled,
                     case_id=case_id,
                 )
@@ -541,7 +541,7 @@ async def stream_ag_ui_run(
                     user_message=prompt,
                     assistant_content=assistant_content,
                     model_semaphore=runtime.model_semaphore,
-                    http_client=runtime.ollama_http_client,
+                    http_client=runtime.background_http_client,
                 )
         except AGUIExecutionError:
             raise

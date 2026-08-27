@@ -308,7 +308,7 @@ async def run_knowledge_search(
                 max_results=limit,
                 knowledge_base_slugs=deps.knowledge_base_slugs,
                 query_embedding=query_embedding,
-                current_embedding_model=settings.memory_embedding_model,
+                current_embedding_model=settings.resolved_background_embedding_model,
             )
     except Exception as exc:
         logger.exception("knowledge_search failed")

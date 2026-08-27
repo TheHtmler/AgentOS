@@ -26,12 +26,12 @@ _ASSISTANT_SNIPPET = 500
 GenerateTitleFn = Callable[[str, str, httpx.AsyncClient], Awaitable[str | None]]
 
 
-async def generate_title_via_ollama(
+async def generate_title_via_background(
     user_message: str,
     assistant_content: str,
     http_client: httpx.AsyncClient,
 ) -> str | None:
-    """Ask the chat model for a short title; returns None on failure."""
+    """Ask the background chat model for a short title; returns None on failure."""
 
     settings = get_settings()
     user_snip = user_message.strip()[:_USER_SNIPPET]
@@ -47,12 +47,12 @@ async def generate_title_via_ollama(
         f"Assistant:\n{asst_snip}"
     )
 
-    url = settings.ollama_base_url.rstrip("/") + "/chat/completions"
+    url = settings.resolved_background_base_url + "/chat/completions"
     try:
         response = await http_client.post(
             url,
             json={
-                "model": settings.ollama_model,
+                "model": settings.resolved_background_chat_model,
                 "messages": [
                     {
                         "role": "system",
@@ -122,7 +122,7 @@ def schedule_auto_thread_title(
         return
 
     _inflight.add(thread_id)
-    generator = generate_title or generate_title_via_ollama
+    generator = generate_title or generate_title_via_background
 
     async def _run() -> None:
         try:

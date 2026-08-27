@@ -155,7 +155,7 @@ async def continue_run_after_approval(
                             version.memory_recall_max_chars,
                             settings.memory_recall_max_chars,
                         ),
-                        http_client=runtime.ollama_http_client,
+                        http_client=runtime.background_http_client,
                     )
                     memory_block = format_memory_block(memories, exclude_keys=case_keys)
                 except Exception:
@@ -273,7 +273,7 @@ async def continue_run_after_approval(
                     user_id=user_id,
                     user_account=user.email if user is not None else None,
                     thread_id=run.thread_id,
-                    http_client=runtime.ollama_http_client,
+                    http_client=runtime.background_http_client,
                     sandbox_client=runtime.sandbox_http_client,
                     knowledge_base_slugs=version.knowledge_base_slugs,
                 ),
@@ -351,13 +351,13 @@ async def continue_run_after_approval(
             raise AGUIExecutionError("对话记录保存失败，请稍后重试。") from error
 
         # Same fire-and-forget path as a fresh run's completion.
-        if runtime.ollama_http_client is not None:
+        if runtime.background_http_client is not None:
             schedule_auto_thread_title(
                 thread_id=run.thread_id,
                 user_message="(continued after approval)",
                 assistant_content=assistant_content,
                 model_semaphore=runtime.model_semaphore,
-                http_client=runtime.ollama_http_client,
+                http_client=runtime.background_http_client,
             )
             schedule_memory_extract(
                 user_id=user_id,
@@ -367,7 +367,7 @@ async def continue_run_after_approval(
                 user_message=prompt,
                 assistant_content=assistant_content,
                 model_semaphore=runtime.model_semaphore,
-                http_client=runtime.ollama_http_client,
+                http_client=runtime.background_http_client,
                 memory_enabled=version.memory_enabled,
                 case_id=case_id,
             )
@@ -380,7 +380,7 @@ async def continue_run_after_approval(
                 user_message=prompt,
                 assistant_content=assistant_content,
                 model_semaphore=runtime.model_semaphore,
-                http_client=runtime.ollama_http_client,
+                http_client=runtime.background_http_client,
             )
 
     try:

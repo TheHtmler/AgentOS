@@ -11,7 +11,7 @@ from agent_api.case.extract import (
     ExtractedCasePayload,
     apply_attribution_policy,
     apply_case_extract,
-    extract_case_via_ollama,
+    extract_case_via_background,
     infer_case_fact_key,
     merge_user_slot_hints,
     parse_case_extract_payload,
@@ -137,7 +137,7 @@ def test_self_context_upgrades_model_updates_without_regex_hints() -> None:
 
 
 @pytest.mark.anyio
-async def test_extract_case_via_ollama_forces_json_and_strips_think() -> None:
+async def test_extract_case_via_background_forces_json_and_strips_think() -> None:
     captured: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -160,7 +160,7 @@ async def test_extract_case_via_ollama_forces_json_and_strips_think() -> None:
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        payload = await extract_case_via_ollama("男宝", "好的", client)
+        payload = await extract_case_via_background("男宝", "好的", client)
 
     assert captured["response_format"] == {"type": "json_object"}
     assert payload.attribution == "self"

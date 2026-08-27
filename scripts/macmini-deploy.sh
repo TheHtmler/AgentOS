@@ -279,7 +279,7 @@ async def main() -> int:
 sys.exit(asyncio.run(main()))
 "; then
     uv run --directory "$ROOT/services/agent-api" python scripts/seed_knowledge.py ||
-      warn "knowledge seed failed (Ollama embedding down?) — run scripts/seed_knowledge.py manually"
+      warn "knowledge seed failed (background embedding endpoint down?) — run scripts/seed_knowledge.py manually"
   else
     log "core knowledge doc already present, skip"
   fi

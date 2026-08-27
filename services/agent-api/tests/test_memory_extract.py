@@ -13,7 +13,7 @@ from agent_api.db.memory_store import list_active_memories
 from agent_api.db.models import Agent, User
 from agent_api.memory.extract import (
     ExtractedMemoryPayload,
-    extract_memory_via_ollama,
+    extract_memory_via_background,
     parse_extracted_payload,
     schedule_memory_extract,
     upsert_extracted_facts,
@@ -56,7 +56,7 @@ def test_post_complete_scheduler_signatures_match_call_sites() -> None:
 
 
 @pytest.mark.anyio
-async def test_extract_memory_via_ollama_forces_json_and_strips_think() -> None:
+async def test_extract_memory_via_background_forces_json_and_strips_think() -> None:
     captured: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -77,7 +77,7 @@ async def test_extract_memory_via_ollama_forces_json_and_strips_think() -> None:
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        payload = await extract_memory_via_ollama("男宝", "已记录", client)
+        payload = await extract_memory_via_background("男宝", "已记录", client)
 
     assert captured["response_format"] == {"type": "json_object"}
     assert payload.profile == {"sex": "male"}
