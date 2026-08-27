@@ -391,7 +391,9 @@ def _is_non_json_endpoint_response(error: BaseException) -> bool:
     return False
 
 
-def user_facing_run_error_message(error: BaseException) -> str:
+def user_facing_run_error_message(
+    error: BaseException, *, context_window: int | None = None
+) -> str:
     """Map provider failures to actionable user-facing text instead of a generic 500."""
 
     if _is_non_json_endpoint_response(error):
@@ -401,8 +403,13 @@ def user_facing_run_error_message(error: BaseException) -> str:
             "配置无误则稍后重试。"
         )
     if is_context_overflow_error(error):
+        # The window comes from the resolved provider profile (local env or remote
+        # row) — never hardcode it, remote endpoints have their own real windows.
+        window_note = (
+            f"（约 {max(1, round(context_window / 1024))}k tokens)" if context_window else ""
+        )
         return (
-            "当前内容超出了模型上下文窗口（16k tokens)。"
+            f"当前内容超出了模型上下文窗口{window_note}。"
             "建议一次分析一份报告，或另起一段对话后重试。"
         )
     if isinstance(error, UsageLimitExceeded):

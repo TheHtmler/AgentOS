@@ -258,8 +258,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     try:
         async with AsyncExitStack() as stack:
+            entered_toolsets: list[AbstractToolset[AgentDeps]] = []
             for toolset in mcp_toolsets:
-                await stack.enter_async_context(toolset)
+                try:
+                    await stack.enter_async_context(toolset)
+                except Exception:
+                    # A dead MCP server must not take the whole API down with it.
+                    logger.exception(
+                        "failed to start MCP toolset %r; continuing without it", toolset
+                    )
+                    continue
+                entered_toolsets.append(toolset)
+            if len(entered_toolsets) != len(mcp_toolsets):
+                # Runs must never see a toolset that failed to start: swap both the
+                # runtime list and the shared startup agent to the entered subset.
+                runtime.mcp_toolsets = entered_toolsets
+                agent = create_agent(
+                    http_client,
+                    search_router=search_router if settings.search_enabled else None,
+                    search_enabled=settings.search_enabled,
+                    fetch_router=fetch_router if settings.fetch_url_enabled else None,
+                    fetch_enabled=settings.fetch_url_enabled,
+                    toolsets=entered_toolsets,
+                )
+                runtime.agent = agent
             await stack.enter_async_context(agent)
             try:
                 yield

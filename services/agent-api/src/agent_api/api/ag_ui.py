@@ -460,7 +460,9 @@ async def stream_ag_ui_run(
                 started.run_id,
                 error_message=format_run_failure_message(error),
             )
-            raise AGUIExecutionError(user_facing_run_error_message(error)) from error
+            raise AGUIExecutionError(
+                user_facing_run_error_message(error, context_window=profile.context_window)
+            ) from error
 
     async def persist_completed(result: AgentRunResult[AgentOutput]) -> None:
         try:

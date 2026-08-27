@@ -42,6 +42,21 @@ def test_overflow_error_maps_to_actionable_message() -> None:
     assert "一次分析一份" in message
 
 
+def test_overflow_message_uses_resolved_context_window() -> None:
+    error = ModelHTTPError(
+        status_code=400,
+        model_name="deepseek-chat",
+        body={
+            "message": "request (140000 tokens) exceeds the available context size (131072 tokens)"
+        },
+    )
+
+    message = user_facing_run_error_message(error, context_window=131_072)
+
+    assert "128k" in message
+    assert "16k" not in message
+
+
 def test_generic_error_keeps_generic_message() -> None:
     assert user_facing_run_error_message(RuntimeError("boom")) == (
         "模型服务暂时不可用，请稍后重试。"
