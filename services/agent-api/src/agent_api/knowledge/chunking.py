@@ -206,13 +206,19 @@ def _hard_slice(text: str, max_chars: int) -> list[str]:
 
 
 def _overlap_prefix(text: str, overlap: int) -> str:
-    if overlap <= 0 or len(text) <= overlap:
-        return text.strip()
-    tail = text[-overlap:].strip()
+    # Only carry a sentence-clean tail into the next chunk. Punctuation-free
+    # source lines (slide bullets, table/OCR fragments) have no such cut point;
+    # falling back to the raw tail there would duplicate that exact fragment
+    # into every following chunk until a period finally appears (it can chain
+    # for dozens of chunks in slide decks and OCR'd tables).
+    if overlap <= 0:
+        return ""
+    window = text if len(text) <= overlap else text[-overlap:]
+    tail = window.strip()
     cut = tail.find("。")
     if cut >= 0 and cut < len(tail) - 1:
         return tail[cut + 1 :].strip()
-    return tail
+    return ""
 
 
 def _contextualize(body: str, heading: str | None) -> str:

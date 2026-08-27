@@ -42,6 +42,17 @@ def test_chunk_text_hard_splits_long_paragraph() -> None:
     assert all(len(chunk.content) <= 120 for chunk in chunks)
 
 
+def test_chunk_text_overlap_skips_when_no_sentence_boundary() -> None:
+    # Slide/table/OCR fragments without "。" gave the old fallback nothing
+    # clean to cut, so it duplicated the raw tail into every following
+    # chunk. Punctuation-free pieces should now start fresh instead.
+    fragments = "\n\n".join(f"要点{i}没有句号仅是短语" for i in range(30))
+    chunks = chunk_text(fragments, max_chars=60, overlap=40)
+    assert len(chunks) >= 3
+    bodies = [chunk.content for chunk in chunks]
+    assert len(bodies) == len(set(bodies))
+
+
 def test_chunk_text_empty_raises() -> None:
     import pytest
 
