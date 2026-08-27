@@ -24,7 +24,7 @@
   - `src/agent_api/db/` — SQLAlchemy 模型与 repository;`migrations/` — Alembic。
 - `infra/` — Ollama Modelfile、launchd plist、frp/nginx 配置。
 - `docs/` — 架构事实来源，索引在 `docs/README.md`;`docs/16` 是 Agent 运行时建成态架构。
-- `scripts/macmini-deploy.sh` — Mac mini 部署（pull → sync → migrate → seed agents → build → 重启）。前端构建是「先建后换」：服务不停，先用 `NEXT_DIST_DIR=.next.new` 构建（`next.config` 的 `distDir` 读这个环境变量），成功后 bootout → **等服务注册项与端口都释放** → 替换 `.next` → 启动并等 HTTP 就绪（不就绪会在脚本输出里告警）；停机窗口只有几秒，构建失败旧构建原样在跑。bootout 是异步的，跳过等待会让新进程撞上旧进程占着的端口，曾导致「部署后 502、再跑一次才好」。脚本自身被 pull 更新时会先 re-exec 新版本再继续（bash 边读边执行，自更新不 re-exec 会执行到错位代码）。知识库内容完全由 Ops 导入管理（`POST /v1/ops/knowledge/import`），部署链路不再自动播种——`seed/knowledge/mma_pa_chunks.json` 只作为 `test_knowledge_evaluation.py` 等测试的夹具留存，不再有生产入口；换 embedding 模型后旧内容需通过 Ops 重新导入受影响文档来刷新向量（`embedding_model` 不匹配的 chunk 只是退化成关键词检索，不会报错，见 `docs/16`）。
+- `scripts/macmini-deploy.sh` — Mac mini 部署（pull → sync → migrate → seed agents → build → 重启）。前端构建是「先建后换」：服务不停，先用 `NEXT_DIST_DIR=.next.new` 构建（`next.config` 的 `distDir` 读这个环境变量），成功后 bootout → **等服务注册项与端口都释放** → 替换 `.next` → 启动并等 HTTP 就绪（不就绪会在脚本输出里告警）；停机窗口只有几秒，构建失败旧构建原样在跑。bootout 是异步的，跳过等待会让新进程撞上旧进程占着的端口，曾导致「部署后 502、再跑一次才好」。脚本自身被 pull 更新时会先 re-exec 新版本再继续（bash 边读边执行，自更新不 re-exec 会执行到错位代码）。知识库内容完全由 Ops 导入管理（`POST /v1/ops/knowledge/import`），部署链路不再自动播种——`seed/knowledge/mma_pa_chunks.json` 只作为 `test_knowledge_evaluation.py` 等测试的夹具留存，不再有生产入口；换 embedding 模型后旧内容需通过 Ops 重新导入受影响文档来刷新向量（`embedding_model` 不匹配的 chunk 只是退化成关键词检索，不会报错，见 `docs/16`）。PDF/图片导入不走本地 OCR，逐页/逐图调用可配置的远程视觉模型（`BACKGROUND_VISION_MODEL`,见 `knowledge/vision_extract.py`）解析，未配置直接 400；本地 PaddleOCR 仍只服务聊天内文档上传抽取。
 
 ## 常用命令
 

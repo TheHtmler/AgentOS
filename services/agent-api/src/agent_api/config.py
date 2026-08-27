@@ -126,6 +126,11 @@ class Settings(BaseSettings):
     background_api_key: str = ""
     background_chat_model: str = ""
     background_embedding_model: str = ""
+    # Vision-capable model for Ops knowledge PDF/image import (per-page transcription
+    # + diagram description). No fallback to background_chat_model — that model is
+    # usually text-only, so an empty value means "vision import unavailable" rather
+    # than a broken call.
+    background_vision_model: str = ""
     # Read-only MCP (stdio). Default off; enable after reviewing allowlist.
     mcp_enabled: bool = False
     # Empty command → built-in PubMed readonly server module.
@@ -320,6 +325,12 @@ class Settings(BaseSettings):
         """Embedding model for memory/knowledge vectors; falls back to memory_embedding_model."""
 
         return self.background_embedding_model.strip() or self.memory_embedding_model
+
+    @property
+    def resolved_background_vision_model(self) -> str:
+        """Vision model for knowledge PDF/image import; empty means unavailable."""
+
+        return self.background_vision_model.strip()
 
     @property
     def admin_emails(self) -> frozenset[str]:

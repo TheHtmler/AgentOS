@@ -198,22 +198,34 @@ async def test_ops_import_json_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.anyio
-async def test_ops_import_image_uses_ocr(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def fake_ocr(image: bytes, **_kwargs: object) -> str:
+async def test_ops_import_image_uses_vision_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_vision(image: bytes, *, http_client: httpx.AsyncClient, settings: object) -> str:
         assert image == b"\xff\xd8\xffimage"
         return "图片识别出的第一段。\n\n图片识别出的第二段。"
 
-    monkeypatch.setattr("agent_api.api.ops_knowledge.ocr_image_bytes", fake_ocr)
-    slug = f"ops-image-{uuid4().hex}"
-    token = await _ops_cookie(monkeypatch)
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        client.cookies.set("ops_session", token)
-        response = await client.post(
-            "/v1/ops/knowledge/import",
-            data={"mode": "file", "slug": slug, "title": "扫描指南"},
-            files={"file": ("guide.jpg", b"\xff\xd8\xffimage", "image/jpeg")},
-        )
+    monkeypatch.setattr("agent_api.api.ops_knowledge.extract_image_text_vision", fake_vision)
+    settings = get_settings().model_copy(update={"background_vision_model": "vision-model"})
+    monkeypatch.setattr("agent_api.api.ops_knowledge.get_settings", lambda: settings)
+
+    background_client = httpx.AsyncClient()
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel()),
+        model_semaphore=asyncio.Semaphore(1),
+        background_http_client=background_client,
+    )
+    try:
+        slug = f"ops-image-{uuid4().hex}"
+        token = await _ops_cookie(monkeypatch)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            client.cookies.set("ops_session", token)
+            response = await client.post(
+                "/v1/ops/knowledge/import",
+                data={"mode": "file", "slug": slug, "title": "扫描指南"},
+                files={"file": ("guide.jpg", b"\xff\xd8\xffimage", "image/jpeg")},
+            )
+    finally:
+        await background_client.aclose()
 
     assert response.status_code == 200
     document = response.json()["documents"][0]
@@ -222,6 +234,80 @@ async def test_ops_import_image_uses_ocr(monkeypatch: pytest.MonkeyPatch) -> Non
     assert document["chunk_count"] >= 1
     assert document["ocr_pages"] == 1
     assert document["text_layer_pages"] == 0
+
+
+@pytest.mark.anyio
+async def test_ops_import_pdf_uses_vision_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_pdf_vision(
+        data: bytes,
+        *,
+        http_client: httpx.AsyncClient,
+        settings: object,
+    ) -> tuple[str, int, int]:
+        assert data == b"%PDF-1.4 fake pdf bytes"
+        return "[第 1 页]\n第一页内容。\n\n[第 2 页]\n第二页内容。", 0, 2
+
+    monkeypatch.setattr("agent_api.api.ops_knowledge.extract_pdf_text_vision", fake_pdf_vision)
+    settings = get_settings().model_copy(update={"background_vision_model": "vision-model"})
+    monkeypatch.setattr("agent_api.api.ops_knowledge.get_settings", lambda: settings)
+
+    background_client = httpx.AsyncClient()
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel()),
+        model_semaphore=asyncio.Semaphore(1),
+        background_http_client=background_client,
+    )
+    try:
+        slug = f"ops-pdf-{uuid4().hex}"
+        token = await _ops_cookie(monkeypatch)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            client.cookies.set("ops_session", token)
+            response = await client.post(
+                "/v1/ops/knowledge/import",
+                data={"mode": "pdf", "slug": slug, "title": "扫描手册"},
+                files={"file": ("guide.pdf", b"%PDF-1.4 fake pdf bytes", "application/pdf")},
+            )
+    finally:
+        await background_client.aclose()
+
+    assert response.status_code == 200
+    document = response.json()["documents"][0]
+    assert document["slug"] == slug
+    assert document["title"] == "扫描手册"
+    assert document["chunk_count"] >= 1
+    assert document["ocr_pages"] == 2
+    assert document["text_layer_pages"] == 0
+
+
+@pytest.mark.anyio
+async def test_ops_import_file_without_vision_model_returns_400(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = get_settings().model_copy(update={"background_vision_model": ""})
+    monkeypatch.setattr("agent_api.api.ops_knowledge.get_settings", lambda: settings)
+
+    background_client = httpx.AsyncClient()
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel()),
+        model_semaphore=asyncio.Semaphore(1),
+        background_http_client=background_client,
+    )
+    try:
+        token = await _ops_cookie(monkeypatch)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            client.cookies.set("ops_session", token)
+            response = await client.post(
+                "/v1/ops/knowledge/import",
+                data={"mode": "file", "slug": "no-vision-model", "title": "未配置视觉模型"},
+                files={"file": ("guide.jpg", b"\xff\xd8\xffimage", "image/jpeg")},
+            )
+    finally:
+        await background_client.aclose()
+
+    assert response.status_code == 400
+    assert "BACKGROUND_VISION_MODEL" in str(response.json()["detail"])
 
 
 @pytest.mark.anyio

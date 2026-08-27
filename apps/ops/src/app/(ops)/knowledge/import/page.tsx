@@ -315,8 +315,8 @@ export default function KnowledgeImportPage() {
                 <div className="doc-card__meta">
                   <span>{document.chunk_count} 条切片</span>
                   <span>{document.overwrote ? "已覆盖原文档" : "新建文档"}</span>
-                  <span>文本层 {document.text_layer_pages} 页</span>
-                  <span>OCR {document.ocr_pages} 页</span>
+                  <span>文本层回退 {document.text_layer_pages} 页</span>
+                  <span>视觉解析 {document.ocr_pages} 页</span>
                 </div>
               </article>
             ))}

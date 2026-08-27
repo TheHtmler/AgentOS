@@ -26,10 +26,13 @@ from agent_api.db.models import (
 )
 from agent_api.db.session import session_factory
 from agent_api.knowledge.normalize import normalize_json_payload, normalize_plain_text
-from agent_api.knowledge.ocr_client import OcrError, ocr_image_bytes
-from agent_api.knowledge.pdf_extract import extract_pdf_text
 from agent_api.knowledge.types import ChunkSpec, DocumentSpec
 from agent_api.knowledge.url_extract import fetch_url_text
+from agent_api.knowledge.vision_extract import (
+    VisionExtractError,
+    extract_image_text_vision,
+    extract_pdf_text_vision,
+)
 from agent_api.runtime import AgentRuntime
 
 router = APIRouter(prefix="/v1/ops/knowledge", tags=["ops-knowledge"])
@@ -122,7 +125,10 @@ class ImportDocumentOut(BaseModel):
     title: str
     chunk_count: int
     overwrote: bool
+    # Pages/images the background vision model transcribed (field name kept for
+    # Ops frontend compatibility; no longer "OCR" — see knowledge/vision_extract.py).
     ocr_pages: int
+    # PDF pages where the vision call failed and the raw PyMuPDF text layer was used instead.
     text_layer_pages: int
 
 
@@ -310,25 +316,16 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
     is_json = mime == "application/json" or suffix in _JSON_SUFFIXES
     is_text = mime.startswith("text/") or suffix in _TEXT_SUFFIXES
 
-    if is_image:
-        if not settings.ocr_enabled:
-            raise ValueError("图片导入需要开启 OCR。请检查 OCR_ENABLED 与 OCR_BASE_URL。")
-        async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
-            body = await ocr_image_bytes(data, client=client, settings=settings)
-            spec = normalize_plain_text(slug=slug, title=title, body=body)
-            return await _persist_import(
-                [spec],
-                base_slug=base_slug,
-                created_by=subject,
-                http_client=_background_http_client(request),
-                ocr_pages=1,
+    if is_image or is_pdf:
+        vision_client = _background_http_client(request)
+        if vision_client is None or not settings.resolved_background_vision_model:
+            raise ValueError(
+                "PDF/图片导入需要先配置 BACKGROUND_VISION_MODEL（及 BACKGROUND_BASE_URL）。",
             )
-
-    if is_pdf:
-        async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
-            body, text_layer_pages, ocr_pages = await extract_pdf_text(
+        if is_image:
+            body = await extract_image_text_vision(
                 data,
-                client=client,
+                http_client=vision_client,
                 settings=settings,
             )
             spec = normalize_plain_text(slug=slug, title=title, body=body)
@@ -336,10 +333,24 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
                 [spec],
                 base_slug=base_slug,
                 created_by=subject,
-                http_client=_background_http_client(request),
-                text_layer_pages=text_layer_pages,
-                ocr_pages=ocr_pages,
+                http_client=vision_client,
+                ocr_pages=1,
             )
+
+        body, text_layer_pages, ocr_pages = await extract_pdf_text_vision(
+            data,
+            http_client=vision_client,
+            settings=settings,
+        )
+        spec = normalize_plain_text(slug=slug, title=title, body=body)
+        return await _persist_import(
+            [spec],
+            base_slug=base_slug,
+            created_by=subject,
+            http_client=vision_client,
+            text_layer_pages=text_layer_pages,
+            ocr_pages=ocr_pages,
+        )
 
     if is_json:
         payload = cast(dict[str, Any], json.loads(data.decode("utf-8")))
@@ -379,7 +390,7 @@ async def import_knowledge(
         if content_type.startswith("multipart/form-data"):
             return await _import_multipart(request, subject)
         raise ValueError("content type must be application/json or multipart/form-data")
-    except OcrError as exc:
+    except VisionExtractError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
