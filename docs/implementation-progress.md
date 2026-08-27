@@ -135,6 +135,7 @@
 - Codex 风格工作区对齐：侧栏+主聊天布局复刻与收敛、composer 对齐、会话列表与 composer 解耦、会话项列对齐与溢出收敛、聊天元数据与移动端布局修复、新建会话默认选中 General。
 - 部署脚本：swap 构建前清理旧 `.next/types`（已删路由的旧类型会被 tsconfig include 拉进构建期检查）。
 - 配置修复：`apps/ops/.env.example` 的 `AGENT_API_BASE_URL` 由 `:8000` 修正为 `:8100`(8000 被 OCR 占用；与 ops-api 默认值/plist/部署脚本对齐）。
+- P0 快修（2026-08-27)：模型溢出用户文案改为按解析出的 provider `context_window` 取值（`user_facing_run_error_message(context_window=)`，两条链路传入，不再硬编码 16k);MCP toolset 启动失败降级为「日志 + 剔除该 toolset」并同步重建共享 agent，不再拖垮整个 app 启动；删除侧栏「搜索/计划任务/插件/站点」四个无 handler 占位按钮（「插件」与 docs/16 取舍相悖）;register 页文案中文化；清理已拆除运行时面板的全部死 CSS(`agentos-runtime-*`/`agentos-context-*`/`codex-agent-summary`/`codex-runtime-row` 等，活类名已逐一核对保留）与旧流程遗留的 `/api/auth/verify` BFF 路由。
 
 ## 验证
 
@@ -163,16 +164,14 @@
 - 数据卫生：`run_events.text_delta` 只写不读——历史回放走 messages 表、实时流走内存 broker、Ops 时间线显式排除，是 `run_events` 体积主因；`runs.status='queued'` 无任何写入路径（无入队实现）;`user_sessions`/`auth_tokens`/`ops_sessions` 三张会话类表无过期清理任务；`case_facts.source_thread_id/source_run_id` 写而不读（响应不含、Ops 无查看面）。
 - Sandbox:Manager 生产镜像治理、执行外工作区 GC（磁盘配额 watcher 仅执行期生效）、CPU-秒累计配额、终端/WebSocket、`_USER_LOCKS` 按用户只增不减（长期运行内存小漏）、真实 Mac mini Docker 烟测未验收。
 - 知识库：chunk 在线编辑未做（快照一键恢复已有）；多 base 只做一半——文档/切片 ID 命名空间、`_knowledge_base_for_slug` 自动建库、Ops 列表与导入全部硬编码 `mma-pa`,`GET /v1/ops/knowledge/bases` 无消费方。
-- MCP:Ops 仅展示登记清单不提供服务器配置（按 docs/16 演进触发条件执行）;MCP toolset enter 失败会拖垮整个 app 启动（默认 `mcp_enabled=false`，平时不暴露）。
+- MCP:Ops 仅展示登记清单不提供服务器配置（按 docs/16 演进触发条件执行）。
 - 工具策略与审计：参数级细规则（按 URL/命令）未做；操作审计表未落库。
-- Web 残留：侧栏「搜索/计划任务/插件/站点」四个无 handler 占位按钮（「插件」与 docs/16 取舍共识相悖，应删而非实装）;register 页文案为英文，与全站中文不一致；已拆除面板的死 CSS(`agentos-runtime-*` 等）未清；`/api/auth/verify` BFF 路由为旧流程遗留（注册已走 inspect+register)。
-- 其他：模型溢出用户文案硬编码「16k tokens」（远程 provider 窗口可配后会误导）;`upload_max_files_per_message` 配置预留未接（当前一条消息一个附件）;`model_step` 耗时为整 run 墙钟（AG-UI adapter 不暴露逐请求边界）。
+- 其他：`upload_max_files_per_message` 配置预留未接（当前一条消息一个附件）;`model_step` 耗时为整 run 墙钟（AG-UI adapter 不暴露逐请求边界）。
 
 ## 下一步
 
-按轻重缓急分档（依据：16GB Mac mini 单并发部署、invite-only 小规模医疗场景用户、docs/16 既定取舍）。
+按轻重缓急分档（依据：16GB Mac mini 单并发部署、invite-only 小规模医疗场景用户、docs/16 既定取舍）。P0 快修档已于 2026-08-27 完成（见「已完成」)。
 
-- P0 快修（小时级，消除误导与地雷）：溢出文案按解析出的 provider `context_window` 取值；删除或实装侧栏四个死按钮；register 页中文化；MCP toolset enter 失败降级为「日志 + 不挂 MCP」而非启动失败；清理死 CSS 与遗留 BFF 路由。
 - P1 数据卫生（Mac mini 长跑慢性病，越早越省）:`text_delta` 停写或采样（先最终确认无消费方）+ `queued` 死状态清理；三张会话/token 表加过期清理（可复用 lifespan 里 `hitl_timeout_loop` 的循环模式）;Sandbox 执行外工作区 GC 与 `_USER_LOCKS` 清理；Case fact reject（状态枚举已有，补写路径 + 横幅按钮）。
 - P2 产品闭环：用户面记忆查看/删除（医疗隐私正当性，Ops 已有同款 GET/DELETE 可参照）;Ops 用户管理页（禁用/重发邀请，账号生命周期的最小闭环）;magic link 补签发路径或从 schema 移除；多知识库通用化（ID 命名空间 + Ops base 切换，第二个垂类入库前必做）;knowledge P0 评测迁通用 eval runner。
 - P3 大项（等产品信号再动）：领域扩展表与高级 Case ACL；外部 MCP 服务器配置面（按 docs/16 触发条件：先多服务器注册/连接探测/AgentVersion 绑定）；参数级 tool policy + 审计表；Sandbox 生产化（镜像治理/终端/配额/真实烟测）；多 ops 账号；组织级租户。
