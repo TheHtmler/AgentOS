@@ -9,11 +9,12 @@
   -> Next.js BFF 路由（同域代理，鉴权 Cookie 透传）
   -> FastAPI (services/agent-api)
        1. start_run 落库（thread/run 事实，单运行约束）
-       2. 加载注入块：Case 档案 / 记忆召回 / 上传 Artifact 预览 / 视觉页渲染
-       3. 组装：稳定指令 + user 角色上下文快照 + 预算裁剪后的历史
-       4. pydantic-ai agent loop（工具循环 + HITL 中断）
+       2. 急症红旗检测（emergency.py）：命中则流首插入独立就医提示，不经模型
+       3. 加载注入块：Case 档案 / 记忆召回 / 上传 Artifact 预览 / 视觉页渲染
+       4. 组装：稳定指令 + user 角色上下文快照 + 预算裁剪后的历史
+       5. pydantic-ai agent loop（工具循环 + HITL 中断）
           └─ 每个模型请求前：step 级预算压力检查
-       5. 流式事件回写浏览器；Run/消息/工具事件/token 用量落 PostgreSQL
+       6. 流式事件回写浏览器；Run/消息/工具事件/token 用量落 PostgreSQL
   -> Ollama (qwen3-vl:8b-instruct, num_ctx 16k) 或 Agent 版本配置的远程 OpenAI-compatible 端点
   -> PaddleOCR sidecar (:8787)
 ```
@@ -27,6 +28,14 @@
 - **注入位置**(`inject_context_snapshot`)：新 run 放历史**末尾**（事实贴近当前问题，历史前缀可被 Ollama KV 复用）;HITL 续跑放**开头**（避免拆散检查点尾部的工具调用/结果配对）。
 
 设计意图：小模型（8B）对长 system prompt 的遵循度随长度快速衰减；指令稳定（可缓存）+ 数据当数据，是让 8B 模型行为可预期的前提。
+
+## 急症红旗提示（代码强制）
+
+核心文件：`services/agent-api/src/agent_api/emergency.py`。
+
+- AG-UI 链路对每条用户消息跑 `detect_emergency_signal`：六类刻意收窄的正则——意识（叫不醒/昏迷）、抽搐、呼吸（困难/急促/深快）、循环（嘴唇发紫/休克）、持续呕吐/拒食嗜睡组合、代谢特异（反应差/精神明显变差）。普通发热咳嗽不触发，避免普通感冒每轮报警。
+- 命中后的就医提示**不经过模型**：流上在 `RunStartedEvent` 之后立即插入一条独立 `EMERGENCY_NOTICE` 文本消息（建议尽快就医/联系急诊评估），持久化的 assistant 内容前也拼接同一提示——直播与刷新后历史一致，模型自己的回答冲不掉它。
+- 动机：MMA/PA 人群急性失代偿是已知高风险场景，8B 模型靠 prompt 约束不保证升级提示稳定输出，所以这条提示由代码保证。测试：`tests/test_emergency.py`；行为场景：`eval/scenarios/` 中的 emergency 场景（真实模型）。
 
 ## 上下文预算体系
 

@@ -1,12 +1,14 @@
 # 实施进度
 
-最后更新：2026-08-25（Sandbox 文件发现与聊天预览）
+最后更新：2026-08-27（按代码现状全面核对：补记 Provider/急症提示/置顶/Codex 工作区，未完成项按代码重写）
 
 ## 当前状态
 
 前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与 MMA/PA `knowledge_search` 已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。Run、Artifact、用户记忆和多看护人基础 ACL 已绑定 Case 作用域。公共知识库已有 P0 策展切片与混合检索、运营审核与文档快照。平台 util 工具（`time_diff` / `calculate`）与薄评测 runner + foundation golden suite 已落地。聊天模型已切换为 `agentos-qwen3vl:16k`：16k 上下文、单流并发、Qwen3-VL 报告视觉输入和更大的 OCR 预览均已接入。新增用户级 Sandbox MVP：独立 Sandbox Manager、用户工作区、默认禁网/非 root/资源限制、命令输出 Artifact 和可配置策略的 `sandbox_exec` 工具；Ops Agent 版本页可逐项配置内置工具策略。
 
-本轮 Sandbox 仍是 opt-in：未配置 Manager token 或 `SANDBOX_ENABLED=true` 时不会挂载执行工具。工作区目录使用规范化用户账号索引，UUID 仍用于权限和并发锁；已有 UUID 目录首次访问时自动迁移。受限工作区内的 `sandbox_exec` 平台默认允许执行，Ops 仍可逐版本改为审批或禁止。命令执行前后会发现新增/修改文件并回传元数据；聊天通过当前登录用户校验后在对应生成位置显示文件名，并在右侧按需预览文本、图片和 PDF，其他 MIME 提供下载，单文件服务受 `SANDBOX_FILE_MAX_BYTES` 限制。Manager 的生产镜像治理、配额/清理后台、终端/WebSocket 和真实 Mac mini Docker 烟测仍需单独验收。
+本轮 Sandbox 仍是 opt-in：未配置 Manager token 或 `SANDBOX_ENABLED=true` 时不会挂载执行工具。工作区目录使用规范化用户账号索引，UUID 仍用于权限和并发锁；已有 UUID 目录首次访问时自动迁移。受限工作区内的 `sandbox_exec` 平台默认允许执行，Ops 仍可逐版本改为审批或禁止。命令执行前后会发现新增/修改文件并回传元数据；聊天通过当前登录用户校验后在对应生成位置显示文件名，并在右侧按需预览文本、图片和 PDF，其他 MIME 提供下载，单文件服务受 `SANDBOX_FILE_MAX_BYTES` 限制。Manager 的生产镜像治理、执行外工作区 GC、终端/WebSocket 和真实 Mac mini Docker 烟测仍需单独验收。
+
+远程模型 Provider 体系已落地：Agent 版本可静态绑定 OpenAI-compatible 端点（含 responses 模式与 reasoning 摘要），Ops 完整 CRUD,api_key 只写不读；儿科急症红旗提示由代码强制（`emergency.py`)，不依赖模型自觉。前端已完成 Codex 风格工作区对齐与会话置顶。
 
 已完成：
 
@@ -124,6 +126,15 @@
 - Thinking 展示修复：Responses provider 的 reasoning 同时带可读 summary 与加密签名，前端此前被末尾的 encrypted 事件无条件降级为「加密 reasoning 不可读」；现在已有可读内容时保留文本，仅在没有可读内容时才标注加密。想看流式 thinking 的配置：`responses` 模式 + `reasoning_summary`(auto/concise/detailed);chat_completions 形态是否可见取决于端点是否透传 `reasoning_content`。
 - 部署 502 修复：`macmini-deploy.sh` 的 bootout 是异步的，旧进程可能数秒内仍占着 3000/3001(SSE 长连接更慢），新进程随即 bootstrap 撞 EADDRINUSE 进入 KeepAlive 崩溃退避，表现为「部署后 502、再跑一次才好」；现在 bootout 后等服务注册项与端口都释放才 swap 启动，启动后等 HTTP 就绪，不就绪在脚本输出里告警（`/tmp/agentos-{web,ops}.out.log`)。另修自更新竞态：bash 边读边执行，`git pull` 换掉脚本本身会按旧偏移续读新文件（首次部署新脚本时等于跑错位代码），现在 pull 后检测到脚本变化即 `exec` 新版本（`--no-pull` + 原始参数）。
 - Mermaid 图表渲染：` ```mermaid ` 代码块在前端渲染为 SVG 图（动态 import mermaid，按需加载不进主 bundle);300ms 防抖吸收流式半截源码，解析失败保留上一帧、无成功帧则回落代码视图；「代码/图表」切换；`securityLevel: "strict"`，跟随 light/dark 主题。这是纯前端渲染，与 MCP/工具无关。支持放大预览：工具栏「放大」或点击图面打开全屏浮层（portal 到 body,Esc/点空白关闭，锁定背景滚动）,±/重置缩放按 viewBox 自然宽度换算，手机上可拖动查看细节。
+- 模型 Provider 体系（08-19/20 落地，本次补记）:`model_providers` 表（迁移 `b3c4d5e6f7a8` 起）+ 内置 `local` 行每次启动从 env 重同步 + 远程 OpenAI-compatible 端点（`api_mode=chat_completions/responses`、可选 `reasoning_summary`、`context_window`、`max_concurrent_runs`、`supports_vision`/`supports_tools`);`agent_versions.model_provider_id` 发布级静态绑定，解析失败 409 不静默换模型；每个远程 provider 独立并发信号量，不被本地 1 并发阻塞；Ops Providers 页完整 CRUD,api_key 响应只有 `sk-...xxxx` 掩码，被版本引用禁删；`supports_tools=false` 的绑定在 AG-UI 与 HITL 续跑两条链路 fail-fast 409;`supports_vision=false` 跳过视觉加载并向产品端透出供 UI 提示。
+- 儿科急症红旗提示（代码强制，此前无任何文档）:`emergency.py` 六类收窄关键词检测（意识/抽搐/呼吸/循环/呕吐拒食嗜睡/代谢特异，普通发热咳嗽不触发）;AG-UI 链路命中后在 `RunStartedEvent` 流首插入独立 `EMERGENCY_NOTICE` 消息，并拼入持久化 assistant 内容，直播与历史一致；`tests/test_emergency.py` 覆盖。
+- 富工具结果卡片与统一预览面板：实时与历史工具卡渲染结构化结果（knowledge 命中片段/搜索链接/fetch 链接/read_artifact 正文窗口/sandbox 生成文件列表）；附件与 sandbox 文件预览统一进右侧可拖宽面板（文本直读/图片 objectURL/PDF sandbox iframe/其他下载）。
+- 平台基础指令领域中立化：`SYSTEM_INSTRUCTIONS` 去除垂类耦合，领域行为归 Agent overlay。
+- Sandbox 加固：stdout/stderr 有界流式截顶（head+tail，绝不全量缓冲）;执行期工作区磁盘配额 watcher（默认 1GiB，超限杀容器）；容器 `docker rm -f` 兜底。
+- 会话置顶：`threads.is_pinned`（迁移 `r4s5t6u7v8`),`PATCH /v1/threads/{id}` 置顶/取消，桌面侧栏独立「已固定」区。
+- Codex 风格工作区对齐：侧栏+主聊天布局复刻与收敛、composer 对齐、会话列表与 composer 解耦、会话项列对齐与溢出收敛、聊天元数据与移动端布局修复、新建会话默认选中 General。
+- 部署脚本：swap 构建前清理旧 `.next/types`（已删路由的旧类型会被 tsconfig include 拉进构建期检查）。
+- 配置修复：`apps/ops/.env.example` 的 `AGENT_API_BASE_URL` 由 `:8000` 修正为 `:8100`(8000 被 OCR 占用；与 ops-api 默认值/plist/部署脚本对齐）。
 
 ## 验证
 
@@ -144,13 +155,24 @@
 
 ## 未完成
 
-- 邀请邮件送达、再登录 magic link、用户禁用与管理员审计。
-- Artifact 原文件下载、完整 `messages.role=tool` 模型历史对齐，以及 Artifact 审计记录（聊天报告上传/OCR 已落地，见上）。
-- Chunk 在线编辑（快照一键恢复已落地）。
-- 运营后台扩展：外部 MCP 服务器配置、多 ops 账号表。
-- 更复杂的 Case ACL（邀请生命周期、所有权转移、组织/临床角色）、领域扩展表（如护理计划/化验时间线）；Sandbox 配额清理、终端/WebSocket；账号变更后的历史工作区治理；侧栏按工具类型的富展示。
-- 参数级 Tool Policy（如按 URL/命令细规则）、审计表落库。
+> 2026-08-27 按代码逐条核对重写；每条附代码证据。
+
+- 账号体系：邀请邮件送达（仍靠管理员手动转发链接）;magic link 再登录为半建——`auth_tokens.purpose='magic_link'` 被 schema 与 `/v1/auth/verify` 接受，但全仓没有签发点；用户禁用无写入路径（`users.status='disabled'` 仅被登录校验读取）;Ops 无用户管理页；管理员审计未做。
+- Case:proposed fact 只能 confirm 不能 reject(`rejected` 状态无任何写入方，待确认横幅永不消）;Case 改名/归档/删除 API 缺失（`archived` 为死状态）；创建/成员/默认管理只有 API+BFF、无 UI（当前设计为对话内隐式，属预留）；高级 ACL（邀请生命周期/所有权转移/组织/临床角色）与领域扩展表（护理计划/化验时间线）未做。
+- Artifact 与记忆治理：Artifact 无列表/更新/删除 API，孤儿 Artifact 无清理，`kind='other'` 死值；Artifact 审计记录缺失；`messages.role=tool` 完整模型历史对齐未做（历史经 `run_events` 摘要重建，已是稳定做法）；用户自己的记忆无查看/删除 API（仅 Ops 侧 GET/DELETE)。
+- 数据卫生：`run_events.text_delta` 只写不读——历史回放走 messages 表、实时流走内存 broker、Ops 时间线显式排除，是 `run_events` 体积主因；`runs.status='queued'` 无任何写入路径（无入队实现）;`user_sessions`/`auth_tokens`/`ops_sessions` 三张会话类表无过期清理任务；`case_facts.source_thread_id/source_run_id` 写而不读（响应不含、Ops 无查看面）。
+- Sandbox:Manager 生产镜像治理、执行外工作区 GC（磁盘配额 watcher 仅执行期生效）、CPU-秒累计配额、终端/WebSocket、`_USER_LOCKS` 按用户只增不减（长期运行内存小漏）、真实 Mac mini Docker 烟测未验收。
+- 知识库：chunk 在线编辑未做（快照一键恢复已有）；多 base 只做一半——文档/切片 ID 命名空间、`_knowledge_base_for_slug` 自动建库、Ops 列表与导入全部硬编码 `mma-pa`,`GET /v1/ops/knowledge/bases` 无消费方。
+- MCP:Ops 仅展示登记清单不提供服务器配置（按 docs/16 演进触发条件执行）;MCP toolset enter 失败会拖垮整个 app 启动（默认 `mcp_enabled=false`，平时不暴露）。
+- 工具策略与审计：参数级细规则（按 URL/命令）未做；操作审计表未落库。
+- Web 残留：侧栏「搜索/计划任务/插件/站点」四个无 handler 占位按钮（「插件」与 docs/16 取舍共识相悖，应删而非实装）;register 页文案为英文，与全站中文不一致；已拆除面板的死 CSS(`agentos-runtime-*` 等）未清；`/api/auth/verify` BFF 路由为旧流程遗留（注册已走 inspect+register)。
+- 其他：模型溢出用户文案硬编码「16k tokens」（远程 provider 窗口可配后会误导）;`upload_max_files_per_message` 配置预留未接（当前一条消息一个附件）;`model_step` 耗时为整 run 墙钟（AG-UI adapter 不暴露逐请求边界）。
 
 ## 下一步
 
-平台基础能力：模型/Provider 档位；可选将 knowledge P0 迁到通用 eval runner。领域侧在 Case 之上挂医疗扩展与多看护人授权；运营侧可继续做 chunk 编辑、外部 MCP 配置与多账号。
+按轻重缓急分档（依据：16GB Mac mini 单并发部署、invite-only 小规模医疗场景用户、docs/16 既定取舍）。
+
+- P0 快修（小时级，消除误导与地雷）：溢出文案按解析出的 provider `context_window` 取值；删除或实装侧栏四个死按钮；register 页中文化；MCP toolset enter 失败降级为「日志 + 不挂 MCP」而非启动失败；清理死 CSS 与遗留 BFF 路由。
+- P1 数据卫生（Mac mini 长跑慢性病，越早越省）:`text_delta` 停写或采样（先最终确认无消费方）+ `queued` 死状态清理；三张会话/token 表加过期清理（可复用 lifespan 里 `hitl_timeout_loop` 的循环模式）;Sandbox 执行外工作区 GC 与 `_USER_LOCKS` 清理；Case fact reject（状态枚举已有，补写路径 + 横幅按钮）。
+- P2 产品闭环：用户面记忆查看/删除（医疗隐私正当性，Ops 已有同款 GET/DELETE 可参照）;Ops 用户管理页（禁用/重发邀请，账号生命周期的最小闭环）;magic link 补签发路径或从 schema 移除；多知识库通用化（ID 命名空间 + Ops base 切换，第二个垂类入库前必做）;knowledge P0 评测迁通用 eval runner。
+- P3 大项（等产品信号再动）：领域扩展表与高级 Case ACL；外部 MCP 服务器配置面（按 docs/16 触发条件：先多服务器注册/连接探测/AgentVersion 绑定）；参数级 tool policy + 审计表；Sandbox 生产化（镜像治理/终端/配额/真实烟测）；多 ops 账号；组织级租户。
