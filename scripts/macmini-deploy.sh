@@ -229,7 +229,10 @@ if [[ "$DO_PULL" -eq 1 ]]; then
   git merge --ff-only "${remote}/${branch}"
   if [[ "$(shasum "$SELF" | awk '{print $1}')" != "$self_before" ]]; then
     log "deploy script changed by pull — re-exec the new version"
-    exec bash "$SELF" --no-pull "${ORIG_ARGS[@]}"
+    # ${arr[@]+...} guard: under `set -u`, bash < 4.4 (e.g. macOS 3.2) errors
+    # with "unbound variable" when expanding an EMPTY array via "${arr[@]}".
+    # The guarded form expands to nothing when ORIG_ARGS is empty on every bash.
+    exec bash "$SELF" --no-pull ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
   fi
 else
   log "skip git pull"
