@@ -14,4 +14,5 @@ class SearchProvider(Protocol):
         *,
         max_results: int,
         timeout: float,
+        domains: tuple[str, ...] = (),
     ) -> SearchResponse: ...

@@ -325,6 +325,7 @@ async def create_scheduled_task(
             )
             session.add(task)
             await session.flush()
+            await session.refresh(task)
             agent = await session.get(Agent, task.agent_id)
             return await _to_response(session, task, agent.name if agent is not None else "")
     except ScheduleValidationError as error:
@@ -429,6 +430,8 @@ async def update_scheduled_task(
                 task.timezone = timezone_name
                 task.next_run_at = next_at
                 task.status = "active"
+            await session.flush()
+            await session.refresh(task)
             return await _to_response(session, task, agent_name)
     except ScheduleValidationError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -454,6 +457,8 @@ async def _set_task_status(task_id: UUID, user_id: UUID, next_status: str) -> Sc
                 task.timezone,
                 now=datetime.now(UTC),
             )
+        await session.flush()
+        await session.refresh(task)
         return await _to_response(session, task, agent_name)
 
 
@@ -484,6 +489,8 @@ async def mark_scheduled_task_read(
             raise HTTPException(status_code=404, detail="Scheduled task not found")
         task, agent_name = row
         task.result_read_at = datetime.now(UTC)
+        await session.flush()
+        await session.refresh(task)
         return await _to_response(session, task, agent_name)
 
 

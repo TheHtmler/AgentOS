@@ -217,6 +217,14 @@ async def _next_message_seq(session: AsyncSession, thread_id: UUID) -> int:
 
 
 async def _next_run_event_seq(session: AsyncSession, run_id: UUID) -> int:
+    # Tool callbacks persist through separate short-lived sessions. Locking the
+    # parent Run serializes max(seq)+1 allocation and prevents duplicate events
+    # when independent tool/result callbacks finish together.
+    run_exists = await session.scalar(
+        select(Run.id).where(Run.id == run_id).with_for_update(),
+    )
+    if run_exists is None:
+        raise RunNotFoundError(f"Run {run_id} does not exist")
     last_seq = await session.scalar(
         select(func.coalesce(func.max(RunEvent.seq), 0)).where(RunEvent.run_id == run_id),
     )
@@ -725,7 +733,15 @@ async def start_run(
         session,
         run_id=run.id,
         event_type="run_started",
-        payload={"status": "running"},
+        payload={
+            "status": "running",
+            "execution_mode": "scheduled" if scheduled_task_id is not None else "interactive",
+            **(
+                {"scheduled_task_id": str(scheduled_task_id)}
+                if scheduled_task_id is not None
+                else {}
+            ),
+        },
     )
 
     return StartedRun(thread_id=thread.id, run_id=run.id)

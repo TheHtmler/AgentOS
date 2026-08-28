@@ -79,6 +79,7 @@ async def test_run_facts_are_ordered_and_rollback_cleanly(
         ]
         assert run is not None
         assert run.status == "completed"
+        assert events[0].payload["execution_mode"] == "interactive"
         assert [(event.seq, event.event_type) for event in events] == [
             (1, "run_started"),
             (2, "text_delta"),

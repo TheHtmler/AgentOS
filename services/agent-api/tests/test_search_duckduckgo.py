@@ -14,7 +14,7 @@ async def test_duckduckgo_maps_results(monkeypatch: pytest.MonkeyPatch) -> None:
             return None
 
         def text(self, query: str, max_results: int = 5) -> list[dict[str, str]]:
-            assert query == "agentos"
+            assert query == "site:github.com agentos"
             assert max_results == 3
             return [
                 {
@@ -29,7 +29,12 @@ async def test_duckduckgo_maps_results(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("agent_api.tools.search.duckduckgo.RawDDGS", fake_ddgs)
     provider = DuckDuckGoProvider()
-    response = await provider.search("agentos", max_results=3, timeout=5.0)
+    response = await provider.search(
+        "agentos",
+        max_results=3,
+        timeout=5.0,
+        domains=("github.com",),
+    )
     assert response.provider == "duckduckgo"
     assert response.results[0].url == "https://example.com/agentos"
     assert response.results[0].snippet == "runtime"

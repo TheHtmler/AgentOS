@@ -29,6 +29,7 @@ class FakeProvider:
         *,
         max_results: int,
         timeout: float,
+        domains: tuple[str, ...] = (),
     ) -> SearchResponse:
         self.calls += 1
         if self._error is not None:
@@ -76,7 +77,7 @@ async def test_router_failsover_on_recoverable_error() -> None:
 
 
 @pytest.mark.anyio
-async def test_router_does_not_failover_on_empty_results() -> None:
+async def test_router_failsover_on_empty_results() -> None:
     tavily = FakeProvider(
         "tavily",
         response=SearchResponse(provider="tavily", query="q", results=[]),
@@ -91,8 +92,8 @@ async def test_router_does_not_failover_on_empty_results() -> None:
     )
     router = SearchRouter([tavily, ddg])
     result = await router.search("q", max_results=3, timeout=5.0)
-    assert result.provider == "tavily"
-    assert ddg.calls == 0
+    assert result.provider == "duckduckgo"
+    assert ddg.calls == 1
 
 
 @pytest.mark.anyio

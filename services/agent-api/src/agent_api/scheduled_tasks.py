@@ -28,6 +28,7 @@ from agent_api.db.chat_store import (
 from agent_api.db.models import Run, ScheduledTask
 from agent_api.db.session import session_factory
 from agent_api.runtime import AgentRuntime
+from agent_api.runtime_context import ScheduledTaskExecutionContext
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,23 @@ class ClaimedScheduledTask:
     run_id: UUID
     scheduled_for: datetime
     prompt: str
+    execution_context: ScheduledTaskExecutionContext
+
+
+def _execution_context(
+    task: ScheduledTask,
+    *,
+    scheduled_for: datetime,
+) -> ScheduledTaskExecutionContext:
+    return ScheduledTaskExecutionContext(
+        task_id=task.id,
+        title=task.title,
+        schedule_type=task.schedule_type,
+        timezone=task.timezone,
+        scheduled_for=scheduled_for,
+        previous_run_at=task.last_run_at,
+        previous_run_status=task.last_run_status,
+    )
 
 
 async def _task_for_update(
@@ -238,6 +256,8 @@ async def claim_due_task(
     scheduled_for = task.next_run_at
     if scheduled_for is None:
         return None
+
+    execution_context = _execution_context(task, scheduled_for=scheduled_for)
 
     # Advance before model work so a slow run cannot be claimed twice. A process
     # restart leaves the ordinary Run recoverable by the existing orphan sweep.
@@ -290,6 +310,7 @@ async def claim_due_task(
         run_id=started.run_id,
         scheduled_for=scheduled_for,
         prompt=task.prompt,
+        execution_context=execution_context,
     )
 
 
@@ -305,6 +326,7 @@ async def start_manual_task(
     task = await _task_for_update(session, task_id=task_id, user_id=user_id)
     if task is None or task.thread_id is None:
         raise LookupError(f"scheduled task {task_id} does not exist")
+    execution_context = _execution_context(task, scheduled_for=now)
     try:
         started = await start_run(
             session,
@@ -324,15 +346,25 @@ async def start_manual_task(
         run_id=started.run_id,
         scheduled_for=now,
         prompt=task.prompt,
+        execution_context=execution_context,
     )
 
 
 class _ScheduledRequest:
     """Small internal Request surface used to consume the existing AG-UI stream."""
 
-    def __init__(self, app: FastAPI, started: StartedRun, body: bytes) -> None:
+    def __init__(
+        self,
+        app: FastAPI,
+        started: StartedRun,
+        body: bytes,
+        scheduled_task_context: ScheduledTaskExecutionContext,
+    ) -> None:
         self.app = app
-        self.state = SimpleNamespace(prestarted_run=started)
+        self.state = SimpleNamespace(
+            prestarted_run=started,
+            scheduled_task_context=scheduled_task_context,
+        )
         self.headers = {"accept": "text/event-stream"}
         self._body = body
 
@@ -384,6 +416,7 @@ async def execute_claimed_task_with_user(
         app,
         StartedRun(thread_id=claim.thread_id, run_id=claim.run_id),
         input_payload.model_dump_json(by_alias=True).encode(),
+        claim.execution_context,
     )
     try:
         response = await stream_ag_ui_run(cast(Request, request), user)

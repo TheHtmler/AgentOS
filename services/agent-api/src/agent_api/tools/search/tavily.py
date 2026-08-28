@@ -34,6 +34,7 @@ class TavilyProvider:
         *,
         max_results: int,
         timeout: float,
+        domains: tuple[str, ...] = (),
     ) -> SearchResponse:
         if not self.is_available():
             raise SearchProviderError(
@@ -43,13 +44,15 @@ class TavilyProvider:
             )
 
         url = f"{self._base_url}/search"
-        payload = {
+        payload: dict[str, Any] = {
             "api_key": self._api_key,
             "query": query,
             "max_results": max_results,
             "include_answer": False,
             "search_depth": "basic",
         }
+        if domains:
+            payload["include_domains"] = list(domains)
 
         try:
             response = await self._http_client.post(

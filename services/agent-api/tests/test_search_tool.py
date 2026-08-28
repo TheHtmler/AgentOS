@@ -20,6 +20,7 @@ class FakeProvider:
         *,
         max_results: int,
         timeout: float,
+        domains: tuple[str, ...] = (),
     ) -> SearchResponse:
         return SearchResponse(
             provider=self.name,
@@ -46,6 +47,7 @@ class FailingProvider:
         *,
         max_results: int,
         timeout: float,
+        domains: tuple[str, ...] = (),
     ) -> SearchResponse:
         raise SearchProviderError("down", provider=self.name, recoverable=True)
 
@@ -70,6 +72,50 @@ async def test_run_web_search_returns_error_json() -> None:
     payload = json.loads(await run_web_search(deps, "agentos"))
     assert "error" in payload
     assert payload["query"] == "agentos"
+
+
+@pytest.mark.anyio
+async def test_run_web_search_normalizes_and_forwards_domains() -> None:
+    class ScopedProvider(FakeProvider):
+        def __init__(self) -> None:
+            self.received_domains: tuple[str, ...] | None = None
+
+        async def search(
+            self,
+            query: str,
+            *,
+            max_results: int,
+            timeout: float,
+            domains: tuple[str, ...] = (),
+        ) -> SearchResponse:
+            self.received_domains = domains
+            return await super().search(
+                query,
+                max_results=max_results,
+                timeout=timeout,
+                domains=domains,
+            )
+
+    provider = ScopedProvider()
+    deps = AgentDeps(search_router=SearchRouter([provider]), persist_tool_events=False)
+    payload = json.loads(
+        await run_web_search(
+            deps,
+            "github trending",
+            domains=["https://github.com/", "github.com"],
+        )
+    )
+
+    assert payload["provider"] == "duckduckgo"
+    assert provider.received_domains == ("github.com",)
+
+
+@pytest.mark.anyio
+async def test_run_web_search_rejects_non_host_domain() -> None:
+    deps = AgentDeps(search_router=SearchRouter([FakeProvider()]), persist_tool_events=False)
+    payload = json.loads(await run_web_search(deps, "agentos", domains=["github.com/trending"]))
+
+    assert "invalid search domain" in payload["error"]
 
 
 @pytest.mark.anyio

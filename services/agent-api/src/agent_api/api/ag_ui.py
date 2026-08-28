@@ -80,6 +80,7 @@ from agent_api.memory.extract import schedule_memory_extract
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import get_runtime
+from agent_api.runtime_context import ScheduledTaskExecutionContext
 from agent_api.thread_title import schedule_auto_thread_title
 from agent_api.tools.search.tool import AgentDeps
 from agent_api.uploads.context import load_upload_injection
@@ -212,6 +213,10 @@ async def stream_ag_ui_run(
         except ThreadBusyError as error:
             raise HTTPException(status_code=409, detail="Thread is already running") from error
 
+    scheduled_task_context = getattr(request.state, "scheduled_task_context", None)
+    if not isinstance(scheduled_task_context, ScheduledTaskExecutionContext):
+        scheduled_task_context = None
+
     run_started_at = time.monotonic()
     # First text/reasoning content latency, captured in the produce loop below;
     # stays None for runs that end on a pure tool loop without visible output.
@@ -286,13 +291,20 @@ async def stream_ag_ui_run(
                     logger.exception("upload vision failed; continuing without image parts")
                     vision_parts = []
 
-        history = await load_thread_model_history(
-            started.thread_id,
-            user_id=user.id,
-            history_max_runs=resolve_version_tuning(
-                version.history_max_runs,
-                settings.history_max_runs,
-            ),
+        # Scheduled runs retain their task Thread for user-visible history, but do not
+        # feed prior model turns back into the next execution. The task context carries
+        # only the small, intentional continuity needed by the scheduler.
+        history = (
+            []
+            if scheduled_task_context is not None
+            else await load_thread_model_history(
+                started.thread_id,
+                user_id=user.id,
+                history_max_runs=resolve_version_tuning(
+                    version.history_max_runs,
+                    settings.history_max_runs,
+                ),
+            )
         )
 
         async with session_factory() as session, session.begin():
@@ -305,6 +317,7 @@ async def stream_ag_ui_run(
             memory_block=memory_block,
             case_block=case_block,
             upload_block=upload_block,
+            scheduled_task_context=scheduled_task_context,
             timezone_name=settings.runtime_timezone,
             locale=settings.runtime_locale,
         )
@@ -339,7 +352,14 @@ async def stream_ag_ui_run(
         )
         budget_report.log(run_id=started.run_id)
         await persist_context_budget_event(started.run_id, budget_report, phase="pre_run")
-        history = inject_context_snapshot(history, snapshot)
+        # Keep the saved task prompt as the final user message. Some model adapters
+        # treat a trailing synthetic user block as the current prompt when two user
+        # messages are adjacent; scheduled runs put the metadata before the prompt.
+        history = inject_context_snapshot(
+            history,
+            snapshot,
+            position="start" if scheduled_task_context is not None else "end",
+        )
         agent = runtime.build_run_agent(
             system_prompt_overlay=version.system_prompt_overlay,
             tool_policy_overrides=version.tool_policy_overrides,

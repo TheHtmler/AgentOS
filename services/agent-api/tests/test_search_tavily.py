@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -9,6 +11,8 @@ from agent_api.tools.search.types import SearchProviderError
 async def test_tavily_maps_results() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/search"
+        request_payload = json.loads(request.content)
+        assert request_payload["include_domains"] == ["github.com"]
         return httpx.Response(
             200,
             json={
@@ -29,7 +33,12 @@ async def test_tavily_maps_results() -> None:
         base_url="https://api.tavily.com",
     ) as client:
         provider = TavilyProvider(api_key="tvly-test", http_client=client)
-        response = await provider.search("q", max_results=5, timeout=5.0)
+        response = await provider.search(
+            "q",
+            max_results=5,
+            timeout=5.0,
+            domains=("github.com",),
+        )
 
     assert response.provider == "tavily"
     assert response.results[0].snippet == "Hello"

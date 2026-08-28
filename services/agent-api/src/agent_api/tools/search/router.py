@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class SearchRouter:
-    """Try configured search providers in order until one succeeds."""
+    """Try configured search providers in order until one returns useful results."""
 
     def __init__(self, providers: list[SearchProvider]) -> None:
         self._providers = providers
@@ -26,6 +26,7 @@ class SearchRouter:
         *,
         max_results: int,
         timeout: float,
+        domains: tuple[str, ...] = (),
     ) -> SearchResponse:
         normalized = query.strip()
         if not normalized:
@@ -33,6 +34,7 @@ class SearchRouter:
 
         attempted: list[str] = []
         last_error: SearchProviderError | None = None
+        empty_response: SearchResponse | None = None
 
         for provider in self._providers:
             if not provider.is_available():
@@ -41,11 +43,19 @@ class SearchRouter:
 
             attempted.append(provider.name)
             try:
-                # Empty result lists are still successes; do not failover.
-                return await provider.search(
+                response = await provider.search(
                     normalized,
                     max_results=max_results,
                     timeout=timeout,
+                    domains=domains,
+                )
+                if response.results:
+                    return response
+                if empty_response is None:
+                    empty_response = response
+                logger.info(
+                    "Search provider %s returned no results; trying the next provider",
+                    provider.name,
                 )
             except SearchProviderError as exc:
                 last_error = exc
@@ -56,6 +66,9 @@ class SearchRouter:
                     exc,
                 )
                 continue
+
+        if empty_response is not None:
+            return empty_response
 
         detail = ", ".join(attempted) if attempted else "none"
         message = f"all search providers failed (attempted: {detail})"

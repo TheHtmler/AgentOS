@@ -40,10 +40,11 @@ class DuckDuckGoProvider:
         *,
         max_results: int,
         timeout: float,
+        domains: tuple[str, ...] = (),
     ) -> SearchResponse:
         try:
             raw_results = await asyncio.wait_for(
-                asyncio.to_thread(self._search_sync, query, max_results),
+                asyncio.to_thread(self._search_sync, query, max_results, domains),
                 timeout=timeout,
             )
         except TimeoutError as exc:
@@ -77,7 +78,13 @@ class DuckDuckGoProvider:
 
         return SearchResponse(provider=self.name, query=query, results=results)
 
-    def _search_sync(self, query: str, max_results: int) -> list[dict[str, Any]]:
+    def _search_sync(
+        self,
+        query: str,
+        max_results: int,
+        domains: tuple[str, ...] = (),
+    ) -> list[dict[str, Any]]:
+        scoped_query = " ".join([*(f"site:{domain}" for domain in domains), query])
         with _ddgs_factory() as client:
-            rows = list(client.text(query, max_results=max_results))
+            rows = list(client.text(scoped_query, max_results=max_results))
         return [cast(dict[str, Any], row) for row in rows]

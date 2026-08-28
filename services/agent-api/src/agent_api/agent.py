@@ -22,7 +22,11 @@ from pydantic_ai.toolsets import AbstractToolset
 from agent_api.config import Settings, get_settings
 from agent_api.context_budget import BudgetReport, make_step_history_processor
 from agent_api.db.provider_store import ResolvedModelProfile, local_profile_from_settings
-from agent_api.runtime_context import format_runtime_context_pack
+from agent_api.runtime_context import (
+    ScheduledTaskExecutionContext,
+    format_runtime_context_pack,
+    format_scheduled_task_context,
+)
 from agent_api.tools.fetch.router import FetchRouter
 from agent_api.tools.policy import PolicyAction
 from agent_api.tools.registry import mounted_tool_names, mounted_tools
@@ -112,6 +116,21 @@ one short caveat after the deliverable (or omit if already covered).
   completion.
 """
 
+SCHEDULED_TASK_INSTRUCTIONS = """\
+## Capability: scheduled task execution
+When the per-run context contains `Scheduled task execution`, the scheduler has already
+created and authorized the task. Treat the saved user prompt as an action to perform now,
+not as a request to design or create a schedule.
+- Complete the requested deliverable in this run.
+- For fresh or external data, call the relevant mounted read-only tools before answering;
+  retrieve each independent source the task explicitly requests.
+- Never ask for deployment location, schedule time, or notification destination during a
+  scheduled run unless the saved task genuinely cannot proceed without that missing fact.
+- A refusal, capability disclaimer, or plan without the requested deliverable is not a
+  successful completion. If execution cannot finish, state the concrete failure.
+- Keep scheduler metadata and internal identifiers out of the user-facing result.
+"""
+
 SEARCH_INSTRUCTIONS = """\
 ## Capability: web_search
 Use when you need fresh or externally grounded facts: current events, changing APIs/docs,
@@ -119,6 +138,9 @@ reference standards/charts/guidelines, or references the user did not paste in f
 Prefer a mounted domain tool over web_search when that tool covers the need.
 If the user names an identifiable external reference (platform + id/title/URL) and the
 content is not in the thread, search first; do not ask them to paste recoverables.
+When the source is known, pass its host in `domains` (for example `github.com`) so the
+search stays on that source. For predictable public pages, fetch the canonical URL directly
+when possible; for GitHub Trending use `/trending?since=daily` and `/trending?since=weekly`.
 Ambiguous match → pick the best-supported result, state the assumption in one line, continue.
 Base claims on tool results and include source URLs. Never pretend you searched if you did not.
 """
@@ -273,7 +295,7 @@ def build_instructions(
     instruction prefix stays cache-stable and small models can tell rules from data.
     """
 
-    sections = [SYSTEM_INSTRUCTIONS]
+    sections = [SYSTEM_INSTRUCTIONS, SCHEDULED_TASK_INSTRUCTIONS]
     if overlay and overlay.strip():
         sections.append(overlay.strip())
     # Upload/report formatting applies to every artifact-capable Agent; keying on the
@@ -307,6 +329,7 @@ def build_context_snapshot(
     memory_block: str | None = None,
     case_block: str | None = None,
     upload_block: str | None = None,
+    scheduled_task_context: ScheduledTaskExecutionContext | None = None,
     timezone_name: str = "Asia/Shanghai",
     locale: str = "zh-CN",
     now: datetime | None = None,
@@ -323,7 +346,12 @@ def build_context_snapshot(
         # Fresh every call so "today" stays correct without relying on model world knowledge.
         format_runtime_context_pack(now=now, timezone_name=timezone_name, locale=locale),
     ]
-    for block in (memory_block, case_block, upload_block):
+    scheduled_block = (
+        format_scheduled_task_context(scheduled_task_context)
+        if scheduled_task_context is not None
+        else None
+    )
+    for block in (scheduled_block, memory_block, case_block, upload_block):
         if block and block.strip():
             sections.append(block.strip())
     return "\n\n".join(sections)

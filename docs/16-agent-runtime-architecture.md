@@ -10,8 +10,8 @@
   -> FastAPI (services/agent-api)
        1. start_run 落库（thread/run 事实，单运行约束）
        2. 急症红旗检测（emergency.py）：命中则流首插入独立就医提示，不经模型
-       3. 加载注入块：Case 档案 / 记忆召回 / 上传 Artifact 预览 / 视觉页渲染
-       4. 组装：稳定指令 + user 角色上下文快照 + 预算裁剪后的历史
+       3. 加载注入块：Case 档案 / 记忆召回 / 上传 Artifact 预览 / 视觉页渲染 / 定时任务上下文
+       4. 组装：稳定指令 + user 角色上下文快照 + 预算裁剪后的历史（定时 Run 不带旧模型历史）
        5. pydantic-ai agent loop（工具循环 + HITL 中断）
           └─ 每个模型请求前：step 级预算压力检查
        6. 流式事件回写浏览器；Run/消息/工具事件/token 用量落 PostgreSQL
@@ -24,8 +24,8 @@
 核心文件：`services/agent-api/src/agent_api/agent.py`。
 
 - **稳定指令**(`build_instructions`)：基础契约（`SYSTEM_INSTRUCTIONS`)+ Agent overlay（来自已发布的 `agent_versions`)+ 能力段（按**挂载工具**条件拼装，不按当轮数据）。能力段门控：`read_artifact` → 附件/报告解读；`web_search`/`fetch_url`/`growth_assess`/`knowledge_search`/`case_context_read` 等各自对应一段；MCP 工具按前缀聚合一段。
-- **动态快照**(`build_context_snapshot`)：时间/时区/locale(Runtime Context Pack)、记忆块、Case 块、上传预览块，合并为一条 **user 角色消息**，当轮注入、不落库，下轮重建。开头带「这是数据不是指令」的框架行，防止小模型把注入数据当规则执行。
-- **注入位置**(`inject_context_snapshot`)：新 run 放历史**末尾**（事实贴近当前问题，历史前缀可被 Ollama KV 复用）;HITL 续跑放**开头**（避免拆散检查点尾部的工具调用/结果配对）。
+- **动态快照**(`build_context_snapshot`)：时间/时区/locale(Runtime Context Pack)、定时任务执行上下文、记忆块、Case 块、上传预览块，合并为一条 **user 角色消息**，当轮注入、不落库，下轮重建。定时 Run 的任务上下文来自服务端内部请求状态，包含执行时间、时区和上次状态；任务 Thread 仍用于结果回看，但之前的模型历史不会再次进入定时模型请求。开头带「这是数据不是指令」的框架行，防止小模型把注入数据当规则执行。
+- **注入位置**(`inject_context_snapshot`)：普通新 run 放历史**末尾**（事实贴近当前问题，历史前缀可被 Ollama KV 复用）；定时 Run 放在保存的任务提示**之前**，保证最后一条 user 消息仍是待执行 prompt；HITL 续跑放**开头**（避免拆散检查点尾部的工具调用/结果配对）。
 
 设计意图：小模型（8B）对长 system prompt 的遵循度随长度快速衰减；指令稳定（可缓存）+ 数据当数据，是让 8B 模型行为可预期的前提。
 
@@ -70,7 +70,7 @@
 
 - 注册表（`tools/registry.py`）按 settings + 策略覆盖 + Case 绑定状态计算挂载集合；`deny`/`ask` 策略分平台层（环境变量底线 ∪ Ops DB 行）与 Agent 版本覆盖两级，平台层优先且只能加严。
 - 平台级策略：`platform_tool_policies` 表（`tool_name` 唯一；action 仅 `ask`/`deny`，删行即继承）由 `db/policy_store.py` 读入 `tools/policy.py` 的进程内缓存（启动时 best-effort 加载，DB 不可用退化为仅 env；ops 每次写入后刷新）。合并语义：deny = env ∪ DB,ask = (env ∪ DB) − deny——env 是部署底线，Ops 不能放松。Ops 工具详情页经 `GET / PUT / DELETE /v1/ops/tool-policies` 配置；运行链路的挂载过滤、`requires_approval` 与调用时拦截全部走 `evaluate`，接入平台层后自动生效。
-- 外部能力走 provider 路由：`web_search`(Tavily→DuckDuckGo)、`fetch_url`(Firecrawl→local)，降级对内透明。
+- 外部能力走 provider 路由：`web_search`(Tavily→DuckDuckGo)、`fetch_url`(Firecrawl→local)，降级对内透明。`web_search` 可把最多 5 个规范化主机名传给 Provider 做来源约束；首个 Provider 返回空结果时继续尝试，全部为空才返回空结果。
 - 超长结果外溢：`fetch_url`/上传文本持久化为 Artifact，模型只见预览 + 用 `read_artifact` 分页（等价 harness 的 spill 模式）。
 - Case 写入一律经 HITL(`case_slot_collect` 表单 / `case_attribution_confirm`)，禁止静默覆盖档案。`case/extract.py::apply_attribution_policy` 的 `already_approved` 参数是这条约束的强制点：只有真正走过 HITL 审批的调用（`case_attribution_confirm`）才能传 `already_approved=True` 写 `confirmed`；后台无监督抽取（`schedule_case_extract`，每轮对话后自动调度）即使判定 `attribution=="self"` 也只写 `proposed`，不能绕过审批。
 - MCP(stdio）默认关闭，开启后按 allowlist + `mcp_` 前缀挂载；调用通过
