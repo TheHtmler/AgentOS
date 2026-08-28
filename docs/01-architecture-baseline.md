@@ -81,7 +81,7 @@ SSE 负责 Agent 事件输出；普通 HTTP POST 负责创建、恢复和取消�
 
 | 领域       | 表                                                              |
 | ---------- | --------------------------------------------------------------- |
-| 身份与租户 | `tenants`、`users`、`memberships`                               |
+| 身份与租户 | `tenants`、`users`、`memberships`、`user_channel_bindings`      |
 | Agent 配置 | `agents`、`agent_versions`、`model_configs`、`knowledge_bases`  |
 | 领域上下文 | `cases`、`case_memberships`、`case_facts`、`care_plans`         |
 | 对话与运行 | `threads`、`messages`、`runs`、`run_events`                     |

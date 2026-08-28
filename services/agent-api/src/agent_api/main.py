@@ -8,6 +8,7 @@ from agent_api.api.auth import router as auth_router
 from agent_api.api.cases import router as cases_router
 from agent_api.api.ops_agents import router as ops_agents_router
 from agent_api.api.ops_auth import router as ops_auth_router
+from agent_api.api.ops_channel_bindings import router as ops_channel_bindings_router
 from agent_api.api.ops_knowledge import router as ops_knowledge_router
 from agent_api.api.ops_memories import router as ops_memories_router
 from agent_api.api.ops_providers import router as ops_providers_router
@@ -45,6 +46,7 @@ app.include_router(runs_router)
 app.include_router(sandboxes_router)
 app.include_router(auth_router)
 app.include_router(ops_auth_router)
+app.include_router(ops_channel_bindings_router)
 app.include_router(ops_stats_router)
 app.include_router(ops_knowledge_router)
 app.include_router(ops_memories_router)

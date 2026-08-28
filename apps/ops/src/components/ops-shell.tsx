@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { BookOpen, Bot, Cpu, LayoutGrid, MessageSquare, Plug, Wrench } from "lucide-react";
+import { BookOpen, Bot, Cpu, Link2, LayoutGrid, MessageSquare, Plug, Wrench } from "lucide-react";
 
-type NavIconName = "grid" | "book" | "bot" | "chat" | "tool" | "plug" | "chip";
+type NavIconName = "grid" | "book" | "bot" | "chat" | "tool" | "plug" | "chip" | "link";
 
 type NavItem = {
   href: string;
@@ -24,6 +24,7 @@ const NAV_GROUPS: { label: string; items: readonly NavItem[] }[] = [
       { href: "/knowledge", label: "知识库", icon: "book" },
       { href: "/agents", label: "智能体", icon: "bot" },
       { href: "/providers", label: "模型", icon: "chip" },
+      { href: "/channel-bindings", label: "账号绑定", icon: "link" },
       { href: "/tools", label: "工具", icon: "tool" },
     ],
   },
@@ -61,6 +62,9 @@ function NavIcon({ name }: { name: NavIconName }) {
   }
   if (name === "chip") {
     return <Cpu className={cls} aria-hidden="true" />;
+  }
+  if (name === "link") {
+    return <Link2 className={cls} aria-hidden="true" />;
   }
   return <Plug className={cls} aria-hidden="true" />;
 }

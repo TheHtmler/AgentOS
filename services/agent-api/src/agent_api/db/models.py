@@ -106,6 +106,97 @@ class UserSession(Base):
     )
 
 
+class UserChannelBinding(Base):
+    """Map one AgentOS user to one external channel peer and its permissions."""
+
+    __tablename__ = "user_channel_bindings"
+    __table_args__ = (
+        CheckConstraint(
+            "channel IN ('openclaw-weixin')",
+            name="ck_user_channel_bindings_channel",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'disabled')",
+            name="ck_user_channel_bindings_status",
+        ),
+        CheckConstraint(
+            "length(trim(account_id)) > 0",
+            name="ck_user_channel_bindings_account_id",
+        ),
+        CheckConstraint(
+            "length(trim(peer_id)) > 0",
+            name="ck_user_channel_bindings_peer_id",
+        ),
+        UniqueConstraint(
+            "channel",
+            "account_id",
+            "peer_id",
+            name="uq_user_channel_bindings_endpoint",
+        ),
+        Index(
+            "ix_user_channel_bindings_user_channel",
+            "user_id",
+            "channel",
+        ),
+        Index(
+            "uq_user_channel_bindings_default",
+            "user_id",
+            "channel",
+            unique=True,
+            postgresql_where=text("is_default = true"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    # The channel account is the OpenClaw bot identity; peer_id is the target chat.
+    channel: Mapped[str] = mapped_column(String(64), nullable=False)
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    peer_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        server_default=text("'active'"),
+        nullable=False,
+    )
+    receive_notifications: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("true"),
+        nullable=False,
+    )
+    allow_openclaw: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("false"),
+        nullable=False,
+    )
+    allow_agentos: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("false"),
+        nullable=False,
+    )
+    is_default: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("false"),
+        nullable=False,
+    )
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class OpsSession(Base):
     """Revocable ops-console session (env root subject; not a user_sessions row)."""
 
