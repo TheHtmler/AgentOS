@@ -138,6 +138,9 @@ class Settings(BaseSettings):
     # only in env — never in the DB or any API response.
     background_vision_base_url: str = ""
     background_vision_api_key: str = ""
+    # Vision transcription can take longer than the local PaddleOCR timeout,
+    # especially for dense or high-resolution standalone images.
+    background_vision_timeout_seconds: float = 180.0
     # Read-only MCP (stdio). Default off; enable after reviewing allowlist.
     mcp_enabled: bool = False
     # Empty command → built-in PubMed readonly server module.
@@ -236,6 +239,14 @@ class Settings(BaseSettings):
     def fetch_url_timeout_seconds_must_be_positive(cls, value: float) -> float:
         if value <= 0:
             raise ValueError("fetch_url_timeout_seconds must be greater than 0")
+
+        return value
+
+    @field_validator("background_vision_timeout_seconds")
+    @classmethod
+    def background_vision_timeout_seconds_must_be_positive(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("background_vision_timeout_seconds must be greater than 0")
 
         return value
 

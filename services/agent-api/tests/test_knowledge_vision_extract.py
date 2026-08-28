@@ -165,6 +165,25 @@ async def test_extract_image_text_vision_transcribes_via_background_model() -> N
 
 
 @pytest.mark.anyio
+async def test_extract_image_text_vision_uses_dedicated_timeout() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        timeout = request.extensions["timeout"]
+        assert isinstance(timeout, dict)
+        assert timeout["read"] == 91.0
+        return httpx.Response(200, json={"choices": [{"message": {"content": "正文"}}]})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        text = await extract_image_text_vision(
+            b"\xff\xd8\xffimage",
+            http_client=client,
+            settings=_settings(background_vision_timeout_seconds=91),
+        )
+
+    assert text == "正文"
+
+
+@pytest.mark.anyio
 async def test_extract_image_text_vision_strips_think_tags() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(

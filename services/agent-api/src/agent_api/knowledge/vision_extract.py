@@ -77,12 +77,13 @@ async def _transcribe_image(
                 "max_tokens": 2048,
                 "temperature": 0,
             },
-            timeout=settings.ocr_timeout_seconds,
+            timeout=settings.background_vision_timeout_seconds,
         )
         response.raise_for_status()
     except httpx.TimeoutException as exc:
         raise VisionExtractError(
-            "视觉模型请求超时，请检查 BACKGROUND_VISION_BASE_URL/BACKGROUND_BASE_URL 是否正常。"
+            "视觉模型请求超时，请检查 BACKGROUND_VISION_BASE_URL/BACKGROUND_BASE_URL 是否正常，"
+            "或增大 BACKGROUND_VISION_TIMEOUT_SECONDS。"
         ) from exc
     except httpx.HTTPStatusError as exc:
         raise VisionExtractError(
