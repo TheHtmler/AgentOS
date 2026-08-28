@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, MouseEvent, useEffect, useMemo, useState } from "react";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { CalendarClock, MoreHorizontal, Plus } from "lucide-react";
 
 import {
   AlertDialog,
@@ -21,6 +21,8 @@ export type Conversation = {
   is_pinned: boolean;
   latest_message_content: string | null;
   updated_at: string;
+  scheduled_task_id: string | null;
+  scheduled_task_title: string | null;
 };
 
 type ConversationListProps = {
@@ -52,7 +54,9 @@ function isConversation(value: unknown): value is Conversation {
     (typeof value.title === "string" || value.title === null) &&
     typeof value.is_pinned === "boolean" &&
     (typeof value.latest_message_content === "string" || value.latest_message_content === null) &&
-    typeof value.updated_at === "string"
+    typeof value.updated_at === "string" &&
+    (typeof value.scheduled_task_id === "string" || value.scheduled_task_id === null) &&
+    (typeof value.scheduled_task_title === "string" || value.scheduled_task_title === null)
   );
 }
 
@@ -456,6 +460,19 @@ export function ConversationList({
                         >
                           <div className="agentos-conversation-title-row">
                             <p className="agentos-conversation-title">
+                              {conversation.scheduled_task_id ? (
+                                <span
+                                  title={
+                                    conversation.scheduled_task_title
+                                      ? `定时任务：${conversation.scheduled_task_title}`
+                                      : "定时任务会话"
+                                  }
+                                  aria-label="定时任务会话"
+                                  className="mr-1 inline-flex align-[-0.1em] text-[var(--accent)]"
+                                >
+                                  <CalendarClock aria-hidden="true" className="size-3" />
+                                </span>
+                              ) : null}
                               {conversationLabel(conversation)}
                               {isStreaming ? (
                                 <span className="agentos-conversation-status is-streaming">

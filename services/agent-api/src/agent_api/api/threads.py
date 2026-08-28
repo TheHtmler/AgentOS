@@ -41,6 +41,8 @@ class ThreadSummaryResponse(BaseModel):
     is_pinned: bool
     latest_message_content: str | None
     updated_at: datetime
+    scheduled_task_id: UUID | None
+    scheduled_task_title: str | None
 
 
 class ThreadListResponse(BaseModel):
@@ -190,6 +192,8 @@ async def get_threads(
                 is_pinned=thread.is_pinned,
                 latest_message_content=thread.latest_message_content,
                 updated_at=thread.updated_at,
+                scheduled_task_id=thread.scheduled_task_id,
+                scheduled_task_title=thread.scheduled_task_title,
             )
             for thread in threads
         ],

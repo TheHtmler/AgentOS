@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,7 @@ from agent_api.db.models import (
     Run,
     RunEvent,
     RunMessageHistory,
+    ScheduledTask,
     Thread,
 )
 from agent_api.hitl_types import ApprovalRequest, InterruptDecision
@@ -62,6 +63,8 @@ class ThreadListItem:
     is_pinned: bool
     latest_message_content: str | None
     updated_at: datetime
+    scheduled_task_id: UUID | None
+    scheduled_task_title: str | None
 
 
 @dataclass(frozen=True)
@@ -515,9 +518,24 @@ async def list_threads(
         .scalar_subquery()
     )
 
-    statement = select(Thread, latest_message_content).where(
-        Thread.user_id == user_id,
-        Thread.deleted_at.is_(None),
+    statement = (
+        select(
+            Thread,
+            latest_message_content,
+            ScheduledTask.id,
+            ScheduledTask.title,
+        )
+        .outerjoin(
+            ScheduledTask,
+            and_(
+                ScheduledTask.thread_id == Thread.id,
+                ScheduledTask.owner_user_id == user_id,
+            ),
+        )
+        .where(
+            Thread.user_id == user_id,
+            Thread.deleted_at.is_(None),
+        )
     )
     if agent_id is not None:
         statement = statement.where(Thread.agent_id == agent_id)
@@ -534,8 +552,10 @@ async def list_threads(
             is_pinned=thread.is_pinned,
             latest_message_content=message_content,
             updated_at=thread.updated_at,
+            scheduled_task_id=scheduled_task_id,
+            scheduled_task_title=scheduled_task_title,
         )
-        for thread, message_content in result.tuples()
+        for thread, message_content, scheduled_task_id, scheduled_task_title in result.tuples()
     ]
 
 

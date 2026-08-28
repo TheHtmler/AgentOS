@@ -53,6 +53,8 @@ Agent API lifespan 启动一个进程内 `ScheduledTaskScheduler`，默认每 15
 
 Next.js Web BFF 只代理上述用户端点，不把 Agent API 地址或 session token 暴露给浏览器。Web 入口在聊天工作区的「定时任务」视图；任务的专属会话仍通过现有 Thread 历史 API 打开。
 
+聊天侧栏的 `GET /v1/threads` 会为任务专属 Thread 返回 `scheduled_task_id` 和 `scheduled_task_title`；普通会话这两个字段为 `null`。Web 使用任务专属的日历时钟图标标识该历史会话，点击后仍按普通 Thread 历史链路打开，不改变任务执行或权限边界。
+
 ## 日历规则
 
 - 一次性：`run_at` 必须是未来时间；没有指定时区的时间按请求中的 IANA 时区解释。

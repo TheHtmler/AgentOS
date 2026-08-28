@@ -18,7 +18,15 @@ from agent_api.db.chat_store import (
     pause_run_for_approval,
     start_run,
 )
-from agent_api.db.models import Agent, Run, RunEvent, RunMessageHistory, Thread, User
+from agent_api.db.models import (
+    Agent,
+    Run,
+    RunEvent,
+    RunMessageHistory,
+    ScheduledTask,
+    Thread,
+    User,
+)
 from agent_api.hitl_types import ApprovalRequest
 
 
@@ -421,6 +429,49 @@ async def test_list_threads_filters_by_agent(database_session: AsyncSession) -> 
 
         assert [thread.id for thread in threads] == [parenting.thread_id]
         assert general.thread_id not in {thread.id for thread in threads}
+    finally:
+        await transaction.rollback()
+
+
+@pytest.mark.anyio
+async def test_list_threads_marks_scheduled_task_sessions(database_session: AsyncSession) -> None:
+    session = database_session
+    transaction = await session.begin()
+
+    try:
+        user = User(email="scheduled-session@example.com", status="active")
+        session.add(user)
+        await session.flush()
+        general_id = await session.scalar(select(Agent.id).where(Agent.slug == "general"))
+        assert general_id is not None
+
+        started = await start_run(
+            session,
+            thread_id=None,
+            user_content="定时任务内容",
+            model_name="gemma4:e4b",
+            user_id=user.id,
+            agent_id=general_id,
+        )
+        session.add(
+            ScheduledTask(
+                owner_user_id=user.id,
+                agent_id=general_id,
+                thread_id=started.thread_id,
+                title="每日任务",
+                prompt="定时任务内容",
+                schedule_type="daily",
+                schedule_config={"time_of_day": "09:00"},
+                timezone="Asia/Shanghai",
+            )
+        )
+        await session.flush()
+
+        threads = await list_threads(session, limit=20, user_id=user.id)
+
+        assert len(threads) == 1
+        assert threads[0].scheduled_task_id is not None
+        assert threads[0].scheduled_task_title == "每日任务"
     finally:
         await transaction.rollback()
 
