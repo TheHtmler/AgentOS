@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
-import { OpsFetchError, opsJson } from "@/lib/ops-fetch";
+import { OpsFetchError, errorMessage as fetchErrorMessage, opsJson } from "@/lib/ops-fetch";
 
 type ImportMode = "json" | "text" | "url" | "file";
 
@@ -66,10 +66,7 @@ const JSON_EXAMPLE = JSON.stringify(
 
 function errorMessage(body: unknown, status: number): string {
   if (body && typeof body === "object") {
-    const detail = "detail" in body ? body.detail : undefined;
-    const error = "error" in body ? body.error : undefined;
-    if (typeof detail === "string") return detail;
-    if (typeof error === "string") return error;
+    return fetchErrorMessage(body as { detail?: string; error?: string }, status);
   }
   return `导入失败（${status}）`;
 }
@@ -238,7 +235,7 @@ export default function KnowledgeImportPage() {
       <form className="panel stack" onSubmit={submitImport}>
         {mode === "json" ? (
           <label>
-            Seed 格式 JSON
+            <span className="req">*</span>Seed 格式 JSON
             <textarea
               rows={16}
               value={jsonBody}
@@ -246,6 +243,9 @@ export default function KnowledgeImportPage() {
               spellCheck={false}
               onChange={(event) => setJsonBody(event.target.value)}
             />
+            <span className="field-hint">
+              批量导入的文档数组；每个文档含 slug、title 和 chunks（切片）。
+            </span>
           </label>
         ) : null}
 
@@ -253,16 +253,19 @@ export default function KnowledgeImportPage() {
           <>
             <div className="form-grid cols-2">
               <label>
-                文档标识
+                <span className="req">*</span>文档标识
                 <input
                   value={slug}
                   required
                   placeholder="例如：mma-guideline"
                   onChange={(event) => setSlug(event.target.value)}
                 />
+                <span className="field-hint">
+                  文档的唯一标识；相同标识再导入会覆盖旧版并保留快照。
+                </span>
               </label>
               <label>
-                标题
+                <span className="req">*</span>标题
                 <input
                   value={title}
                   required
@@ -272,7 +275,7 @@ export default function KnowledgeImportPage() {
               </label>
             </div>
             <label>
-              正文
+              <span className="req">*</span>正文
               <textarea
                 rows={14}
                 value={textBody}
@@ -287,7 +290,7 @@ export default function KnowledgeImportPage() {
         {mode === "url" ? (
           <>
             <label>
-              网页链接
+              <span className="req">*</span>网页链接
               <input
                 type="url"
                 value={url}
@@ -295,16 +298,20 @@ export default function KnowledgeImportPage() {
                 placeholder="https://example.com/article"
                 onChange={(event) => setUrl(event.target.value)}
               />
+              <span className="field-hint">
+                抓取网页正文后导入；抓取失败会显示在文档的失败状态里。
+              </span>
             </label>
             <div className="form-grid cols-2">
               <label>
-                文档标识
+                <span className="req">*</span>文档标识
                 <input
                   value={slug}
                   required
                   placeholder="例如：source-article"
                   onChange={(event) => setSlug(event.target.value)}
                 />
+                <span className="field-hint">唯一标识；相同标识再导入会覆盖并保留快照。</span>
               </label>
               <label>
                 标题（可选）
@@ -340,6 +347,7 @@ export default function KnowledgeImportPage() {
                   placeholder="留空则根据文件名生成"
                   onChange={(event) => setSlug(event.target.value)}
                 />
+                <span className="field-hint">相同标识再导入会覆盖旧版并保留快照。</span>
               </label>
               <label>
                 标题（可选）

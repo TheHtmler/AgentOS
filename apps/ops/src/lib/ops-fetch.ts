@@ -7,6 +7,20 @@ export class OpsFetchError extends Error {
   }
 }
 
+/** Surface backend error detail in actionable Chinese wherever possible. */
+
+export function errorMessage(
+  body: { detail?: string; error?: string } | null,
+  status: number,
+): string {
+  if (body?.detail) return body.detail;
+  if (body?.error === "agent_api_unavailable") {
+    return "后端服务不可用：无法连接 agent-api，请确认服务已启动（或部署后已就绪）";
+  }
+  if (body?.error) return body.error;
+  return `请求失败（${status}）`;
+}
+
 export async function opsJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     ...init,
@@ -21,10 +35,7 @@ export async function opsJson<T>(input: string, init?: RequestInit): Promise<T> 
       detail?: string;
       error?: string;
     } | null;
-    throw new OpsFetchError(
-      response.status,
-      body?.detail ?? body?.error ?? `请求失败（${response.status}）`,
-    );
+    throw new OpsFetchError(response.status, errorMessage(body, response.status));
   }
   if (response.status === 204) {
     return undefined as T;

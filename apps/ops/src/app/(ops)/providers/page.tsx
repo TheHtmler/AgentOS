@@ -295,7 +295,7 @@ export default function ProvidersPage() {
           <h2 className="section-title">{editing ? `编辑：${editing.name}` : "新建 Provider"}</h2>
           <div className="form-grid cols-2">
             <label>
-              标识（slug）
+              <span className="req">*</span>标识（slug）
               <input
                 value={form.slug}
                 required
@@ -306,19 +306,23 @@ export default function ProvidersPage() {
                 disabled={editing !== null}
                 onChange={(event) => patchForm({ slug: event.target.value })}
               />
+              <span className="field-hint">
+                Provider 的唯一标识，创建后不可改；小写字母、数字或连字符。
+              </span>
             </label>
             <label>
-              名称
+              <span className="req">*</span>名称
               <input
                 value={form.name}
                 required
                 placeholder="DeepSeek"
                 onChange={(event) => patchForm({ name: event.target.value })}
               />
+              <span className="field-hint">展示用名称。</span>
             </label>
           </div>
           <label>
-            Base URL（OpenAI 兼容端点）
+            <span className="req">*</span>Base URL（OpenAI 兼容端点）
             <input
               type="url"
               value={form.baseUrl}
@@ -327,10 +331,13 @@ export default function ProvidersPage() {
               spellCheck={false}
               onChange={(event) => patchForm({ baseUrl: event.target.value })}
             />
+            <span className="field-hint">
+              通常以 /v1 结尾；只填站点根会导致端点返回网页、解析失败。
+            </span>
           </label>
           <div className="form-grid cols-2">
             <label>
-              默认模型
+              <span className="req">*</span>默认模型
               <input
                 value={form.defaultModel}
                 required
@@ -338,6 +345,9 @@ export default function ProvidersPage() {
                 spellCheck={false}
                 onChange={(event) => patchForm({ defaultModel: event.target.value })}
               />
+              <span className="field-hint">
+                该端点上实际可用的模型名；填错对话会报「模型不存在」类错误。
+              </span>
             </label>
             <label>
               API 模式
@@ -394,7 +404,7 @@ export default function ProvidersPage() {
           </div>
           <div className="form-grid cols-2">
             <label>
-              上下文窗口（tokens）
+              <span className="req">*</span>上下文窗口（tokens）
               <input
                 type="number"
                 min={1}
@@ -404,9 +414,12 @@ export default function ProvidersPage() {
                 placeholder="131072"
                 onChange={(event) => patchForm({ contextWindow: event.target.value })}
               />
+              <span className="field-hint">
+                端点模型的真实窗口；预算护栏按它裁剪输入，配错会导致误裁或溢出报错。
+              </span>
             </label>
             <label>
-              最大输出 tokens
+              <span className="req">*</span>最大输出 tokens
               <input
                 type="number"
                 min={1}
@@ -416,6 +429,7 @@ export default function ProvidersPage() {
                 placeholder="8192"
                 onChange={(event) => patchForm({ maxOutputTokens: event.target.value })}
               />
+              <span className="field-hint">单次回答的最大输出长度，超出会被截断。</span>
             </label>
           </div>
           <div className="form-grid cols-2">
@@ -430,9 +444,10 @@ export default function ProvidersPage() {
                 placeholder="留空则用端点默认"
                 onChange={(event) => patchForm({ temperature: event.target.value })}
               />
+              <span className="field-hint">留空 = 使用端点默认。</span>
             </label>
             <label>
-              并发上限
+              <span className="req">*</span>并发上限
               <input
                 type="number"
                 min={1}
@@ -441,6 +456,9 @@ export default function ProvidersPage() {
                 required
                 onChange={(event) => patchForm({ maxConcurrentRuns: event.target.value })}
               />
+              <span className="field-hint">
+                该 Provider 同时进行的对话数；按端点配额设置，本地建议 1。
+              </span>
             </label>
           </div>
           <div className="filter-row">
@@ -451,6 +469,9 @@ export default function ProvidersPage() {
                 onChange={(event) => patchForm({ supportsVision: event.target.checked })}
               />
               支持图片输入 {boolZh(form.supportsVision)}
+              <span className="field-hint">
+                模型能接受图片/PDF 输入才勾选，误勾后用户发图会报错
+              </span>
             </label>
             <label className="inline-check">
               <input
@@ -459,6 +480,9 @@ export default function ProvidersPage() {
                 onChange={(event) => patchForm({ supportsTools: event.target.checked })}
               />
               支持工具调用 {boolZh(form.supportsTools)}
+              <span className="field-hint">
+                模型接受原生工具调用才勾选；不勾时绑定它的 Agent 发送时直接 409
+              </span>
             </label>
             <label className="inline-check">
               <input
@@ -467,6 +491,9 @@ export default function ProvidersPage() {
                 onChange={(event) => patchForm({ enabled: event.target.checked })}
               />
               启用 {boolZh(form.enabled)}
+              <span className="field-hint">
+                停用后新版本不能绑定；已绑定的 Agent 运行会报 409 不可用
+              </span>
             </label>
           </div>
           <div className="btn-row">

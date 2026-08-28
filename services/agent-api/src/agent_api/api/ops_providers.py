@@ -183,7 +183,7 @@ async def create_ops_model_provider(
     if payload.slug == BUILTIN_LOCAL_PROVIDER_SLUG:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"'{BUILTIN_LOCAL_PROVIDER_SLUG}' is reserved for the built-in provider",
+            detail=f"'{BUILTIN_LOCAL_PROVIDER_SLUG}' 是内置 Provider 的保留标识",
         )
 
     async with session_factory() as session, session.begin():
@@ -193,7 +193,7 @@ async def create_ops_model_provider(
         if clash is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="A model provider with this slug already exists",
+                detail="相同标识（slug）的 Provider 已存在",
             )
         provider = ModelProvider(
             slug=payload.slug,
@@ -227,19 +227,19 @@ async def patch_ops_model_provider(
 ) -> OpsModelProviderOut:
     data = payload.model_dump(exclude_unset=True)
     if not data:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="没有需要修改的字段")
 
     async with session_factory() as session, session.begin():
         provider = await session.get(ModelProvider, provider_id)
         if provider is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Model provider not found",
+                detail="Provider 不存在",
             )
         if provider.is_builtin:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="The built-in local provider is managed via env settings",
+                detail="内置本地 Provider 由环境变量管理，不可在此修改",
             )
 
         if payload.clear_api_key:
@@ -279,12 +279,12 @@ async def delete_ops_model_provider(
         if provider is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Model provider not found",
+                detail="Provider 不存在",
             )
         if provider.is_builtin:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="The built-in local provider cannot be deleted",
+                detail="内置本地 Provider 不可删除",
             )
         in_use = await session.scalar(
             select(func.count(AgentVersion.id)).where(
@@ -294,6 +294,6 @@ async def delete_ops_model_provider(
         if in_use:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Provider is referenced by agent version(s); disable it instead",
+                detail="该 Provider 仍被 Agent 版本引用，请改为停用",
             )
         await session.delete(provider)

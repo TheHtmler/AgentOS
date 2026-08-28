@@ -249,6 +249,11 @@ a.btn:hover {
   color: var(--muted);
 }
 
+.req {
+  color: var(--danger);
+  margin-right: 2px;
+}
+
 .tool-policy-list {
   display: grid;
   gap: 8px;

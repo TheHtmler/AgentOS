@@ -46,6 +46,12 @@ type OpsAgentDetail = {
   versions: OpsAgentVersion[];
 };
 
+type KnowledgeBaseOption = {
+  slug: string;
+  name: string;
+  status: string;
+};
+
 type ToolAction = "inherit" | "allow" | "ask" | "deny";
 
 type OpsTool = {
@@ -78,10 +84,34 @@ const RISK_LABELS: Record<string, string> = {
 };
 
 const TUNING_FIELDS = [
-  { key: "memory_recall_top_k", label: "记忆召回条数", min: 1, max: 50 },
-  { key: "memory_recall_max_chars", label: "记忆召回字符上限", min: 200, max: 20000 },
-  { key: "history_max_runs", label: "历史窗口 Run 数", min: 1, max: 20 },
-  { key: "agent_max_requests_per_run", label: "单 Run 请求上限", min: 1, max: 50 },
+  {
+    key: "memory_recall_top_k",
+    label: "记忆召回条数",
+    min: 1,
+    max: 50,
+    hint: "每轮对话最多注入多少条长期记忆",
+  },
+  {
+    key: "memory_recall_max_chars",
+    label: "记忆召回字符上限",
+    min: 200,
+    max: 20000,
+    hint: "注入记忆的总字符数上限",
+  },
+  {
+    key: "history_max_runs",
+    label: "历史窗口 Run 数",
+    min: 1,
+    max: 20,
+    hint: "每轮对话携带最近几轮历史",
+  },
+  {
+    key: "agent_max_requests_per_run",
+    label: "单 Run 请求上限",
+    min: 1,
+    max: 50,
+    hint: "一次回答允许的最大模型调用步数，超出自动停止",
+  },
 ] as const;
 
 type TuningKey = (typeof TUNING_FIELDS)[number]["key"];
@@ -117,7 +147,8 @@ export default function AgentDetailPage() {
   const [overlay, setOverlay] = useState("");
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [caseEnabled, setCaseEnabled] = useState(false);
-  const [knowledgeBaseSlugsText, setKnowledgeBaseSlugsText] = useState("");
+  const [knowledgeBaseSlugs, setKnowledgeBaseSlugs] = useState<string[]>([]);
+  const [bases, setBases] = useState<KnowledgeBaseOption[]>([]);
   const [providers, setProviders] = useState<ModelProviderOption[]>([]);
   const [modelProviderId, setModelProviderId] = useState("");
   const [toolSpecs, setToolSpecs] = useState<OpsTool[]>([]);
@@ -136,7 +167,7 @@ export default function AgentDetailPage() {
           .map((spec) => [spec.name, overrides[spec.name] ?? "inherit"]),
       ) as Record<string, ToolAction>,
     );
-    setKnowledgeBaseSlugsText(version?.knowledge_base_slugs?.join(", ") ?? "");
+    setKnowledgeBaseSlugs(version?.knowledge_base_slugs ?? []);
     setModelProviderId(version?.model_provider_id ?? "");
     setTuning(
       Object.fromEntries(
@@ -169,6 +200,12 @@ export default function AgentDetailPage() {
     } catch {
       setProviders([]);
     }
+    try {
+      const body = await opsJson<{ bases: KnowledgeBaseOption[] }>("/api/ops/knowledge/bases");
+      setBases(body.bases.filter((base) => base.status === "active"));
+    } catch {
+      setBases([]);
+    }
   }, [applyVersion, params.agentId]);
 
   useEffect(() => {
@@ -190,12 +227,7 @@ export default function AgentDetailPage() {
           ([name, action]) => !knownNames.has(name) || action !== "inherit",
         ),
       ) as Record<string, "allow" | "ask" | "deny">;
-      const knowledge_base_slugs = knowledgeBaseSlugsText.trim()
-        ? knowledgeBaseSlugsText
-            .split(",")
-            .map((slug) => slug.trim())
-            .filter(Boolean)
-        : null;
+      const knowledge_base_slugs = knowledgeBaseSlugs.length > 0 ? knowledgeBaseSlugs : null;
       const updated = await opsJson<OpsAgentDetail>(`/api/ops/agents/${params.agentId}/versions`, {
         method: "POST",
         body: JSON.stringify({
@@ -258,16 +290,21 @@ export default function AgentDetailPage() {
           <form className="panel stack" onSubmit={(event) => void onPublish(event)}>
             <h2 className="section-title">发布新版本</h2>
             <p className="muted" style={{ margin: 0 }}>
-              版本不可原地修改。保存会新建一版并设为当前发布版，旧版保留可回看。
+              本页字段全部可选：留空 /
+              不勾选即继承当前默认行为。保存会新建一版并设为当前发布版（立即对新对话生效），旧版保留可回看。
             </p>
             <label>
-              系统提示叠加
+              系统提示叠加（可选）
               <textarea
                 rows={14}
                 value={overlay}
                 spellCheck={false}
                 onChange={(event) => setOverlay(event.target.value)}
               />
+              <span className="field-hint">
+                追加在内置系统提示之后的指令，用于约束这个 Agent 的回答风格与边界；留空 =
+                只使用内置提示。
+              </span>
             </label>
             <div className="filter-row">
               <label className="inline-check">
@@ -277,6 +314,9 @@ export default function AgentDetailPage() {
                   onChange={(event) => setMemoryEnabled(event.target.checked)}
                 />
                 长期记忆 {boolZh(memoryEnabled)}
+                <span className="field-hint">
+                  自动从对话提取用户偏好/病情要点，后续对话自动携带
+                </span>
               </label>
               <label className="inline-check">
                 <input
@@ -285,6 +325,7 @@ export default function AgentDetailPage() {
                   onChange={(event) => setCaseEnabled(event.target.checked)}
                 />
                 档案能力 {boolZh(caseEnabled)}
+                <span className="field-hint">启用 Case 档案（结构化随访信息），写入需用户确认</span>
               </label>
             </div>
             <div className="stack">
@@ -328,18 +369,32 @@ export default function AgentDetailPage() {
                   ))}
               </div>
             </div>
+            <div>
+              <span>知识库范围（可选）</span>
+              <div className="filter-row">
+                {bases.map((base) => (
+                  <label key={base.slug} className="inline-check">
+                    <input
+                      type="checkbox"
+                      checked={knowledgeBaseSlugs.includes(base.slug)}
+                      onChange={(event) =>
+                        setKnowledgeBaseSlugs((current) =>
+                          event.target.checked
+                            ? [...current, base.slug]
+                            : current.filter((slug) => slug !== base.slug),
+                        )
+                      }
+                    />
+                    {base.name}（{base.slug}）
+                  </label>
+                ))}
+              </div>
+              <span className="field-hint">
+                勾选该 Agent 可检索的知识库；都不勾 = 不限制（可检索全部知识库）。
+              </span>
+            </div>
             <label>
-              知识库范围（可选，逗号分隔 slug；留空 = 不限制，能查全部知识库）
-              <input
-                type="text"
-                value={knowledgeBaseSlugsText}
-                spellCheck={false}
-                placeholder="mma-pa"
-                onChange={(event) => setKnowledgeBaseSlugsText(event.target.value)}
-              />
-            </label>
-            <label>
-              模型 Provider
+              模型 Provider（可选）
               <select
                 value={modelProviderId}
                 onChange={(event) => setModelProviderId(event.target.value)}
@@ -352,11 +407,15 @@ export default function AgentDetailPage() {
                   </option>
                 ))}
               </select>
+              <span className="field-hint">
+                该 Agent 新对话使用的模型端点；「本地（默认）」= 本机
+                Ollama。发布级绑定，端点故障不会自动换模型。
+              </span>
             </label>
             <div className="stack">
               <div>
                 <h3 className="section-title">运行参数</h3>
-                <p className="field-hint">可选，留空继承环境默认；随新版本固化。</p>
+                <p className="field-hint">全部可选，留空继承环境默认；随新版本固化。</p>
               </div>
               <div className="filter-row">
                 {TUNING_FIELDS.map((field) => (
@@ -374,6 +433,7 @@ export default function AgentDetailPage() {
                         }))
                       }
                     />
+                    <span className="field-hint">{field.hint}</span>
                   </label>
                 ))}
               </div>
