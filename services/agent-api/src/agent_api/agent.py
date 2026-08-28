@@ -392,6 +392,29 @@ def create_background_http_client(settings: Settings) -> httpx.AsyncClient:
     )
 
 
+def create_background_vision_http_client(settings: Settings) -> httpx.AsyncClient | None:
+    """Create a dedicated client for knowledge vision import, or None to reuse the shared one.
+
+    Only needed when ``background_vision_base_url``/``background_vision_api_key``
+    override the shared background endpoint — without an override the vision
+    calls go through ``background_http_client`` unchanged, so no second pool.
+    """
+
+    if not (
+        settings.background_vision_base_url.strip() or settings.background_vision_api_key.strip()
+    ):
+        return None
+    headers: dict[str, str] = {}
+    api_key = settings.resolved_background_vision_api_key
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(timeout=180.0, connect=5.0),
+        trust_env=False,
+        headers=headers,
+    )
+
+
 async def warm_up_ollama_model(
     http_client: httpx.AsyncClient,
     settings: Settings,

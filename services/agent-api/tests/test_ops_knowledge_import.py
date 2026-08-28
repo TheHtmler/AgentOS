@@ -3,10 +3,12 @@
 import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
+from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 from pwdlib import PasswordHash
 from pydantic_ai import Agent
@@ -14,6 +16,10 @@ from pydantic_ai.models.test import TestModel
 from sqlalchemy import func, select
 
 from agent_api.api import ops_auth as ops_auth_api
+from agent_api.api.ops_knowledge import (
+    _background_http_client,  # pyright: ignore[reportPrivateUsage]
+    _background_vision_http_client,  # pyright: ignore[reportPrivateUsage]
+)
 from agent_api.config import get_settings
 from agent_api.db.models import KnowledgeDocumentSnapshot
 from agent_api.db.ops_store import create_ops_session
@@ -308,6 +314,43 @@ async def test_ops_import_file_without_vision_model_returns_400(
 
     assert response.status_code == 400
     assert "BACKGROUND_VISION_MODEL" in str(response.json()["detail"])
+
+
+def _request_with_runtime(runtime: AgentRuntime) -> Request:
+    scope: dict[str, Any] = {
+        "type": "http",
+        "method": "POST",
+        "path": "/",
+        "headers": [],
+        "app": app,
+    }
+    request = Request(scope)
+    request.app.state.runtime = runtime
+    return request
+
+
+@pytest.mark.anyio
+async def test_background_vision_http_client_prefers_dedicated_endpoint() -> None:
+    """Transcription uses the dedicated client; embeddings keep the shared one."""
+
+    shared = httpx.AsyncClient()
+    dedicated = httpx.AsyncClient()
+    try:
+        runtime = AgentRuntime(
+            agent=Agent(TestModel()),
+            model_semaphore=asyncio.Semaphore(1),
+            background_http_client=shared,
+            background_vision_http_client=dedicated,
+        )
+        assert _background_vision_http_client(_request_with_runtime(runtime)) is dedicated
+        assert _background_http_client(_request_with_runtime(runtime)) is shared
+
+        # Without a dedicated client the vision helper falls back to the shared pool.
+        runtime.background_vision_http_client = None
+        assert _background_vision_http_client(_request_with_runtime(runtime)) is shared
+    finally:
+        await shared.aclose()
+        await dedicated.aclose()
 
 
 @pytest.mark.anyio

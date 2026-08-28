@@ -131,6 +131,13 @@ class Settings(BaseSettings):
     # usually text-only, so an empty value means "vision import unavailable" rather
     # than a broken call.
     background_vision_model: str = ""
+    # Optional dedicated endpoint for the vision import calls only. Empty values
+    # fall back to the shared background_base_url/background_api_key above, so
+    # embeddings/chat jobs and vision transcription can live on different gateways
+    # (e.g. vision on a GPT relay, embeddings on OpenRouter). The api_key lives
+    # only in env — never in the DB or any API response.
+    background_vision_base_url: str = ""
+    background_vision_api_key: str = ""
     # Read-only MCP (stdio). Default off; enable after reviewing allowlist.
     mcp_enabled: bool = False
     # Empty command → built-in PubMed readonly server module.
@@ -331,6 +338,20 @@ class Settings(BaseSettings):
         """Vision model for knowledge PDF/image import; empty means unavailable."""
 
         return self.background_vision_model.strip()
+
+    @property
+    def resolved_background_vision_base_url(self) -> str:
+        """Vision import endpoint URL; falls back to the shared background URL."""
+
+        return (
+            self.background_vision_base_url.strip() or self.resolved_background_base_url
+        ).rstrip("/")
+
+    @property
+    def resolved_background_vision_api_key(self) -> str:
+        """Vision import endpoint key; falls back to the shared background key."""
+
+        return self.background_vision_api_key.strip() or self.background_api_key.strip()
 
     @property
     def admin_emails(self) -> frozenset[str]:

@@ -201,6 +201,20 @@ def _background_http_client(request: Request) -> httpx.AsyncClient | None:
     return None
 
 
+def _background_vision_http_client(request: Request) -> httpx.AsyncClient | None:
+    """Vision-import client: the dedicated endpoint when configured, else the shared one.
+
+    Only the transcription step uses this; the embedding step in ``_persist_import``
+    keeps the shared background client, so parsed text is always vectorized by the
+    fixed embedding endpoint even when vision lives on a different gateway.
+    """
+
+    runtime = getattr(request.app.state, "runtime", None)
+    if isinstance(runtime, AgentRuntime):
+        return runtime.background_vision_http_client or runtime.background_http_client
+    return None
+
+
 async def _persist_import(
     specs: list[DocumentSpec],
     *,
@@ -317,7 +331,7 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
     is_text = mime.startswith("text/") or suffix in _TEXT_SUFFIXES
 
     if is_image or is_pdf:
-        vision_client = _background_http_client(request)
+        vision_client = _background_vision_http_client(request)
         if vision_client is None or not settings.resolved_background_vision_model:
             raise ValueError(
                 "PDF/图片导入需要先配置 BACKGROUND_VISION_MODEL（及 BACKGROUND_BASE_URL）。",
@@ -333,7 +347,7 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
                 [spec],
                 base_slug=base_slug,
                 created_by=subject,
-                http_client=vision_client,
+                http_client=_background_http_client(request),
                 ocr_pages=1,
             )
 
@@ -347,7 +361,7 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
             [spec],
             base_slug=base_slug,
             created_by=subject,
-            http_client=vision_client,
+            http_client=_background_http_client(request),
             text_layer_pages=text_layer_pages,
             ocr_pages=ocr_pages,
         )

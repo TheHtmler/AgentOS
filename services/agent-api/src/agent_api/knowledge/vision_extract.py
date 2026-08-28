@@ -58,7 +58,7 @@ async def _transcribe_image(
 
     try:
         response = await http_client.post(
-            settings.resolved_background_base_url + "/chat/completions",
+            settings.resolved_background_vision_base_url + "/chat/completions",
             json={
                 "model": settings.resolved_background_vision_model,
                 "messages": [
@@ -80,7 +80,9 @@ async def _transcribe_image(
         )
         response.raise_for_status()
     except httpx.TimeoutException as exc:
-        raise VisionExtractError("视觉模型请求超时，请检查 BACKGROUND_BASE_URL 是否正常。") from exc
+        raise VisionExtractError(
+            "视觉模型请求超时，请检查 BACKGROUND_VISION_BASE_URL/BACKGROUND_BASE_URL 是否正常。"
+        ) from exc
     except httpx.HTTPStatusError as exc:
         raise VisionExtractError(
             f"视觉模型请求失败（HTTP {exc.response.status_code}），"

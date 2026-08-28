@@ -57,6 +57,32 @@ async def test_extract_pdf_text_vision_sends_one_request_per_page() -> None:
 
 
 @pytest.mark.anyio
+async def test_extract_pdf_text_vision_uses_dedicated_vision_base_url() -> None:
+    """A vision override reroutes transcription while the shared endpoint stays put."""
+
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "转录内容"}}]})
+
+    transport = httpx.MockTransport(handler)
+    settings = _settings(
+        background_base_url="http://shared.test",
+        background_vision_base_url="http://vision-only.test/",
+    )
+    async with httpx.AsyncClient(transport=transport) as client:
+        await extract_pdf_text_vision(
+            _pdf_bytes(""),
+            http_client=client,
+            settings=settings,
+        )
+
+    assert len(requests) == 1
+    assert requests[0].url == httpx.URL("http://vision-only.test/chat/completions")
+
+
+@pytest.mark.anyio
 async def test_extract_pdf_text_vision_falls_back_to_text_layer_on_failure() -> None:
     text = "This page has a real text layer used as the failure fallback."
 
