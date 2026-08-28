@@ -18,6 +18,10 @@ type KnowledgeDocument = {
   version_label: string | null;
   review_status: string;
   chunk_count: number;
+  import_status: string;
+  import_error: string | null;
+  import_progress_done: number | null;
+  import_progress_total: number | null;
 };
 
 const REVIEW_OPTIONS = ["curated", "clinically_reviewed", "withdrawn"] as const;
@@ -64,6 +68,15 @@ export default function KnowledgePage() {
       await loadDocuments();
     })();
   }, [loadDocuments]);
+
+  // Imports run in the background — keep refreshing while any document is
+  // still processing so the status badges reach their terminal state.
+  const hasProcessing = documents.some((doc) => doc.import_status === "processing");
+  useEffect(() => {
+    if (!hasProcessing) return;
+    const timer = window.setTimeout(() => void loadDocuments(), 2500);
+    return () => window.clearTimeout(timer);
+  }, [hasProcessing, loadDocuments, documents]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -169,6 +182,19 @@ export default function KnowledgePage() {
                   <span>{doc.slug}</span>
                   <span>v{doc.version_label ?? "—"}</span>
                   <span>{doc.chunk_count} 条</span>
+                  {doc.import_status === "processing" ? (
+                    <span>
+                      导入中
+                      {doc.import_progress_total
+                        ? ` ${doc.import_progress_done ?? 0}/${doc.import_progress_total} 页`
+                        : "…"}
+                    </span>
+                  ) : null}
+                  {doc.import_status === "failed" ? (
+                    <span className="error" title={doc.import_error ?? undefined}>
+                      导入失败
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <select

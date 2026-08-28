@@ -35,10 +35,14 @@ def _pdf_bytes(*page_texts: str) -> bytes:
 @pytest.mark.anyio
 async def test_extract_pdf_text_vision_sends_one_request_per_page() -> None:
     requests: list[httpx.Request] = []
+    progress: list[tuple[int, int]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         return httpx.Response(200, json={"choices": [{"message": {"content": "转录内容"}}]})
+
+    async def on_progress(done: int, total: int) -> None:
+        progress.append((done, total))
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as client:
@@ -46,11 +50,15 @@ async def test_extract_pdf_text_vision_sends_one_request_per_page() -> None:
             _pdf_bytes("", "", ""),
             http_client=client,
             settings=_settings(),
+            on_progress=on_progress,
         )
 
     assert len(requests) == 3
     assert requests[0].url == httpx.URL("http://vision.test/chat/completions")
     assert json.loads(requests[0].content)["model"] == "vision-model"
+    assert progress[0] == (0, 3)
+    assert progress[-1] == (3, 3)
+    assert len(progress) == 4
 
     full_text, text_layer_pages, vision_pages = result
     assert text_layer_pages == 0

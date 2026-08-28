@@ -3,7 +3,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -18,7 +18,6 @@ from sqlalchemy.exc import IntegrityError
 
 from agent_api.api import ops_auth as ops_auth_api
 from agent_api.api.ops_knowledge import (
-    ImportResponse,
     _background_http_client,  # pyright: ignore[reportPrivateUsage]
     _background_vision_http_client,  # pyright: ignore[reportPrivateUsage]
 )
@@ -60,6 +59,24 @@ async def _ops_cookie(monkeypatch: pytest.MonkeyPatch) -> str:
     return issued.token
 
 
+async def _wait_import_done(
+    client: AsyncClient,
+    slug: str,
+    *,
+    attempts: int = 100,
+) -> dict[str, Any]:
+    """Poll the documents list until the background import reaches a terminal state."""
+
+    for _ in range(attempts):
+        response = await client.get("/v1/ops/knowledge/documents", params={"base": "mma-pa"})
+        assert response.status_code == 200
+        for doc in cast(list[dict[str, Any]], response.json()["documents"]):
+            if doc["slug"] == slug and doc["import_status"] != "processing":
+                return doc
+        await asyncio.sleep(0.1)
+    raise AssertionError(f"import for {slug} did not settle")
+
+
 @pytest.mark.anyio
 async def test_ops_import_text_and_overwrite(monkeypatch: pytest.MonkeyPatch) -> None:
     slug = f"ops-import-a-{uuid4().hex}"
@@ -81,10 +98,14 @@ async def test_ops_import_text_and_overwrite(monkeypatch: pytest.MonkeyPatch) ->
         first_document = first.json()["documents"][0]
         assert first_document["slug"] == slug
         assert first_document["title"] == "导入甲"
-        assert first_document["chunk_count"] >= 1
+        # Submission is acknowledged immediately; chunks land in the background.
+        assert first_document["chunk_count"] == 0
+        assert first_document["import_status"] == "processing"
         assert first_document["overwrote"] is False
-        assert first_document["ocr_pages"] == 0
-        assert first_document["text_layer_pages"] == 0
+
+        settled = await _wait_import_done(client, slug)
+        assert settled["import_status"] == "ready"
+        assert settled["chunk_count"] >= 1
 
         second = await client.post(
             "/v1/ops/knowledge/import",
@@ -96,11 +117,14 @@ async def test_ops_import_text_and_overwrite(monkeypatch: pytest.MonkeyPatch) ->
             },
         )
 
-    assert second.status_code == 200
-    second_document = second.json()["documents"][0]
-    assert second_document["id"] == first_document["id"]
-    assert second_document["title"] == "导入甲（新版）"
-    assert second_document["overwrote"] is True
+        assert second.status_code == 200
+        second_document = second.json()["documents"][0]
+        assert second_document["id"] == first_document["id"]
+        assert second_document["overwrote"] is True
+
+        settled_second = await _wait_import_done(client, slug)
+        assert settled_second["import_status"] == "ready"
+        assert settled_second["title"] == "导入甲（新版）"
 
     async with session_factory() as session:
         snapshot_count = await session.scalar(
@@ -124,15 +148,15 @@ async def test_ops_import_text_embeds_with_the_authenticated_background_client(
 
     seen_clients: list[httpx.AsyncClient] = []
 
-    async def fake_embed_text(
-        text: str,
+    async def fake_embed_texts(
+        texts: list[str],
         http_client: httpx.AsyncClient,
         **_kwargs: object,
-    ) -> list[float]:
+    ) -> list[list[float]]:
         seen_clients.append(http_client)
-        return [0.1, 0.2, 0.3]
+        return [[0.1, 0.2, 0.3] for _ in texts]
 
-    monkeypatch.setattr("agent_api.db.knowledge_store.embed_text", fake_embed_text)
+    monkeypatch.setattr("agent_api.knowledge.import_jobs.embed_texts", fake_embed_texts)
 
     background_client = httpx.AsyncClient()
     app.state.runtime = AgentRuntime(
@@ -155,10 +179,12 @@ async def test_ops_import_text_embeds_with_the_authenticated_background_client(
                     "body": "用于校验 embedding 走认证客户端的正文内容。",
                 },
             )
+            assert response.status_code == 200
+            settled = await _wait_import_done(client, slug)
+            assert settled["import_status"] == "ready"
     finally:
         await background_client.aclose()
 
-    assert response.status_code == 200
     assert seen_clients == [background_client]
 
 
@@ -191,18 +217,23 @@ async def test_ops_import_json_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
             },
         )
 
-    assert response.status_code == 200
-    assert response.json()["documents"] == [
-        {
-            "id": response.json()["documents"][0]["id"],
-            "slug": slug,
-            "title": "JSON 导入",
-            "chunk_count": 1,
-            "overwrote": False,
-            "ocr_pages": 0,
-            "text_layer_pages": 0,
-        },
-    ]
+        assert response.status_code == 200
+        assert response.json()["documents"] == [
+            {
+                "id": response.json()["documents"][0]["id"],
+                "slug": slug,
+                "title": "JSON 导入",
+                "chunk_count": 0,
+                "overwrote": False,
+                "ocr_pages": 0,
+                "text_layer_pages": 0,
+                "import_status": "processing",
+            },
+        ]
+
+        settled = await _wait_import_done(client, slug)
+        assert settled["import_status"] == "ready"
+        assert settled["chunk_count"] == 1
 
 
 @pytest.mark.anyio
@@ -214,6 +245,9 @@ async def test_ops_import_image_uses_vision_model(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr("agent_api.api.ops_knowledge.extract_image_text_vision", fake_vision)
     settings = get_settings().model_copy(update={"background_vision_model": "vision-model"})
     monkeypatch.setattr("agent_api.api.ops_knowledge.get_settings", lambda: settings)
+    # Keep the background task offline: skip the real embeddings endpoint.
+    job_settings = get_settings().model_copy(update={"knowledge_embedding_enabled": False})
+    monkeypatch.setattr("agent_api.knowledge.import_jobs.get_settings", lambda: job_settings)
 
     background_client = httpx.AsyncClient()
     app.state.runtime = AgentRuntime(
@@ -232,16 +266,18 @@ async def test_ops_import_image_uses_vision_model(monkeypatch: pytest.MonkeyPatc
                 data={"mode": "file", "slug": slug, "title": "扫描指南"},
                 files={"file": ("guide.jpg", b"\xff\xd8\xffimage", "image/jpeg")},
             )
+
+            assert response.status_code == 200
+            document = response.json()["documents"][0]
+            assert document["slug"] == slug
+            assert document["title"] == "扫描指南"
+            assert document["import_status"] == "processing"
+
+            settled = await _wait_import_done(client, slug)
+            assert settled["import_status"] == "ready"
+            assert settled["chunk_count"] >= 1
     finally:
         await background_client.aclose()
-
-    assert response.status_code == 200
-    document = response.json()["documents"][0]
-    assert document["slug"] == slug
-    assert document["title"] == "扫描指南"
-    assert document["chunk_count"] >= 1
-    assert document["ocr_pages"] == 1
-    assert document["text_layer_pages"] == 0
 
 
 @pytest.mark.anyio
@@ -258,6 +294,9 @@ async def test_ops_import_pdf_uses_vision_model(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("agent_api.api.ops_knowledge.extract_pdf_text_vision", fake_pdf_vision)
     settings = get_settings().model_copy(update={"background_vision_model": "vision-model"})
     monkeypatch.setattr("agent_api.api.ops_knowledge.get_settings", lambda: settings)
+    # Keep the background task offline: skip the real embeddings endpoint.
+    job_settings = get_settings().model_copy(update={"knowledge_embedding_enabled": False})
+    monkeypatch.setattr("agent_api.knowledge.import_jobs.get_settings", lambda: job_settings)
 
     background_client = httpx.AsyncClient()
     app.state.runtime = AgentRuntime(
@@ -276,16 +315,18 @@ async def test_ops_import_pdf_uses_vision_model(monkeypatch: pytest.MonkeyPatch)
                 data={"mode": "pdf", "slug": slug, "title": "扫描手册"},
                 files={"file": ("guide.pdf", b"%PDF-1.4 fake pdf bytes", "application/pdf")},
             )
+
+            assert response.status_code == 200
+            document = response.json()["documents"][0]
+            assert document["slug"] == slug
+            assert document["title"] == "扫描手册"
+            assert document["import_status"] == "processing"
+
+            settled = await _wait_import_done(client, slug)
+            assert settled["import_status"] == "ready"
+            assert settled["chunk_count"] >= 1
     finally:
         await background_client.aclose()
-
-    assert response.status_code == 200
-    document = response.json()["documents"][0]
-    assert document["slug"] == slug
-    assert document["title"] == "扫描手册"
-    assert document["chunk_count"] >= 1
-    assert document["ocr_pages"] == 2
-    assert document["text_layer_pages"] == 0
 
 
 @pytest.mark.anyio
@@ -356,13 +397,16 @@ async def test_background_vision_http_client_prefers_dedicated_endpoint() -> Non
 
 
 @pytest.mark.anyio
-async def test_ops_import_integrity_error_returns_409(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A residual same-slug conflict surfaces as 409, never a naked 500."""
+async def test_ops_import_integrity_error_marks_document_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A residual same-slug conflict surfaces as a failed import, never a naked 500."""
 
-    async def fake_persist(*args: object, **kwargs: object) -> ImportResponse:
+    async def fake_upsert(*args: object, **kwargs: object) -> None:
         raise IntegrityError("INSERT INTO knowledge_chunks", {}, Exception("duplicate key"))
 
-    monkeypatch.setattr("agent_api.api.ops_knowledge._persist_import", fake_persist)
+    monkeypatch.setattr("agent_api.knowledge.import_jobs.upsert_knowledge_document", fake_upsert)
+    slug = f"ops-conflict-{uuid4().hex}"
     token = await _ops_cookie(monkeypatch)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -371,14 +415,71 @@ async def test_ops_import_integrity_error_returns_409(monkeypatch: pytest.Monkey
             "/v1/ops/knowledge/import",
             json={
                 "mode": "text",
-                "slug": f"ops-409-{uuid4().hex}",
+                "slug": slug,
                 "title": "并发冲突",
                 "body": "正文。",
             },
         )
 
-    assert response.status_code == 409
-    assert "正在导入中" in str(response.json()["detail"])
+        # Submission itself succeeds; the conflict lands on the document status.
+        assert response.status_code == 200
+        settled = await _wait_import_done(client, slug)
+        assert settled["import_status"] == "failed"
+        assert "冲突" in str(settled["import_error"])
+
+
+@pytest.mark.anyio
+async def test_ops_import_dedups_concurrent_submission(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Re-submitting a slug whose import is still running reuses the in-flight job."""
+
+    async def slow_embed_texts(
+        texts: list[str],
+        _client: httpx.AsyncClient,
+        **_kwargs: object,
+    ) -> list[None]:
+        await asyncio.sleep(0.5)
+        return [None] * len(texts)
+
+    monkeypatch.setattr("agent_api.knowledge.import_jobs.embed_texts", slow_embed_texts)
+
+    background_client = httpx.AsyncClient()
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel()),
+        model_semaphore=asyncio.Semaphore(1),
+        background_http_client=background_client,
+    )
+    try:
+        slug = f"ops-dedup-{uuid4().hex}"
+        token = await _ops_cookie(monkeypatch)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            client.cookies.set("ops_session", token)
+            first = await client.post(
+                "/v1/ops/knowledge/import",
+                json={"mode": "text", "slug": slug, "title": "去重", "body": "第一版正文。"},
+            )
+            # The first job is still inside the slowed embed step when this lands.
+            second = await client.post(
+                "/v1/ops/knowledge/import",
+                json={"mode": "text", "slug": slug, "title": "去重", "body": "第二版不应生效。"},
+            )
+
+            assert first.status_code == 200
+            assert first.json()["documents"][0]["overwrote"] is False
+            assert second.status_code == 200
+            # Deduped onto the in-flight job rather than starting a second import.
+            assert second.json()["documents"][0]["overwrote"] is True
+
+            settled = await _wait_import_done(client, slug)
+            assert settled["import_status"] == "ready"
+
+            detail = await client.get(f"/v1/ops/knowledge/documents/{settled['id']}")
+            assert detail.status_code == 200
+            body = str(detail.json())
+            assert "第一版正文" in body
+            assert "第二版不应生效" not in body
+    finally:
+        await background_client.aclose()
 
 
 @pytest.mark.anyio

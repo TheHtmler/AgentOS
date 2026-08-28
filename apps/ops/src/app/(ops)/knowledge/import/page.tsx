@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
-import { OpsFetchError } from "@/lib/ops-fetch";
+import { OpsFetchError, opsJson } from "@/lib/ops-fetch";
 
 type ImportMode = "json" | "text" | "url" | "file";
 
@@ -17,11 +17,25 @@ type ImportedDocument = {
   overwrote: boolean;
   ocr_pages: number;
   text_layer_pages: number;
+  import_status: string;
 };
 
 type ImportResponse = {
   documents: ImportedDocument[];
 };
+
+type DocumentStatus = {
+  id: string;
+  slug: string;
+  title: string;
+  chunk_count: number;
+  import_status: string;
+  import_error: string | null;
+  import_progress_done: number | null;
+  import_progress_total: number | null;
+};
+
+const POLL_INTERVAL_MS = 2000;
 
 const MODES: Array<{ value: ImportMode; label: string }> = [
   { value: "json", label: "JSON" },
@@ -72,6 +86,46 @@ export default function KnowledgeImportPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [documents, setDocuments] = useState<ImportedDocument[]>([]);
+  const [tracked, setTracked] = useState<Record<string, DocumentStatus>>({});
+
+  // Submitted jobs are acknowledged immediately and run in the background —
+  // poll the documents list until every submitted slug reaches a terminal state.
+  const trackedSlugs = useMemo(() => documents.map((doc) => doc.slug), [documents]);
+  useEffect(() => {
+    if (trackedSlugs.length === 0) return;
+    let cancelled = false;
+    let timer: number | undefined;
+
+    async function poll() {
+      try {
+        const body = await opsJson<{ documents: DocumentStatus[] }>(
+          "/api/ops/knowledge/documents?base=mma-pa",
+        );
+        if (cancelled) return;
+        const next: Record<string, DocumentStatus> = {};
+        for (const doc of body.documents) {
+          if (trackedSlugs.includes(doc.slug)) next[doc.slug] = doc;
+        }
+        setTracked(next);
+        const settled = trackedSlugs.every(
+          (slug) => next[slug] && next[slug].import_status !== "processing",
+        );
+        if (settled) {
+          setBusy(false);
+        } else {
+          timer = window.setTimeout(poll, POLL_INTERVAL_MS);
+        }
+      } catch {
+        if (!cancelled) timer = window.setTimeout(poll, POLL_INTERVAL_MS * 2);
+      }
+    }
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [trackedSlugs]);
 
   async function submitImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -130,7 +184,11 @@ export default function KnowledgeImportPage() {
       if (!response.ok) {
         throw new OpsFetchError(response.status, errorMessage(responseBody, response.status));
       }
-      setDocuments((responseBody as ImportResponse).documents);
+      const accepted = (responseBody as ImportResponse).documents;
+      if (accepted.length === 0) setBusy(false);
+      setTracked({});
+      setDocuments(accepted);
+      // busy stays true until the polling effect above sees terminal states.
     } catch (err) {
       if (err instanceof OpsFetchError && err.status === 401) {
         router.replace("/login");
@@ -141,7 +199,6 @@ export default function KnowledgeImportPage() {
       } else {
         setError(err instanceof Error ? err.message : "导入失败");
       }
-    } finally {
       setBusy(false);
     }
   }
@@ -154,7 +211,7 @@ export default function KnowledgeImportPage() {
         </Link>
         <PageHeader
           title="导入知识"
-          lead="支持文本、链接、PDF 和图片（jpg/png/webp，走 OCR）。相同标识会覆盖并保留快照。"
+          lead="支持文本、链接、PDF 和图片（jpg/png/webp，视觉模型逐页解析）。提交后后台执行，页面会显示进度；相同标识会覆盖并保留快照。"
         />
       </div>
 
@@ -272,7 +329,7 @@ export default function KnowledgeImportPage() {
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
               />
               <span className="field-hint">
-                txt / md / json / pdf / jpg / png / webp。图片会先 OCR 再切块。
+                txt / md / json / pdf / jpg / png / webp。PDF 和图片由视觉模型逐页转录。
               </span>
             </label>
             <div className="form-grid cols-2">
@@ -304,23 +361,47 @@ export default function KnowledgeImportPage() {
 
       {documents.length > 0 ? (
         <section className="panel stack" aria-live="polite">
-          <h2 className="section-title">导入完成</h2>
+          <h2 className="section-title">导入任务</h2>
           <div className="doc-list always">
-            {documents.map((document) => (
-              <article key={document.id} className="doc-card">
-                <Link href={`/knowledge/${document.id}`} className="doc-card__title linkish">
-                  {document.title}
-                </Link>
-                <div className="muted">标识：{document.slug}</div>
-                <div className="doc-card__meta">
-                  <span>{document.chunk_count} 条切片</span>
-                  <span>{document.overwrote ? "已覆盖原文档" : "新建文档"}</span>
-                  <span>文本层回退 {document.text_layer_pages} 页</span>
-                  <span>视觉解析 {document.ocr_pages} 页</span>
-                </div>
-              </article>
-            ))}
+            {documents.map((document) => {
+              const status = tracked[document.slug];
+              const state = status?.import_status ?? "processing";
+              return (
+                <article key={document.id} className="doc-card">
+                  {state === "ready" && status ? (
+                    <Link href={`/knowledge/${status.id}`} className="doc-card__title linkish">
+                      {status.title}
+                    </Link>
+                  ) : (
+                    <span className="doc-card__title">{status?.title ?? document.title}</span>
+                  )}
+                  <div className="muted">标识：{document.slug}</div>
+                  <div className="doc-card__meta">
+                    {state === "processing" ? (
+                      <span>
+                        导入中
+                        {status?.import_progress_total
+                          ? `：第 ${status.import_progress_done ?? 0}/${status.import_progress_total} 页`
+                          : "…"}
+                      </span>
+                    ) : null}
+                    {state === "ready" && status ? (
+                      <>
+                        <span>{status.chunk_count} 条切片</span>
+                        <span>{document.overwrote ? "已覆盖原文档" : "新建文档"}</span>
+                      </>
+                    ) : null}
+                    {state === "failed" ? (
+                      <span className="error">导入失败：{status?.import_error ?? "未知错误"}</span>
+                    ) : null}
+                  </div>
+                </article>
+              );
+            })}
           </div>
+          {!busy ? (
+            <p className="muted">重复提交相同标识会覆盖并保留快照，可在本页继续导入。</p>
+          ) : null}
         </section>
       ) : null}
     </div>

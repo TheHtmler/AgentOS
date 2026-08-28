@@ -13,6 +13,7 @@ import asyncio
 import base64
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from typing import cast
 
 import httpx
@@ -121,12 +122,15 @@ async def extract_pdf_text_vision(
     *,
     http_client: httpx.AsyncClient,
     settings: Settings,
+    on_progress: Callable[[int, int], Awaitable[None]] | None = None,
 ) -> tuple[str, int, int]:
     """Vision-transcribe every PDF page; a failed page falls back to its text layer.
 
     Returns ``(full_text, text_layer_pages, vision_pages)`` — text_layer_pages
     counts pages that fell back to the raw PyMuPDF text layer after the vision
     call failed, vision_pages counts pages the vision model transcribed.
+    ``on_progress(settled, total)`` fires as pages finish, for the Ops import
+    progress display.
     """
 
     with pymupdf.open(stream=data, filetype="pdf") as document:
@@ -149,9 +153,10 @@ async def extract_pdf_text_vision(
     semaphore = asyncio.Semaphore(_MAX_CONCURRENT_PAGES)
     vision_pages = 0
     fallback_pages = 0
+    settled_pages = 0
 
     async def transcribe_one(index: int) -> None:
-        nonlocal vision_pages, fallback_pages
+        nonlocal vision_pages, fallback_pages, settled_pages
         async with semaphore:
             try:
                 page_texts[index] = await _transcribe_image(
@@ -171,7 +176,12 @@ async def extract_pdf_text_vision(
                 if fallback:
                     page_texts[index] = fallback
                     fallback_pages += 1
+            settled_pages += 1
+            if on_progress is not None:
+                await on_progress(settled_pages, page_count)
 
+    if on_progress is not None:
+        await on_progress(0, page_count)
     await asyncio.gather(*(transcribe_one(index) for index in range(page_count)))
 
     full_text = "\n\n".join(

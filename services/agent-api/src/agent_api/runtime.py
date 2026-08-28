@@ -240,6 +240,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     from agent_api.db.chat_store import fail_orphaned_in_process_runs
     from agent_api.db.session import session_factory
     from agent_api.hitl_timeout import hitl_timeout_loop
+    from agent_api.knowledge.import_jobs import fail_interrupted_imports, stop_import_jobs
 
     try:
         async with session_factory() as session, session.begin():
@@ -248,6 +249,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             logger.info("failed %s orphaned in-process run(s) on startup", orphaned)
     except Exception:
         logger.exception("failed to sweep orphaned runs on startup")
+
+    try:
+        interrupted = await fail_interrupted_imports()
+        if interrupted:
+            logger.info("marked %s interrupted knowledge import(s) failed on startup", interrupted)
+    except Exception:
+        # Best-effort: stuck 'processing' rows only mislead the Ops UI.
+        logger.exception("failed to sweep interrupted knowledge imports on startup")
 
     try:
         async with session_factory() as session, session.begin():
@@ -305,6 +314,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                     warmup_task.cancel()
                 await asyncio.gather(hitl_timeout_task, warmup_task, return_exceptions=True)
                 await runtime.stop_background_runs()
+                await stop_import_jobs()
     finally:
         try:
             await close_database()

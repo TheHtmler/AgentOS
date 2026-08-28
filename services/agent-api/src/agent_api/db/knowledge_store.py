@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID, uuid5
 
 import httpx
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.config import get_settings
@@ -88,6 +88,21 @@ async def _knowledge_base_for_slug(
     return base
 
 
+async def _lock_document_import(session: AsyncSession, document_id: UUID) -> None:
+    """Serialize same-document import stages; released automatically on commit.
+
+    A slow import keeps running server-side even after the client gives up
+    (uvicorn does not cancel on disconnect), and the delete+reinsert in
+    ``_upsert_knowledge_document`` collides with any overlapping attempt on the
+    deterministic row IDs (UniqueViolation → 500). Submit and persist both take
+    this transaction-scoped lock so same-slug work always serializes.
+    """
+
+    await session.execute(
+        select(func.pg_advisory_xact_lock(func.hashtext(f"knowledge_import.{document_id}"))),
+    )
+
+
 async def _upsert_knowledge_document(
     session: AsyncSession,
     *,
@@ -95,17 +110,11 @@ async def _upsert_knowledge_document(
     spec: DocumentSpec,
     created_by: str,
     http_client: httpx.AsyncClient | None,
+    embeddings: list[list[float] | None] | None = None,
 ) -> tuple[UUID, int, bool, int]:
     base = await _knowledge_base_for_slug(session, base_slug)
     document_id = document_id_for_slug(spec.slug)
-    # Serialize concurrent imports of the same document. A slow import keeps
-    # running server-side even after the client gives up (uvicorn does not
-    # cancel on disconnect), and the delete+reinsert below collides with any
-    # overlapping attempt on the deterministic row IDs (UniqueViolation → 500).
-    # The lock is transaction-scoped, so it releases automatically on commit.
-    await session.execute(
-        select(func.pg_advisory_xact_lock(func.hashtext(f"knowledge_import.{document_id}"))),
-    )
+    await _lock_document_import(session, document_id)
     document = await session.get(KnowledgeDocument, document_id)
     overwrote = document is not None
     fields = {
@@ -118,6 +127,11 @@ async def _upsert_knowledge_document(
         "source_date": spec.source_date,
         "version_label": spec.version_label,
         "review_status": spec.review_status,
+        # A completed import always lands in the ready state with a clean slate.
+        "import_status": "ready",
+        "import_error": None,
+        "import_progress_done": None,
+        "import_progress_total": None,
     }
 
     if document is None:
@@ -170,9 +184,15 @@ async def _upsert_knowledge_document(
     settings = get_settings()
     embed_enabled = http_client is not None and settings.knowledge_embedding_enabled
     embedded = 0
-    for chunk in spec.chunks:
+    for position, chunk in enumerate(spec.chunks):
         embedding: list[float] | None = None
-        if embed_enabled and http_client is not None:
+        if embeddings is not None:
+            # Precomputed by the caller outside this transaction (batched) —
+            # keeps slow HTTP out of the delete+insert critical section.
+            embedding = embeddings[position] if position < len(embeddings) else None
+            if embedding is not None:
+                embedded += 1
+        elif embed_enabled and http_client is not None:
             embedding = await embed_text(
                 f"{chunk.title}\n{chunk.content}",
                 http_client,
@@ -207,6 +227,7 @@ async def upsert_knowledge_document(
     spec: DocumentSpec,
     created_by: str,
     http_client: httpx.AsyncClient | None = None,
+    embeddings: list[list[float] | None] | None = None,
 ) -> tuple[UUID, int, bool]:
     """Insert or replace one knowledge document, snapshotting prior chunks."""
 
@@ -216,8 +237,89 @@ async def upsert_knowledge_document(
         spec=spec,
         created_by=created_by,
         http_client=http_client,
+        embeddings=embeddings,
     )
     return document_id, chunk_count, overwrote
+
+
+async def prepare_document_for_import(
+    session: AsyncSession,
+    *,
+    base_slug: str,
+    slug: str,
+    title: str,
+) -> tuple[KnowledgeDocument, bool, bool]:
+    """Create-or-fetch the document and flip it to ``processing``.
+
+    Returns ``(document, already_processing, existed)``. The advisory lock makes
+    the check-and-flip atomic against a concurrent submit of the same slug, and
+    against a persist transaction finishing right now — the loser of the race
+    always observes ``processing`` and dedups onto the in-flight job.
+    """
+
+    base = await _knowledge_base_for_slug(session, base_slug)
+    document_id = document_id_for_slug(slug)
+    await _lock_document_import(session, document_id)
+    document = await session.get(KnowledgeDocument, document_id)
+    existed = document is not None
+    if document is None:
+        document = KnowledgeDocument(
+            id=document_id,
+            knowledge_base_id=base.id,
+            slug=slug,
+            title=title,
+        )
+        session.add(document)
+    elif document.import_status == "processing":
+        return document, True, existed
+    else:
+        # Placeholder title until the import finishes and writes the real one.
+        document.title = title
+    document.import_status = "processing"
+    document.import_error = None
+    document.import_progress_done = None
+    document.import_progress_total = None
+    return document, False, existed
+
+
+async def set_import_progress(
+    session: AsyncSession,
+    *,
+    document_id: UUID,
+    done: int,
+    total: int,
+) -> None:
+    document = await session.get(KnowledgeDocument, document_id)
+    if document is None or document.import_status != "processing":
+        return
+    document.import_progress_done = done
+    document.import_progress_total = total
+
+
+async def fail_import(session: AsyncSession, *, document_id: UUID, error: str) -> None:
+    document = await session.get(KnowledgeDocument, document_id)
+    if document is None:
+        return
+    document.import_status = "failed"
+    document.import_error = error[:500]
+    document.import_progress_done = None
+    document.import_progress_total = None
+
+
+async def mark_interrupted_imports_failed(session: AsyncSession) -> int:
+    """Sweep documents stuck in ``processing`` after a restart; returns count."""
+
+    result = await session.execute(
+        update(KnowledgeDocument)
+        .where(KnowledgeDocument.import_status == "processing")
+        .values(
+            import_status="failed",
+            import_error="服务重启，导入中断，请重新导入。",
+            import_progress_done=None,
+            import_progress_total=None,
+        ),
+    )
+    return int(getattr(result, "rowcount", 0) or 0)
 
 
 async def upsert_mma_pa_knowledge(

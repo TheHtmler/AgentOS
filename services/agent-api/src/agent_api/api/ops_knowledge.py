@@ -26,6 +26,13 @@ from agent_api.db.models import (
     KnowledgeDocumentSnapshot,
 )
 from agent_api.db.session import session_factory
+from agent_api.knowledge.import_jobs import (
+    ExtractResult,
+    ProgressFn,
+    SubmittedImport,
+    start_import,
+    static_extract,
+)
 from agent_api.knowledge.normalize import normalize_json_payload, normalize_plain_text
 from agent_api.knowledge.types import ChunkSpec, DocumentSpec
 from agent_api.knowledge.url_extract import fetch_url_text
@@ -70,6 +77,11 @@ class KnowledgeDocumentOut(BaseModel):
     review_status: str
     reviewed_at: datetime | None
     chunk_count: int
+    # Background import lifecycle; 'ready' for settled documents.
+    import_status: str
+    import_error: str | None
+    import_progress_done: int | None
+    import_progress_total: int | None
 
 
 class KnowledgeDocumentListResponse(BaseModel):
@@ -131,6 +143,9 @@ class ImportDocumentOut(BaseModel):
     ocr_pages: int
     # PDF pages where the vision call failed and the raw PyMuPDF text layer was used instead.
     text_layer_pages: int
+    # Imports run in the background — the submission response is always
+    # "processing"; poll GET /documents until it turns ready/failed.
+    import_status: str = "processing"
 
 
 class ImportResponse(BaseModel):
@@ -150,6 +165,10 @@ def _document_out(doc: KnowledgeDocument, chunk_count: int) -> KnowledgeDocument
         review_status=doc.review_status,
         reviewed_at=doc.reviewed_at,
         chunk_count=chunk_count,
+        import_status=doc.import_status,
+        import_error=doc.import_error,
+        import_progress_done=doc.import_progress_done,
+        import_progress_total=doc.import_progress_total,
     )
 
 
@@ -216,36 +235,44 @@ def _background_vision_http_client(request: Request) -> httpx.AsyncClient | None
     return None
 
 
-async def _persist_import(
+def _submitted_out(submitted: SubmittedImport) -> ImportDocumentOut:
+    """The immediate acknowledgement for one accepted import job."""
+
+    return ImportDocumentOut(
+        id=submitted.document_id,
+        slug=submitted.slug,
+        title=submitted.title,
+        # Counts/pages are unknown until the background job lands; poll the
+        # documents list for the terminal state.
+        chunk_count=0,
+        overwrote=submitted.overwrote,
+        ocr_pages=0,
+        text_layer_pages=0,
+        import_status="processing",
+    )
+
+
+async def _submit_specs(
+    request: Request,
     specs: list[DocumentSpec],
     *,
     base_slug: str,
-    created_by: str,
-    http_client: httpx.AsyncClient | None = None,
-    text_layer_pages: int = 0,
-    ocr_pages: int = 0,
+    subject: str,
 ) -> ImportResponse:
+    """Accept already-normalized specs as background import jobs, one per document."""
+
+    embedding_client = _background_http_client(request)
     documents: list[ImportDocumentOut] = []
-    async with session_factory() as session, session.begin():
-        for spec in specs:
-            document_id, chunk_count, overwrote = await upsert_knowledge_document(
-                session,
-                base_slug=base_slug,
-                spec=spec,
-                created_by=created_by,
-                http_client=http_client,
-            )
-            documents.append(
-                ImportDocumentOut(
-                    id=document_id,
-                    slug=spec.slug,
-                    title=spec.title,
-                    chunk_count=chunk_count,
-                    overwrote=overwrote,
-                    ocr_pages=ocr_pages,
-                    text_layer_pages=text_layer_pages,
-                ),
-            )
+    for spec in specs:
+        submitted = await start_import(
+            base_slug=base_slug,
+            slug=spec.slug,
+            title=spec.title,
+            created_by=subject,
+            extract=static_extract(spec),
+            embedding_client=embedding_client,
+        )
+        documents.append(_submitted_out(submitted))
     return ImportResponse(documents=documents)
 
 
@@ -261,35 +288,30 @@ async def _import_json_body(
         if not isinstance(document_payload, dict):
             raise ValueError("payload must be an object")
         specs = normalize_json_payload(cast(dict[str, Any], document_payload))
-        return await _persist_import(
-            specs,
-            base_slug=base_slug,
-            created_by=subject,
-            http_client=_background_http_client(request),
-        )
+        return await _submit_specs(request, specs, base_slug=base_slug, subject=subject)
     if mode == "text":
         spec = normalize_plain_text(
             slug=_required_text(payload, "slug"),
             title=_required_text(payload, "title"),
             body=_required_text(payload, "body"),
         )
-        return await _persist_import(
-            [spec],
-            base_slug=base_slug,
-            created_by=subject,
-            http_client=_background_http_client(request),
-        )
+        return await _submit_specs(request, [spec], base_slug=base_slug, subject=subject)
     if mode == "url":
         url = _required_text(payload, "url")
         slug = _required_text(payload, "slug")
+        provided_title = str(payload.get("title") or "").strip()
         settings = get_settings()
-        async with httpx.AsyncClient(timeout=settings.fetch_url_timeout_seconds) as client:
-            extracted_title, body = await fetch_url_text(
-                url,
-                client=client,
-                max_bytes=settings.knowledge_import_max_bytes,
-            )
-            title = str(payload.get("title") or extracted_title).strip()
+
+        async def extract_url(_on_progress: ProgressFn) -> ExtractResult:
+            # Fetch happens inside the background job, not the request — slow
+            # pages no longer hold the HTTP connection.
+            async with httpx.AsyncClient(timeout=settings.fetch_url_timeout_seconds) as client:
+                extracted_title, body = await fetch_url_text(
+                    url,
+                    client=client,
+                    max_bytes=settings.knowledge_import_max_bytes,
+                )
+            title = provided_title or extracted_title.strip()
             spec = normalize_plain_text(
                 slug=slug,
                 title=title,
@@ -297,12 +319,17 @@ async def _import_json_body(
                 source_url=url,
                 source_label=extracted_title,
             )
-            return await _persist_import(
-                [spec],
-                base_slug=base_slug,
-                created_by=subject,
-                http_client=_background_http_client(request),
-            )
+            return spec, 0, 0
+
+        submitted = await start_import(
+            base_slug=base_slug,
+            slug=slug,
+            title=provided_title or slug,
+            created_by=subject,
+            extract=extract_url,
+            embedding_client=_background_http_client(request),
+        )
+        return ImportResponse(documents=[_submitted_out(submitted)])
     raise ValueError(f"unsupported import mode: {mode}")
 
 
@@ -337,55 +364,50 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
             raise ValueError(
                 "PDF/图片导入需要先配置 BACKGROUND_VISION_MODEL（及 BACKGROUND_BASE_URL）。",
             )
-        if is_image:
-            body = await extract_image_text_vision(
-                data,
-                http_client=vision_client,
-                settings=settings,
-            )
-            spec = normalize_plain_text(slug=slug, title=title, body=body)
-            return await _persist_import(
-                [spec],
-                base_slug=base_slug,
-                created_by=subject,
-                http_client=_background_http_client(request),
-                ocr_pages=1,
-            )
 
-        body, text_layer_pages, ocr_pages = await extract_pdf_text_vision(
-            data,
-            http_client=vision_client,
-            settings=settings,
-        )
-        spec = normalize_plain_text(slug=slug, title=title, body=body)
-        return await _persist_import(
-            [spec],
+        if is_image:
+
+            async def extract_image(_on_progress: ProgressFn) -> ExtractResult:
+                body = await extract_image_text_vision(
+                    data,
+                    http_client=vision_client,
+                    settings=settings,
+                )
+                return normalize_plain_text(slug=slug, title=title, body=body), 1, 0
+
+            extract = extract_image
+        else:
+
+            async def extract_pdf(on_progress: ProgressFn) -> ExtractResult:
+                body, _fallback_pages, _vision_pages = await extract_pdf_text_vision(
+                    data,
+                    http_client=vision_client,
+                    settings=settings,
+                    on_progress=on_progress,
+                )
+                return normalize_plain_text(slug=slug, title=title, body=body), 0, 0
+
+            extract = extract_pdf
+
+        submitted = await start_import(
             base_slug=base_slug,
+            slug=slug,
+            title=title,
             created_by=subject,
-            http_client=_background_http_client(request),
-            text_layer_pages=text_layer_pages,
-            ocr_pages=ocr_pages,
+            extract=extract,
+            embedding_client=_background_http_client(request),
         )
+        return ImportResponse(documents=[_submitted_out(submitted)])
 
     if is_json:
         payload = cast(dict[str, Any], json.loads(data.decode("utf-8")))
         specs = normalize_json_payload(payload)
-        return await _persist_import(
-            specs,
-            base_slug=base_slug,
-            created_by=subject,
-            http_client=_background_http_client(request),
-        )
+        return await _submit_specs(request, specs, base_slug=base_slug, subject=subject)
 
     if is_text or suffix == "":
         body = data.decode("utf-8")
         spec = normalize_plain_text(slug=slug, title=title, body=body)
-        return await _persist_import(
-            [spec],
-            base_slug=base_slug,
-            created_by=subject,
-            http_client=_background_http_client(request),
-        )
+        return await _submit_specs(request, [spec], base_slug=base_slug, subject=subject)
 
     raise ValueError("仅支持 txt、md、json、pdf、jpg、png、webp")
 
