@@ -92,6 +92,7 @@ export default function KnowledgeImportPage() {
     if (trackedSlugs.length === 0) return;
     let cancelled = false;
     let timer: number | undefined;
+    let consecutiveFailures = 0;
 
     async function poll() {
       try {
@@ -99,6 +100,7 @@ export default function KnowledgeImportPage() {
           "/api/ops/knowledge/documents?base=mma-pa",
         );
         if (cancelled) return;
+        consecutiveFailures = 0;
         const next: Record<string, DocumentStatus> = {};
         for (const doc of body.documents) {
           if (trackedSlugs.includes(doc.slug)) next[doc.slug] = doc;
@@ -112,8 +114,23 @@ export default function KnowledgeImportPage() {
         } else {
           timer = window.setTimeout(poll, POLL_INTERVAL_MS);
         }
-      } catch {
-        if (!cancelled) timer = window.setTimeout(poll, POLL_INTERVAL_MS * 2);
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof OpsFetchError && err.status === 401) {
+          router.replace("/login");
+          return;
+        }
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= 5) {
+          // Silent-retry-forever used to leave the card stuck at "导入中…" with
+          // no visible error whenever the session expired or the backend bounced.
+          setError(
+            `导入进度刷新失败：${err instanceof Error ? err.message : "网络错误"}。导入本身仍在后台进行，可稍后在知识库列表查看状态。`,
+          );
+          setBusy(false);
+          return;
+        }
+        timer = window.setTimeout(poll, POLL_INTERVAL_MS * 2);
       }
     }
 
@@ -122,7 +139,43 @@ export default function KnowledgeImportPage() {
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [trackedSlugs]);
+  }, [trackedSlugs, router]);
+
+  // Imports survive navigation server-side: resume tracking any in-flight ones
+  // when (re)opening this page, so an import started earlier is still visible.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const body = await opsJson<{ documents: DocumentStatus[] }>(
+          "/api/ops/knowledge/documents?base=mma-pa",
+        );
+        if (cancelled) return;
+        const inflight = body.documents.filter((doc) => doc.import_status === "processing");
+        if (inflight.length === 0) return;
+        setDocuments((current) =>
+          current.length > 0
+            ? current
+            : inflight.map((doc) => ({
+                id: doc.id,
+                slug: doc.slug,
+                title: doc.title,
+                chunk_count: doc.chunk_count,
+                overwrote: false,
+                ocr_pages: 0,
+                text_layer_pages: 0,
+                import_status: doc.import_status,
+              })),
+        );
+        setBusy(true);
+      } catch {
+        // Resume is best-effort; the knowledge list page still shows statuses.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function submitImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -347,7 +400,9 @@ export default function KnowledgeImportPage() {
                   placeholder="留空则根据文件名生成"
                   onChange={(event) => setSlug(event.target.value)}
                 />
-                <span className="field-hint">相同标识再导入会覆盖旧版并保留快照。</span>
+                <span className="field-hint">
+                  留空则根据文件名生成（相似文件名会自动区分）；相同标识再导入会覆盖旧版并保留快照。
+                </span>
               </label>
               <label>
                 标题（可选）
