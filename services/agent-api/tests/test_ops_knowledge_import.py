@@ -20,6 +20,7 @@ from agent_api.api import ops_auth as ops_auth_api
 from agent_api.api.ops_knowledge import (
     _background_http_client,  # pyright: ignore[reportPrivateUsage]
     _background_vision_http_client,  # pyright: ignore[reportPrivateUsage]
+    _slug_from_filename,  # pyright: ignore[reportPrivateUsage]
 )
 from agent_api.config import get_settings
 from agent_api.db.models import KnowledgeDocumentSnapshot
@@ -357,6 +358,31 @@ async def test_ops_import_file_without_vision_model_returns_400(
 
     assert response.status_code == 400
     assert "BACKGROUND_VISION_MODEL" in str(response.json()["detail"])
+
+
+@pytest.mark.anyio
+async def test_slug_from_filename_keeps_clean_ascii_names() -> None:
+    assert _slug_from_filename("guide.pdf") == "guide"
+    assert _slug_from_filename("my-guide.pdf") == "my-guide"
+
+
+@pytest.mark.anyio
+async def test_slug_from_filename_distinguishes_similar_cjk_names() -> None:
+    protein = _slug_from_filename("3.0饮食计算之蛋白质-柠檬宝宝关爱中心2026.3.pdf")
+    fat = _slug_from_filename("3.0饮食计算之脂肪-柠檬宝宝关爱中心2026.3.pdf")
+    assert protein != fat
+    assert protein.startswith("3-0-2026-3-")
+    assert fat.startswith("3-0-2026-3-")
+
+
+@pytest.mark.anyio
+async def test_slug_from_filename_handles_all_cjk_stem_deterministically() -> None:
+    first = _slug_from_filename("膳食指南.pdf")
+    second = _slug_from_filename("膳食指南.pdf")
+    other = _slug_from_filename("喂养手册.pdf")
+    assert first == second
+    assert first != other
+    assert first.startswith("imported-document-")
 
 
 def _request_with_runtime(runtime: AgentRuntime) -> Request:

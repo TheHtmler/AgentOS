@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import UTC, datetime
@@ -199,9 +200,22 @@ def _form_text(form: FormData, field: str, default: str | None = None) -> str | 
 
 
 def _slug_from_filename(filename: str | None) -> str:
+    """Derive a document slug from an uploaded filename.
+
+    The normalization strips CJK (and other non-ASCII) characters, so names
+    differing only in those characters would collapse onto one slug and
+    silently overwrite each other. Whenever normalization changes the stem,
+    append a short deterministic hash of it: re-uploading the same file still
+    derives the same slug (overwrite semantics preserved), while near-identical
+    names stay distinct documents.
+    """
+
     stem = Path(filename or "imported-document").stem.lower()
     slug = re.sub(r"[^a-z0-9]+", "-", stem).strip("-")
-    return slug or "imported-document"
+    if slug == stem:
+        return stem
+    digest = hashlib.sha1(stem.encode("utf-8")).hexdigest()[:6]
+    return f"{slug or 'imported-document'}-{digest}"
 
 
 def _background_http_client(request: Request) -> httpx.AsyncClient | None:
