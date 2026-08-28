@@ -241,6 +241,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     from agent_api.db.session import session_factory
     from agent_api.hitl_timeout import hitl_timeout_loop
     from agent_api.knowledge.import_jobs import fail_interrupted_imports, stop_import_jobs
+    from agent_api.scheduled_tasks import ScheduledTaskScheduler
 
     try:
         async with session_factory() as session, session.begin():
@@ -277,6 +278,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         hitl_timeout_loop(runtime, stop_event=stop_hitl_timeout),
         name="hitl-timeout-loop",
     )
+    scheduled_task_scheduler = ScheduledTaskScheduler(app, runtime)
+    scheduled_task_task = asyncio.create_task(
+        scheduled_task_scheduler.run(),
+        name="scheduled-task-dispatcher",
+    )
+    app.state.scheduled_task_scheduler = scheduled_task_scheduler
 
     try:
         async with AsyncExitStack() as stack:
@@ -310,9 +317,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             finally:
                 stop_hitl_timeout.set()
                 hitl_timeout_task.cancel()
+                await scheduled_task_scheduler.stop()
+                scheduled_task_task.cancel()
                 if not warmup_task.done():
                     warmup_task.cancel()
-                await asyncio.gather(hitl_timeout_task, warmup_task, return_exceptions=True)
+                await asyncio.gather(
+                    hitl_timeout_task,
+                    scheduled_task_task,
+                    warmup_task,
+                    return_exceptions=True,
+                )
                 await runtime.stop_background_runs()
                 await stop_import_jobs()
     finally:

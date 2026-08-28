@@ -8,6 +8,7 @@
 | [14-macmini-frp-ops-deploy.md](14-macmini-frp-ops-deploy.md)                                                                       | Ops 子域 + FRP + launchd + 宝塔部署                                    | 变更 ops 公网入口或 Mac mini 托管方式时 |
 | [15-model-upgrade-qwen3-vl.md](15-model-upgrade-qwen3-vl.md)                                                                       | 聊天模型升级 qwen3-vl:8b-instruct 的实施步骤与验收                     | 更换聊天模型或调整上下文/并发预算时     |
 | [16-agent-runtime-architecture.md](16-agent-runtime-architecture.md)                                                               | Agent 运行时建成态：prompt 组装、上下文预算、模型 Provider、工具、HITL | 改动模型调用组装、预算护栏或工具挂载时  |
+| [17-scheduled-tasks.md](17-scheduled-tasks.md)                                                                                     | 用户定时任务、日历调度、结果回看与运行恢复边界                         | 定时任务、通知或调度器行为变化时        |
 | [02-mvp-roadmap.md](02-mvp-roadmap.md)                                                                                             | MVP 实施顺序与完成标准                                                 | 迭代计划变化时                          |
 | [03-development-workflow.md](03-development-workflow.md)                                                                           | 代码所有权、协作方式与每轮交付格式                                     | 协作边界或开发流程变化时                |
 | [04-foundation-setup.md](04-foundation-setup.md)                                                                                   | 首轮工程初始化命令、代码和验收标准                                     | 工具链或工程骨架变化时                  |

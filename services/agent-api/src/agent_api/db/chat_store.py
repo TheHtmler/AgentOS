@@ -664,6 +664,8 @@ async def start_run(
     user_id: UUID | None = None,
     agent_id: UUID | None = None,
     case_id: UUID | None = None,
+    scheduled_task_id: UUID | None = None,
+    scheduled_for: datetime | None = None,
 ) -> StartedRun:
     """Record a user message and a running execution in the caller's transaction.
 
@@ -710,6 +712,8 @@ async def start_run(
     run = Run(
         thread_id=thread.id,
         case_id=thread.case_id,
+        scheduled_task_id=scheduled_task_id,
+        scheduled_for=scheduled_for,
         status="running",
         model_name=model_name,
         started_at=datetime.now(UTC),

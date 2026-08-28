@@ -65,6 +65,7 @@ from agent_api.db.agent_store import (
 )
 from agent_api.db.case_store import CaseNotFoundError
 from agent_api.db.chat_store import (
+    StartedRun,
     ThreadBusyError,
     ThreadNotFoundError,
     start_run,
@@ -184,27 +185,32 @@ async def stream_ag_ui_run(
     if emergency_category is not None:
         logger.warning("emergency signal detected in user message: %s", emergency_category)
 
-    try:
-        async with session_factory() as session, session.begin():
-            agent_id = requested_agent_id(request) if thread_id is None else None
-            case_id_header = requested_case_id(request) if thread_id is None else None
-            started = await start_run(
-                session,
-                thread_id=thread_id,
-                user_content=prompt,
-                model_name=get_settings().ollama_model,
-                user_id=user.id,
-                agent_id=agent_id,
-                case_id=case_id_header,
-            )
-    except ThreadNotFoundError as error:
-        raise HTTPException(status_code=404, detail="Thread not found") from error
-    except AgentNotFoundError as error:
-        raise HTTPException(status_code=404, detail="Agent not found") from error
-    except CaseNotFoundError as error:
-        raise HTTPException(status_code=404, detail="Case not found") from error
-    except ThreadBusyError as error:
-        raise HTTPException(status_code=409, detail="Thread is already running") from error
+    # The scheduler creates the Run in the same transaction that claims the due
+    # occurrence. It then calls this route's shared execution path with a private
+    # Request.state marker; browser requests can never supply that marker.
+    started = getattr(request.state, "prestarted_run", None)
+    if not isinstance(started, StartedRun):
+        try:
+            async with session_factory() as session, session.begin():
+                agent_id = requested_agent_id(request) if thread_id is None else None
+                case_id_header = requested_case_id(request) if thread_id is None else None
+                started = await start_run(
+                    session,
+                    thread_id=thread_id,
+                    user_content=prompt,
+                    model_name=get_settings().ollama_model,
+                    user_id=user.id,
+                    agent_id=agent_id,
+                    case_id=case_id_header,
+                )
+        except ThreadNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Thread not found") from error
+        except AgentNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Agent not found") from error
+        except CaseNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Case not found") from error
+        except ThreadBusyError as error:
+            raise HTTPException(status_code=409, detail="Thread is already running") from error
 
     run_started_at = time.monotonic()
     # First text/reasoning content latency, captured in the produce loop below;

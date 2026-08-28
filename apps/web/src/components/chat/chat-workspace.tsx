@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, LogOut, MessageSquare, SquarePen } from "lucide-react";
+import { CalendarClock, ChevronRight, LogOut, MessageSquare, SquarePen } from "lucide-react";
 
 import { InvitationManager } from "@/components/auth/invitation-manager";
 import { AgentOsLogo } from "@/components/brand/agentos-logo";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PendingCaseFactsBanner } from "@/components/chat/pending-case-facts-banner";
+import { ScheduledTasksPanel } from "@/components/chat/scheduled-tasks-panel";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import {
   displayAgentName,
@@ -89,6 +90,8 @@ export function ChatWorkspace({
   onLogout,
 }: ChatWorkspaceProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [activeView, setActiveView] = useState<"chat" | "scheduled">("chat");
+  const [scheduledUnreadCount, setScheduledUnreadCount] = useState(0);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState(() => resolveSelectedAgentId(null, []));
   const [agentLoadError, setAgentLoadError] = useState<string | null>(null);
@@ -229,6 +232,7 @@ export function ChatWorkspace({
   }, [isMobileMenuOpen]);
 
   const focusSlot = useCallback((slotKey: string, threadId: string | null) => {
+    setActiveView("chat");
     setVisibleSlotKey(slotKey);
     setActiveThreadId(threadId);
     setIsMobileMenuOpen(false);
@@ -238,6 +242,30 @@ export function ChatWorkspace({
     } else {
       setThreadInUrl(threadId);
     }
+  }, []);
+
+  const handleOpenTaskThread = useCallback(
+    (threadId: string, agentId?: string) => {
+      if (agentId !== undefined) {
+        setSelectedAgentId(agentId);
+      }
+      const currentSlots = slotsRef.current;
+      const existing = currentSlots.find((slot) => slot.threadId === threadId);
+      if (existing) {
+        focusSlot(existing.key, threadId);
+        return;
+      }
+      const nextSlot: ChatSlot = { key: threadId, threadId };
+      setSlots(
+        pruneIdleSlots([...currentSlots, nextSlot], nextSlot.key, streamingBySlotKeyRef.current),
+      );
+      focusSlot(nextSlot.key, threadId);
+    },
+    [focusSlot],
+  );
+
+  const handleScheduledUnreadCountChange = useCallback((count: number) => {
+    setScheduledUnreadCount(count);
   }, []);
 
   const handleSelectThread = useCallback(
@@ -453,9 +481,29 @@ export function ChatWorkspace({
                 <SquarePen aria-hidden="true" className="size-4" />
                 新建任务
               </button>
-              <button type="button" className="is-active">
+              <button
+                type="button"
+                className={activeView === "chat" ? "is-active" : undefined}
+                onClick={() => setActiveView("chat")}
+              >
                 <MessageSquare aria-hidden="true" className="size-4" />
                 聊天
+              </button>
+              <button
+                type="button"
+                className={activeView === "scheduled" ? "is-active" : undefined}
+                onClick={() => {
+                  setActiveView("scheduled");
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <CalendarClock aria-hidden="true" className="size-4" />
+                定时任务
+                {scheduledUnreadCount > 0 ? (
+                  <span className="ml-auto grid min-w-5 place-items-center rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--send-fg)]">
+                    {scheduledUnreadCount}
+                  </span>
+                ) : null}
               </button>
             </nav>
 
@@ -517,53 +565,64 @@ export function ChatWorkspace({
         </aside>
 
         <section className="agentos-main-column min-h-0">
-          <PendingCaseFactsBanner
-            agentId={selectedAgentId}
-            caseEnabled={
-              agents.find((agent) => agent.id === selectedAgentId)?.case_enabled ?? false
-            }
-            refreshKey={threadListVersion}
-          />
-          {hasHydratedFromUrl
-            ? slots.map((slot) => {
-                const isActive = slot.key === visibleSlotKey;
+          <div className={activeView === "scheduled" ? "h-full min-h-0" : "hidden"}>
+            <ScheduledTasksPanel
+              agents={agents}
+              onOpenThread={handleOpenTaskThread}
+              onUnreadCountChange={handleScheduledUnreadCountChange}
+            />
+          </div>
+          <div className={activeView === "chat" ? "h-full min-h-0" : "hidden"}>
+            <>
+              <PendingCaseFactsBanner
+                agentId={selectedAgentId}
+                caseEnabled={
+                  agents.find((agent) => agent.id === selectedAgentId)?.case_enabled ?? false
+                }
+                refreshKey={threadListVersion}
+              />
+              {hasHydratedFromUrl
+                ? slots.map((slot) => {
+                    const isActive = slot.key === visibleSlotKey;
 
-                return (
-                  <div
-                    key={slot.key}
-                    className={isActive ? "h-full min-h-0" : "hidden"}
-                    aria-hidden={!isActive}
-                  >
-                    <ChatPanel
-                      selectedThreadId={slot.threadId}
-                      agentId={selectedAgentId}
-                      agentName={selectedAgentLabel}
-                      agents={agents}
-                      agentLoadError={agentLoadError}
-                      supportsVision={
-                        agents.find((agent) => agent.id === selectedAgentId)?.supports_vision ??
-                        true
-                      }
-                      isActive={isActive}
-                      onRetryAgentLoad={retryAgentLoad}
-                      onSelectAgent={handleSelectAgent}
-                      onNewConversation={handleNewConversation}
-                      onRunStarted={ignoreRunStarted}
-                      onStreamingChanged={(isStreaming) =>
-                        handleSlotStreamingChanged(slot.key, isStreaming)
-                      }
-                      onAwaitingApprovalChanged={(isAwaiting) =>
-                        handleSlotAwaitingApprovalChanged(slot.key, isAwaiting)
-                      }
-                      onThreadChanged={(threadId, agentId) =>
-                        handleSlotThreadChanged(slot.key, threadId, agentId)
-                      }
-                      onRunFinalized={handleRunFinalized}
-                    />
-                  </div>
-                );
-              })
-            : null}
+                    return (
+                      <div
+                        key={slot.key}
+                        className={isActive ? "h-full min-h-0" : "hidden"}
+                        aria-hidden={!isActive}
+                      >
+                        <ChatPanel
+                          selectedThreadId={slot.threadId}
+                          agentId={selectedAgentId}
+                          agentName={selectedAgentLabel}
+                          agents={agents}
+                          agentLoadError={agentLoadError}
+                          supportsVision={
+                            agents.find((agent) => agent.id === selectedAgentId)?.supports_vision ??
+                            true
+                          }
+                          isActive={isActive}
+                          onRetryAgentLoad={retryAgentLoad}
+                          onSelectAgent={handleSelectAgent}
+                          onNewConversation={handleNewConversation}
+                          onRunStarted={ignoreRunStarted}
+                          onStreamingChanged={(isStreaming) =>
+                            handleSlotStreamingChanged(slot.key, isStreaming)
+                          }
+                          onAwaitingApprovalChanged={(isAwaiting) =>
+                            handleSlotAwaitingApprovalChanged(slot.key, isAwaiting)
+                          }
+                          onThreadChanged={(threadId, agentId) =>
+                            handleSlotThreadChanged(slot.key, threadId, agentId)
+                          }
+                          onRunFinalized={handleRunFinalized}
+                        />
+                      </div>
+                    );
+                  })
+                : null}
+            </>
+          </div>
         </section>
       </div>
 
@@ -597,6 +656,36 @@ export function ChatWorkspace({
             </header>
 
             <div className="agentos-mobile-conversation-host min-h-0 flex-1 overflow-hidden">
+              <nav className="mb-3 space-y-1" aria-label="主导航">
+                <button
+                  type="button"
+                  onClick={handleNewConversation}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
+                >
+                  <SquarePen aria-hidden="true" className="size-4" />
+                  新建任务
+                </button>
+                <button
+                  type="button"
+                  className={
+                    activeView === "scheduled"
+                      ? "flex w-full items-center gap-2 bg-zinc-100 px-3 py-2 text-sm text-zinc-950"
+                      : "flex w-full items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
+                  }
+                  onClick={() => {
+                    setActiveView("scheduled");
+                    setIsMobileMenuOpen(false);
+                  }}
+                >
+                  <CalendarClock aria-hidden="true" className="size-4" />
+                  定时任务
+                  {scheduledUnreadCount > 0 ? (
+                    <span className="ml-auto grid min-w-5 place-items-center rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--send-fg)]">
+                      {scheduledUnreadCount}
+                    </span>
+                  ) : null}
+                </button>
+              </nav>
               <ConversationList
                 activeThreadId={activeThreadId}
                 refreshKey={threadListVersion}

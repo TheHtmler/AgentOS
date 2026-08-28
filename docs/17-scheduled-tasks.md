@@ -1,0 +1,70 @@
+# 定时任务
+
+日期：2026-08-29
+
+状态：已完成 AgentOS 内部闭环；外部渠道通知未接入
+
+## 产品范围
+
+定时任务参考主流 Agent 的共同能力：用户保存一段指令，选择助手和时区，按一次性、每天、每周或每月执行；任务可暂停、恢复、编辑、删除或立即执行，并能查看每次执行的 Run、结果和错误。任务结果写入原有聊天会话，用户可从任务详情打开会话继续处理。
+
+当前产品的通知是站内结果提醒：任务完成后，任务页显示未读数量；工作区的「定时任务」导航也显示总未读数，打开对应任务后标记已读。当前仓库没有稳定的 Outbox、邮件服务或 OpenClaw 出站适配器，因此暂不宣称支持微信、邮件或系统推送通知。
+
+## 数据模型
+
+`scheduled_tasks` 是用户拥有的任务定义，主要字段如下：
+
+- `owner_user_id`、`agent_id`、`case_id`、`thread_id`：所有权、发布中的助手、可选 Case 和任务专属会话。任务创建时生成一个空会话；一个会话最多绑定一个任务。
+- `schedule_type`、`schedule_config`、`timezone`：日历规则。`schedule_config` 保存用户所在时区的本地值，`next_run_at` 保存下一次 UTC 时间并建立到期查询索引。
+- `status`：`active`、`paused`、`completed`。一次性任务领取后变为 `completed`，但其执行结果仍可回看；暂停任务不会被调度。
+- `last_run_*`、`consecutive_failures`、`result_read_at`：最近执行投影、连续失败次数和站内未读边界。
+
+`runs.scheduled_task_id` 和 `runs.scheduled_for` 将每次实际执行关联回任务。执行仍是普通 AgentOS Run，因此复用既有消息、工具事件、Artifact、HITL、上下文预算和历史回放能力；上下文快照只在当轮生成，不写入历史。
+
+## 调度与恢复
+
+Agent API lifespan 启动一个进程内 `ScheduledTaskScheduler`，默认每 15 秒轮询一次 PostgreSQL。领取使用 `FOR UPDATE SKIP LOCKED`，一次只领取一个到期任务；领取事务内同时推进下一次时间并创建 `running` Run，避免多进程或慢模型重复执行。调度器最多并行消费 8 个已领取任务，模型并发仍由既有 Provider/进程信号量控制。
+
+任务固定使用自己的 Thread。若该 Thread 已有 `running` 或 `waiting_approval` Run，则本次不重叠执行：任务在约 60 秒后再次尝试。Thread 被删除或没有可用会话时，任务暂停并记录错误。模型失败、取消或等待审批等状态由普通 Run 记录，任务详情显示最近执行和错误；成功会清零连续失败计数。
+
+任务领取前会在同一事务创建普通 Run。API 进程重启时，已有普通 `running`/`queued` Run 由既有 orphan sweep 标记失败；任务定义和下一次日历时间仍在数据库中，调度器重新启动后继续领取。一次性任务即使执行失败也不会自动改回周期任务，用户可从任务页使用「立即执行」重跑，或编辑为新的未来时间。
+
+## API 契约
+
+所有端点都要求当前用户 session；任务、关联会话和 Run 按 owner 过滤，跨用户资源统一返回 `404`。
+
+| 方法     | 路径                              | 行为                                                       |
+| -------- | --------------------------------- | ---------------------------------------------------------- |
+| `GET`    | `/v1/scheduled-tasks`             | 返回当前用户任务列表和未读数量                             |
+| `POST`   | `/v1/scheduled-tasks`             | 创建任务和专属 Thread                                      |
+| `GET`    | `/v1/scheduled-tasks/{id}`        | 返回任务详情和最近 20 次 Run                               |
+| `PATCH`  | `/v1/scheduled-tasks/{id}`        | 修改标题、指令或日历规则；规则变更从当前时间重新计算下一次 |
+| `POST`   | `/v1/scheduled-tasks/{id}/pause`  | 暂停周期任务                                               |
+| `POST`   | `/v1/scheduled-tasks/{id}/resume` | 恢复并重新计算下一次执行                                   |
+| `POST`   | `/v1/scheduled-tasks/{id}/run`    | 不改变未来日历，立即创建一次普通 Run，返回 `202`           |
+| `POST`   | `/v1/scheduled-tasks/{id}/read`   | 将当前任务结果标记为已读                                   |
+| `DELETE` | `/v1/scheduled-tasks/{id}`        | 软删除任务，保留专属 Thread 和历史 Run                     |
+
+Next.js Web BFF 只代理上述用户端点，不把 Agent API 地址或 session token 暴露给浏览器。Web 入口在聊天工作区的「定时任务」视图；任务的专属会话仍通过现有 Thread 历史 API 打开。
+
+## 日历规则
+
+- 一次性：`run_at` 必须是未来时间；没有指定时区的时间按请求中的 IANA 时区解释。
+- 每天：每天在 `time_of_day` 执行。
+- 每周：`days_of_week` 使用 Python weekday 编号 `0=周一` 到 `6=周日`，至少选择一天。
+- 每月：`day_of_month` 为 `1` 到 `31`。不存在的日期会跳过该月，例如每月 31 日不会在 2 月提前执行。
+- 时间计算使用 `zoneinfo`，数据库只用 UTC `next_run_at` 负责到期扫描，避免夏令时变化后固定偏移。
+
+## 部署与验证
+
+定时器不需要新增常驻服务，随 Agent API 一起运行。部署 API 时会执行迁移：
+
+```bash
+uv run --directory services/agent-api alembic upgrade head
+```
+
+部署后用登录后的 Web 页面创建一个距当前时间几分钟的一次性任务，确认任务详情出现 `running`/终态 Run、专属 Thread 有 user/assistant 消息，随后确认导航未读数和执行记录。单元测试覆盖时区转换、周规则滚动、无效月末日期和非法配置；需要 PostgreSQL 的 API、迁移和真实模型链路仍在 Mac mini 部署侧验证。
+
+## 后续通知扩展
+
+外部通知必须作为独立的投递层接入，不能让调度器直接依赖某个渠道插件。推荐后续增加带幂等键的通知 Outbox：任务 Run 完成后写入 `scheduled_task_id + run_id`，投递 worker 根据用户启用的渠道绑定发送，记录重试和最终失败，并继续保留站内未读作为事实源。OpenClaw 入站绑定回调不等于出站能力，不能复用入站接口伪装成通知发送。

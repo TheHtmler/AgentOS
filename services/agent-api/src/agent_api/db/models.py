@@ -866,6 +866,82 @@ class Thread(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class ScheduledTask(Base):
+    """A durable user-owned prompt that can create Runs on a calendar schedule."""
+
+    __tablename__ = "scheduled_tasks"
+    __table_args__ = (
+        CheckConstraint(
+            "schedule_type IN ('once', 'daily', 'weekly', 'monthly')",
+            name="ck_scheduled_tasks_schedule_type",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'paused', 'completed')",
+            name="ck_scheduled_tasks_status",
+        ),
+        CheckConstraint(
+            "last_run_status IS NULL OR last_run_status IN "
+            "('queued', 'running', 'waiting_approval', 'completed', 'failed', 'cancelled')",
+            name="ck_scheduled_tasks_last_run_status",
+        ),
+        UniqueConstraint("thread_id", name="uq_scheduled_tasks_thread_id"),
+        Index("ix_scheduled_tasks_due", "status", "next_run_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    owner_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    agent_id: Mapped[UUID] = mapped_column(
+        ForeignKey("agents.id", ondelete="RESTRICT"),
+        index=True,
+        nullable=False,
+    )
+    case_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("cases.id", ondelete="SET NULL"),
+        index=True,
+    )
+    thread_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("threads.id", ondelete="SET NULL"),
+    )
+    title: Mapped[str] = mapped_column(String(128), nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    schedule_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Local calendar values are kept as JSON so future schedule forms can evolve
+    # without changing the UTC dispatch index or losing the original time zone.
+    schedule_config: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        server_default=text("'active'"),
+        nullable=False,
+    )
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_run_status: Mapped[str | None] = mapped_column(String(24))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    consecutive_failures: Mapped[int] = mapped_column(
+        Integer,
+        server_default=text("0"),
+        nullable=False,
+    )
+    result_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class Message(Base):
     """An ordered user, assistant, system, or tool message within one thread."""
 
@@ -925,6 +1001,11 @@ class Run(Base):
         ForeignKey("cases.id", ondelete="CASCADE"),
         index=True,
     )
+    scheduled_task_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("scheduled_tasks.id", ondelete="SET NULL"),
+        index=True,
+    )
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     model_name: Mapped[str] = mapped_column(String(255), nullable=False)
     input_tokens: Mapped[int | None] = mapped_column(Integer)
