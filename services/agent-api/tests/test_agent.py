@@ -235,6 +235,9 @@ def test_background_vision_endpoint_falls_back_to_shared() -> None:
             "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
             "background_base_url": "https://gateway.example.com/v1",
             "background_api_key": "sk-shared",
+            # Explicit empties keep this test independent of the developer's .env.
+            "background_vision_base_url": "",
+            "background_vision_api_key": "",
         },
     )
 

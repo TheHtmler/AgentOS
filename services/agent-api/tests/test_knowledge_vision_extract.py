@@ -13,6 +13,9 @@ def _settings(**overrides: object) -> Settings:
         "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
         "background_base_url": "http://vision.test",
         "background_vision_model": "vision-model",
+        # Explicit empties keep these tests independent of the developer's .env.
+        "background_vision_base_url": "",
+        "background_vision_api_key": "",
     }
     payload.update(overrides)
     return Settings.model_validate(payload)
