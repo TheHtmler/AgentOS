@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID, uuid5
 
 import httpx
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.config import get_settings
@@ -98,6 +98,14 @@ async def _upsert_knowledge_document(
 ) -> tuple[UUID, int, bool, int]:
     base = await _knowledge_base_for_slug(session, base_slug)
     document_id = document_id_for_slug(spec.slug)
+    # Serialize concurrent imports of the same document. A slow import keeps
+    # running server-side even after the client gives up (uvicorn does not
+    # cancel on disconnect), and the delete+reinsert below collides with any
+    # overlapping attempt on the deterministic row IDs (UniqueViolation → 500).
+    # The lock is transaction-scoped, so it releases automatically on commit.
+    await session.execute(
+        select(func.pg_advisory_xact_lock(func.hashtext(f"knowledge_import.{document_id}"))),
+    )
     document = await session.get(KnowledgeDocument, document_id)
     overwrote = document is not None
     fields = {

@@ -14,9 +14,11 @@ from pwdlib import PasswordHash
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from agent_api.api import ops_auth as ops_auth_api
 from agent_api.api.ops_knowledge import (
+    ImportResponse,
     _background_http_client,  # pyright: ignore[reportPrivateUsage]
     _background_vision_http_client,  # pyright: ignore[reportPrivateUsage]
 )
@@ -351,6 +353,32 @@ async def test_background_vision_http_client_prefers_dedicated_endpoint() -> Non
     finally:
         await shared.aclose()
         await dedicated.aclose()
+
+
+@pytest.mark.anyio
+async def test_ops_import_integrity_error_returns_409(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A residual same-slug conflict surfaces as 409, never a naked 500."""
+
+    async def fake_persist(*args: object, **kwargs: object) -> ImportResponse:
+        raise IntegrityError("INSERT INTO knowledge_chunks", {}, Exception("duplicate key"))
+
+    monkeypatch.setattr("agent_api.api.ops_knowledge._persist_import", fake_persist)
+    token = await _ops_cookie(monkeypatch)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        client.cookies.set("ops_session", token)
+        response = await client.post(
+            "/v1/ops/knowledge/import",
+            json={
+                "mode": "text",
+                "slug": f"ops-409-{uuid4().hex}",
+                "title": "并发冲突",
+                "body": "正文。",
+            },
+        )
+
+    assert response.status_code == 409
+    assert "正在导入中" in str(response.json()["detail"])
 
 
 @pytest.mark.anyio

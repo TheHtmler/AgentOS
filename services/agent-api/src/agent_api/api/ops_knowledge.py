@@ -13,6 +13,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from starlette.datastructures import FormData, UploadFile
 
 from agent_api.api.ops_auth import get_ops_subject
@@ -406,6 +407,13 @@ async def import_knowledge(
         raise ValueError("content type must be application/json or multipart/form-data")
     except VisionExtractError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        # Same-slug imports are serialized by an advisory lock in the store, but a
+        # residual conflict (e.g. lock skipped by a caller) must not surface as 500.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="相同文档正在导入中，请等待上一次导入完成后重试。",
+        ) from exc
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
