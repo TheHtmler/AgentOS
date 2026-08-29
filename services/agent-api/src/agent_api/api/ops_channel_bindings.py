@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.api.ops_auth import get_ops_subject
+from agent_api.db.channel_binding_store import issue_channel_binding_invite, normalize_handle
 from agent_api.db.models import User, UserChannelBinding
 from agent_api.db.session import session_factory
 
@@ -26,6 +27,7 @@ UserStatus = Literal["invited", "active", "disabled"]
 class OpsUserOut(BaseModel):
     id: UUID
     email: str
+    handle: str | None
     status: str
     binding_count: int
     created_at: datetime
@@ -40,6 +42,7 @@ class OpsChannelBindingOut(BaseModel):
     id: UUID
     user_id: UUID
     user_email: str
+    user_handle: str | None
     user_status: str
     channel: str
     account_id: str
@@ -57,6 +60,32 @@ class OpsChannelBindingOut(BaseModel):
 
 class OpsChannelBindingListResponse(BaseModel):
     bindings: list[OpsChannelBindingOut]
+
+
+class PatchOpsUserRequest(BaseModel):
+    handle: str | None = Field(default=None, max_length=64)
+
+    @field_validator("handle")
+    @classmethod
+    def normalize_user_handle(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = normalize_handle(value)
+        if not normalized:
+            raise ValueError("用户名不能只包含空白字符")
+        return normalized
+
+
+class CreateOpsChannelBindingInviteRequest(BaseModel):
+    channel: Channel = "openclaw-weixin"
+
+
+class OpsChannelBindingInviteOut(BaseModel):
+    code: str
+    user_id: UUID
+    user_email: str
+    user_handle: str | None
+    expires_at: datetime
 
 
 class _BindingFields(BaseModel):
@@ -107,6 +136,7 @@ def _to_user_out(user: User, binding_count: int) -> OpsUserOut:
     return OpsUserOut(
         id=user.id,
         email=user.email,
+        handle=user.handle,
         status=user.status,
         binding_count=binding_count,
         created_at=user.created_at,
@@ -118,12 +148,14 @@ def _to_binding_out(
     binding: UserChannelBinding,
     *,
     user_email: str,
+    user_handle: str | None,
     user_status: str,
 ) -> OpsChannelBindingOut:
     return OpsChannelBindingOut(
         id=binding.id,
         user_id=binding.user_id,
         user_email=user_email,
+        user_handle=user_handle,
         user_status=user_status,
         channel=binding.channel,
         account_id=binding.account_id,
@@ -189,7 +221,7 @@ async def list_ops_channel_bindings(
     user_email: str | None = None,
 ) -> OpsChannelBindingListResponse:
     query = (
-        select(UserChannelBinding, User.email, User.status)
+        select(UserChannelBinding, User.email, User.handle, User.status)
         .join(User, User.id == UserChannelBinding.user_id)
         .order_by(User.email, UserChannelBinding.channel, UserChannelBinding.display_name)
     )
@@ -204,10 +236,80 @@ async def list_ops_channel_bindings(
         rows = list(await session.execute(query))
     return OpsChannelBindingListResponse(
         bindings=[
-            _to_binding_out(binding, user_email=email, user_status=user_status)
-            for binding, email, user_status in rows
+            _to_binding_out(
+                binding,
+                user_email=email,
+                user_handle=handle,
+                user_status=user_status,
+            )
+            for binding, email, handle, user_status in rows
         ],
     )
+
+
+@router.patch("/users/{user_id}", response_model=OpsUserOut)
+async def patch_ops_user(
+    user_id: UUID,
+    payload: PatchOpsUserRequest,
+    _subject: Annotated[str, Depends(get_ops_subject)],
+) -> OpsUserOut:
+    if not payload.model_fields_set:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="没有需要修改的字段",
+        )
+
+    async with session_factory() as session, session.begin():
+        user = await session.get(User, user_id, with_for_update=True)
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+        user.handle = payload.handle
+        try:
+            await session.flush()
+        except IntegrityError as error:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="这个 AgentOS 用户名已经被占用",
+            ) from error
+
+        binding_count = await session.scalar(
+            select(func.count(UserChannelBinding.id)).where(
+                UserChannelBinding.user_id == user.id,
+            ),
+        )
+        return _to_user_out(user, int(binding_count or 0))
+
+
+@router.post(
+    "/users/{user_id}/channel-binding-invites",
+    response_model=OpsChannelBindingInviteOut,
+)
+async def create_ops_channel_binding_invite(
+    user_id: UUID,
+    payload: CreateOpsChannelBindingInviteRequest,
+    _subject: Annotated[str, Depends(get_ops_subject)],
+) -> OpsChannelBindingInviteOut:
+    async with session_factory() as session, session.begin():
+        user = await session.get(User, user_id, with_for_update=True)
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+        if user.status == "disabled":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="已禁用用户不能绑定",
+            )
+        code, expires_at = await issue_channel_binding_invite(
+            session,
+            user_id=user.id,
+            channel=payload.channel,
+        )
+        return OpsChannelBindingInviteOut(
+            code=code,
+            user_id=user.id,
+            user_email=user.email,
+            user_handle=user.handle,
+            expires_at=expires_at,
+        )
 
 
 @router.post(
@@ -276,6 +378,7 @@ async def create_ops_channel_binding(
             return _to_binding_out(
                 binding,
                 user_email=user.email,
+                user_handle=user.handle,
                 user_status=user.status,
             )
     except IntegrityError as error:
@@ -364,6 +467,7 @@ async def patch_ops_channel_binding(
             return _to_binding_out(
                 binding,
                 user_email=user.email,
+                user_handle=user.handle,
                 user_status=user.status,
             )
     except IntegrityError as error:

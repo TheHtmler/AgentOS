@@ -62,22 +62,35 @@ uv run --directory services/agent-api python scripts/create_invitation.py admin@
 | `POST /v1/auth/invitations`                                | 管理员 session | 创建或替换 pending invite 链接      |
 | `/v1/chat/*`、`/v1/threads/*`、`/v1/runs/*`、`/v1/ag-ui/*` | session        | 仅访问当前用户资源                  |
 | `GET /v1/ops/users`                                        | Ops session    | 返回用户列表和绑定数量              |
+| `PATCH /v1/ops/users/{user_id}`                            | Ops session    | 配置可选的 AgentOS handle           |
+| `POST /v1/channel-bindings/pairing-codes`                  | User session   | 为当前登录用户生成一次性微信配对码  |
+| `GET /v1/channel-bindings`                                 | User session   | 查看当前用户自己的微信绑定概况      |
+| `DELETE /v1/channel-bindings/{binding_id}`                 | User session   | 撤销当前用户自己的微信绑定          |
+| `POST /v1/ops/users/{user_id}/channel-binding-invites`     | Ops session    | 为指定用户生成一次性微信配对码      |
 | `/v1/ops/channel-bindings*`                                | Ops session    | 管理用户与 OpenClaw 微信会话绑定    |
+| `POST /v1/internal/openclaw/weixin/binding-events`         | Bearer secret  | OpenClaw 发送绑定/解绑控制消息      |
 
 ## 外部渠道绑定
 
-绑定过程分为两个责任边界：
+绑定过程分为三个责任边界：
 
 1. OpenClaw 负责微信二维码登录、微信会话维持和实际收发；它的 `account_id` 与微信 `peer_id` 是外部渠道标识。
-2. Ops 负责把已知的外部会话归属到一个 AgentOS `User`，并配置 `receive_notifications`、`allow_openclaw`、`allow_agentos` 三个权限。默认只开启通知，两个入站权限均关闭。
+2. AgentOS 登录用户或 Ops 管理员签发一次性 `channel_binding_invites` 配对码；配对码绑定目标用户，不依赖可猜的用户名，也不把外部 ID 暴露给用户。
+3. AgentOS 保存 `user_channel_bindings`，并由 Ops 配置 `receive_notifications`、`allow_openclaw`、`allow_agentos` 三个权限。自助绑定默认只开启通知，两个入站权限均关闭。
 
-当前定时通知只需要读取 `status='active'` 且 `receive_notifications=true` 的绑定，使用其 `account_id + peer_id` 调用 OpenClaw 出站适配器。入站桥接尚未启用；未来接入时必须先按 `peer_id` 解析绑定和权限，再创建或复用该用户的 Thread，不能让 OpenClaw 的昵称或客户端传入的 AgentOS 用户 ID 决定归属。
+用户在 AgentOS“微信通知”页面生成配对码，在微信发送“绑定 配对码”。OpenClaw 在模型调用前把消息、当前 `account_id`、`peer_id` 和 `message_id` 转给内部 callback；AgentOS 校验一次性配对码后建立绑定。绑定控制消息不依赖模型 Provider，`channel_binding_events` 缓存已处理事件，防止渠道重试造成重复状态转换。Ops 邀请入口复用相同配对码流程，作为未登录用户的兜底。
 
-解绑只删除绑定记录，不删除该用户的 Thread、Run、Message、Case 或 Artifact。禁用 AgentOS 用户时，所有绑定在出站和未来入站解析时都必须视为不可用。
+微信端发送“解绑微信”后，AgentOS 只针对当前 `account_id + peer_id` 发起二次确认；用户回复“确认解绑”后，当前绑定软停用为 `status='disabled'`，不需要输入 `peer_id` 或名称。历史 Thread、Run、Message、Case 和 Artifact 保留；Ops 管理员仍可直接停用或删除绑定记录。
+
+当前普通微信消息仍走 OpenClaw 自己的 Agent/模型链路；`allow_agentos` 对应的“从微信进入 AgentOS 用户会话”尚未实现。内部 callback 只承担绑定/解绑状态机，且必须使用仅本机或内网可达的共享 Bearer secret。
+
+当前配对只支持一对一微信会话。群聊的 `peer_id` 代表群而不是单个成员，不能直接套用个人绑定；群通知需要独立的群目标与成员权限模型。
+
+未来外部定时通知需要读取 `status='active'` 且 `receive_notifications=true` 的绑定，使用其 `account_id + peer_id` 调用独立的 OpenClaw 出站适配器。当前定时任务只提供站内结果提醒；禁用 AgentOS 用户时，所有绑定在出站和入站控制解析时都必须视为不可用。
 
 ## 暂不实现
 
 - 邮件供应商、送达状态和重试队列。
 - magic-link 再登录流程（`auth_tokens.purpose='magic_link'` 已被 schema 与 `/v1/auth/verify` 接受，但全仓没有签发点，属半建状态)、OAuth 与 MFA。
-- 用户生命周期管理（`users.status='disabled'` 仍无写入路径）、会话列表和管理员审计页面；Ops 账号绑定页只读用户并管理外部渠道映射。
+- 用户生命周期管理（`users.status='disabled'` 仍无写入路径）、会话列表和管理员审计页面。
 - 对外多租户组织、成员角色与邀请审批。

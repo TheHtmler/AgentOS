@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarClock, ChevronRight, LogOut, MessageSquare, SquarePen } from "lucide-react";
+import {
+  CalendarClock,
+  ChevronRight,
+  Link2,
+  LogOut,
+  MessageCircle,
+  MessageSquare,
+  SquarePen,
+} from "lucide-react";
 
 import { InvitationManager } from "@/components/auth/invitation-manager";
 import { AgentOsLogo } from "@/components/brand/agentos-logo";
@@ -9,6 +17,7 @@ import { ChatPanel } from "@/components/chat/chat-panel";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PendingCaseFactsBanner } from "@/components/chat/pending-case-facts-banner";
 import { ScheduledTasksPanel } from "@/components/chat/scheduled-tasks-panel";
+import { WeChatBindingPanel } from "@/components/channel/wechat-binding-panel";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import {
   displayAgentName,
@@ -90,7 +99,7 @@ export function ChatWorkspace({
   onLogout,
 }: ChatWorkspaceProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [activeView, setActiveView] = useState<"chat" | "scheduled">("chat");
+  const [activeView, setActiveView] = useState<"chat" | "scheduled" | "wechat">("chat");
   const [scheduledUnreadCount, setScheduledUnreadCount] = useState(0);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState(() => resolveSelectedAgentId(null, []));
@@ -505,6 +514,17 @@ export function ChatWorkspace({
                   </span>
                 ) : null}
               </button>
+              <button
+                type="button"
+                className={activeView === "wechat" ? "is-active" : undefined}
+                onClick={() => {
+                  setActiveView("wechat");
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <MessageCircle aria-hidden="true" className="size-4" />
+                微信通知
+              </button>
             </nav>
 
             <div className="agentos-codex-sidebar-section agentos-codex-pinned-section">
@@ -571,6 +591,9 @@ export function ChatWorkspace({
               onOpenThread={handleOpenTaskThread}
               onUnreadCountChange={handleScheduledUnreadCountChange}
             />
+          </div>
+          <div className={activeView === "wechat" ? "h-full min-h-0" : "hidden"}>
+            <WeChatBindingPanel />
           </div>
           <div className={activeView === "chat" ? "h-full min-h-0" : "hidden"}>
             <>
@@ -684,6 +707,21 @@ export function ChatWorkspace({
                       {scheduledUnreadCount}
                     </span>
                   ) : null}
+                </button>
+                <button
+                  type="button"
+                  className={
+                    activeView === "wechat"
+                      ? "flex w-full items-center gap-2 bg-zinc-100 px-3 py-2 text-sm text-zinc-950"
+                      : "flex w-full items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
+                  }
+                  onClick={() => {
+                    setActiveView("wechat");
+                    setIsMobileMenuOpen(false);
+                  }}
+                >
+                  <Link2 aria-hidden="true" className="size-4" />
+                  微信通知
                 </button>
               </nav>
               <ConversationList

@@ -2,7 +2,18 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Bell, Bot, Link2, Pencil, Plus, ShieldCheck, Trash2, UserRound } from "lucide-react";
+import {
+  Bell,
+  Bot,
+  Copy,
+  KeyRound,
+  Link2,
+  Pencil,
+  Plus,
+  ShieldCheck,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/skeleton";
@@ -19,6 +30,7 @@ type BindingStatus = (typeof STATUS_FILTERS)[number];
 type OpsUser = {
   id: string;
   email: string;
+  handle: string | null;
   status: string;
   binding_count: number;
   created_at: string;
@@ -29,6 +41,7 @@ type ChannelBinding = {
   id: string;
   user_id: string;
   user_email: string;
+  user_handle: string | null;
   user_status: string;
   channel: string;
   account_id: string;
@@ -46,6 +59,7 @@ type ChannelBinding = {
 
 type BindingForm = {
   userId: string;
+  userHandle: string;
   accountId: string;
   peerId: string;
   displayName: string;
@@ -57,6 +71,7 @@ type BindingForm = {
 
 const EMPTY_FORM: BindingForm = {
   userId: "",
+  userHandle: "",
   accountId: "",
   peerId: "",
   displayName: "",
@@ -69,6 +84,7 @@ const EMPTY_FORM: BindingForm = {
 function formFromBinding(binding: ChannelBinding): BindingForm {
   return {
     userId: binding.user_id,
+    userHandle: binding.user_handle ?? "",
     accountId: binding.account_id,
     peerId: binding.peer_id,
     displayName: binding.display_name,
@@ -100,6 +116,8 @@ export default function ChannelBindingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<BindingForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -141,7 +159,12 @@ export default function ChannelBindingsPage() {
   function startCreate() {
     const firstAvailableUser = users.find((user) => user.status !== "disabled");
     setEditingId(null);
-    setForm({ ...EMPTY_FORM, userId: firstAvailableUser?.id ?? "" });
+    setForm({
+      ...EMPTY_FORM,
+      userId: firstAvailableUser?.id ?? "",
+      userHandle: firstAvailableUser?.handle ?? "",
+    });
+    setInviteCode(null);
     setFormOpen(true);
     setError(null);
   }
@@ -149,6 +172,7 @@ export default function ChannelBindingsPage() {
   function startEdit(binding: ChannelBinding) {
     setEditingId(binding.id);
     setForm(formFromBinding(binding));
+    setInviteCode(null);
     setFormOpen(true);
     setError(null);
   }
@@ -156,6 +180,7 @@ export default function ChannelBindingsPage() {
   function closeForm() {
     setFormOpen(false);
     setEditingId(null);
+    setInviteCode(null);
   }
 
   async function submitForm(event: FormEvent) {
@@ -167,6 +192,12 @@ export default function ChannelBindingsPage() {
     setSaving(true);
     setError(null);
     try {
+      if (form.userHandle.trim()) {
+        await opsJson(`/api/ops/users/${form.userId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ handle: form.userHandle.trim() }),
+        });
+      }
       const payload = {
         account_id: form.accountId.trim(),
         peer_id: form.peerId.trim(),
@@ -195,6 +226,28 @@ export default function ChannelBindingsPage() {
       setError(err instanceof Error ? err.message : "保存失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function generateInvite() {
+    if (!form.userId) {
+      setError("请先选择 AgentOS 用户");
+      return;
+    }
+    setInviteBusy(true);
+    setError(null);
+    try {
+      const result = await opsJson<{ code: string; expires_at: string }>(
+        `/api/ops/users/${form.userId}/channel-binding-invites`,
+        { method: "POST" },
+      );
+      setInviteCode(result.code);
+      await load();
+      toast.show("一次性绑定码已生成");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "绑定码生成失败");
+    } finally {
+      setInviteBusy(false);
     }
   }
 
@@ -239,11 +292,11 @@ export default function ChannelBindingsPage() {
       {toast.node}
       <PageHeader
         title="账号绑定"
-        lead="把 AgentOS 用户映射到 OpenClaw 微信会话，供后续通知出站和权限路由使用。"
+        lead="管理 AgentOS 用户与 OpenClaw 微信会话的配对和通知权限。"
         actions={
           <Button type="button" onClick={startCreate} disabled={formOpen}>
             <Plus />
-            新建绑定
+            手工绑定（高级）
           </Button>
         }
       />
@@ -251,8 +304,9 @@ export default function ChannelBindingsPage() {
       <div className="callout">
         <h2>当前渠道：OpenClaw 微信</h2>
         <p>
-          <code>account_id</code> 是 OpenClaw 微信账号，<code>peer_id</code>{" "}
-          是具体微信会话。默认只开启通知； OpenClaw 和 AgentOS 入站权限需要在这里显式打开。
+          推荐用户在 AgentOS 的“微信通知”页面生成配对码，再在微信发送“绑定
+          配对码”。这里的手工绑定仅用于运维排查；
+          <code>account_id</code> 和 <code>peer_id</code> 不应要求普通用户自行获取。
         </p>
       </div>
 
@@ -270,7 +324,11 @@ export default function ChannelBindingsPage() {
               <select
                 value={form.userId}
                 disabled={editing !== null}
-                onChange={(event) => patchForm({ userId: event.target.value })}
+                onChange={(event) => {
+                  const user = users.find((item) => item.id === event.target.value);
+                  patchForm({ userId: event.target.value, userHandle: user?.handle ?? "" });
+                  setInviteCode(null);
+                }}
                 required
               >
                 <option value="">选择用户</option>
@@ -280,6 +338,14 @@ export default function ChannelBindingsPage() {
                   </option>
                 ))}
               </select>
+            </label>
+            <label>
+              AgentOS 用户名（可选显示名）
+              <input
+                value={form.userHandle}
+                placeholder="可留空"
+                onChange={(event) => patchForm({ userHandle: event.target.value })}
+              />
             </label>
             <label>
               显示名称
@@ -308,6 +374,41 @@ export default function ChannelBindingsPage() {
                 required
               />
             </label>
+          </div>
+
+          <div className="callout">
+            <div className="section-head">
+              <div>
+                <h2>微信自助绑定码</h2>
+                <p>生成后把配对码交给用户；用户在微信发送“绑定 配对码”。</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void generateInvite()}
+                disabled={inviteBusy || saving}
+              >
+                <KeyRound />
+                {inviteBusy ? "生成中" : "生成绑定码"}
+              </Button>
+            </div>
+            {inviteCode ? (
+              <div className="btn-row">
+                <code className="text-lg tracking-[0.18em]">{inviteCode}</code>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(inviteCode);
+                    toast.show("绑定码已复制");
+                  }}
+                >
+                  <Copy />
+                  复制
+                </Button>
+              </div>
+            ) : null}
           </div>
 
           <div className="stack">
@@ -404,6 +505,7 @@ export default function ChannelBindingsPage() {
                 <div className="row__title">{binding.display_name}</div>
                 <div className="row__meta">
                   <span>{binding.user_email}</span>
+                  {binding.user_handle ? <span>用户名：{binding.user_handle}</span> : null}
                   <span>{binding.channel}</span>
                   {binding.is_default ? <span className="pill">默认</span> : null}
                   {binding.receive_notifications ? <span>通知</span> : null}

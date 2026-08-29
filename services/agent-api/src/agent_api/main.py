@@ -6,6 +6,8 @@ from agent_api.api.ag_ui import router as ag_ui_router
 from agent_api.api.agents import router as agents_router
 from agent_api.api.auth import router as auth_router
 from agent_api.api.cases import router as cases_router
+from agent_api.api.channel_bindings import router as channel_bindings_router
+from agent_api.api.internal_openclaw import router as internal_openclaw_router
 from agent_api.api.ops_agents import router as ops_agents_router
 from agent_api.api.ops_auth import router as ops_auth_router
 from agent_api.api.ops_channel_bindings import router as ops_channel_bindings_router
@@ -41,12 +43,14 @@ app = FastAPI(
 app.include_router(ag_ui_router)
 app.include_router(agents_router)
 app.include_router(cases_router)
+app.include_router(channel_bindings_router)
 app.include_router(threads_router)
 app.include_router(uploads_router)
 app.include_router(runs_router)
 app.include_router(sandboxes_router)
 app.include_router(scheduled_tasks_router)
 app.include_router(auth_router)
+app.include_router(internal_openclaw_router)
 app.include_router(ops_auth_router)
 app.include_router(ops_channel_bindings_router)
 app.include_router(ops_stats_router)

@@ -75,9 +75,11 @@ Mac mini 仓库根目录：
 OPS_ROOT_USERNAME=admin
 OPS_ROOT_PASSWORD=你的简单密码
 OPS_SESSION_TTL_HOURS=12
+OPENCLAW_BINDING_SHARED_SECRET=与 OpenClaw 微信插件配置相同的随机长字符串
 ```
 
 （可选）也可用 `OPS_ROOT_PASSWORD_HASH`（Argon2id）；两者都设时以 hash 为准。  
+绑定 callback 默认使用 `http://127.0.0.1:8100/v1/internal/openclaw/weixin/binding-events`，不需要新增公网端口或 FRP 代理。OpenClaw 微信插件账号配置中的 `bindingBridgeUrl`、`bindingBridgeToken` 必须分别指向该地址并使用相同 secret；secret 只放在两端本机配置，不进仓库。
 `apps/web/.env.local` / `apps/ops/.env.local` 建议：`AGENT_API_BASE_URL=http://127.0.0.1:8100`(agent-api 已让出 8000 给本机 OCR 服务;OCR_BASE_URL 指向 `http://127.0.0.1:8000`)。
 
 ## 5. 用户 Sandbox（可选）

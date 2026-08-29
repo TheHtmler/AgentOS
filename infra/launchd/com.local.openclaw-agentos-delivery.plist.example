@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.local.openclaw-agentos-delivery</string>
+  <key>ProgramArguments</key>
+  <array><string>__NODE_BIN__</string><string>__AGENTOS_ROOT__/infra/openclaw/agentos-weixin-delivery.mjs</string></array>
+  <key>WorkingDirectory</key><string>__AGENTOS_ROOT__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OPENCLAW_DELIVERY_PORT</key><string>18790</string>
+    <key>OPENCLAW_CONFIG</key><string>__OPENCLAW_HOME__/openclaw.json</string>
+    <key>OPENCLAW_WEIXIN_ACCOUNT_ID</key><string>582e531a918e-im-bot</string>
+    <key>OPENCLAW_WEIXIN_PLUGIN_ROOT</key><string>__OPENCLAW_PLUGIN_ROOT__</string>
+    <key>OPENCLAW_DELIVERY_SHARED_SECRET</key><string>__DELIVERY_SECRET__</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+</dict>
+</plist>

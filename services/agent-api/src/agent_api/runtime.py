@@ -241,6 +241,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     from agent_api.db.session import session_factory
     from agent_api.hitl_timeout import hitl_timeout_loop
     from agent_api.knowledge.import_jobs import fail_interrupted_imports, stop_import_jobs
+    from agent_api.scheduled_notifications import ScheduledNotificationWorker
     from agent_api.scheduled_tasks import ScheduledTaskScheduler
 
     try:
@@ -284,6 +285,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         name="scheduled-task-dispatcher",
     )
     app.state.scheduled_task_scheduler = scheduled_task_scheduler
+    notification_worker = ScheduledNotificationWorker()
+    notification_worker.start()
 
     try:
         async with AsyncExitStack() as stack:
@@ -318,6 +321,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 stop_hitl_timeout.set()
                 hitl_timeout_task.cancel()
                 await scheduled_task_scheduler.stop()
+                await notification_worker.stop()
                 scheduled_task_task.cancel()
                 if not warmup_task.done():
                     warmup_task.cancel()

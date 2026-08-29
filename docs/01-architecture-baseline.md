@@ -79,15 +79,15 @@ SSE 负责 Agent 事件输出；普通 HTTP POST 负责创建、恢复和取消�
 
 ## 数据模型最小集合
 
-| 领域       | 表                                                              |
-| ---------- | --------------------------------------------------------------- |
-| 身份与租户 | `tenants`、`users`、`memberships`、`user_channel_bindings`      |
-| Agent 配置 | `agents`、`agent_versions`、`model_configs`、`knowledge_bases`  |
-| 领域上下文 | `cases`、`case_memberships`、`case_facts`、`care_plans`         |
-| 对话与运行 | `threads`、`messages`、`runs`、`run_events`                     |
-| 工具与审批 | `mcp_servers`、`tools`、`tool_calls`、`interrupts`、`approvals` |
-| 知识与文件 | `knowledge_documents`、`knowledge_chunks`、`artifacts`          |
-| Runtime    | `usage_records`、`audit_logs`                                   |
+| 领域       | 表                                                                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 身份与租户 | `tenants`、`users`、`memberships`、`user_channel_bindings`、`channel_binding_flows`、`channel_binding_invites`、`channel_binding_events` |
+| Agent 配置 | `agents`、`agent_versions`、`model_configs`、`knowledge_bases`                                                                           |
+| 领域上下文 | `cases`、`case_memberships`、`case_facts`、`care_plans`                                                                                  |
+| 对话与运行 | `threads`、`messages`、`runs`、`run_events`                                                                                              |
+| 工具与审批 | `mcp_servers`、`tools`、`tool_calls`、`interrupts`、`approvals`                                                                          |
+| 知识与文件 | `knowledge_documents`、`knowledge_chunks`、`artifacts`                                                                                   |
+| Runtime    | `usage_records`、`audit_logs`                                                                                                            |
 
 `run_events` 采用 append-only 设计，并使用 `(run_id, seq)` 唯一约束。前端断线重连时传入最后一个 `seq`，后端补发缺失事件。审批、恢复、取消和工具调用都必须带 `idempotency_key`。当前 Sandbox 工作区由 Manager 管理，命令输出复用 `artifacts(kind='sandbox')`，尚未增加独立 `sandboxes` 表。
 

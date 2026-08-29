@@ -1,6 +1,6 @@
 # 实施进度
 
-最后更新：2026-08-28（新增 AgentOS 用户与 OpenClaw 微信会话绑定及 Ops 配置）
+最后更新：2026-08-29（新增用户定时任务与站内结果提醒）
 
 ## 当前状态
 
@@ -104,7 +104,8 @@
 - 平台 util 工具：`ToolDomain.UTIL` 下 `time_diff`（可注入 now、日历月/年）与 `calculate`（白名单 AST）；`UTIL_TOOLS_ENABLED`；挂载时注入 `UTIL_INSTRUCTIONS`。
 - 薄评测框架：`agent_api.eval.runner` + `seed/util/foundation_eval.json`（`foundation-util-v1`）；pytest 覆盖 golden 与挂载/禁用；knowledge P0 暂未迁移到该 runner。
 - 运营后台竖切：`apps/ops`（`:3001`）+ `/v1/ops/*`；env 种子 root（`OPS_ROOT_*`）与独立 `ops_sessions` Cookie；知识文档列表 / PATCH `review_status` / 只读快照；seed upsert 前写入 `knowledge_document_snapshots`；迁移 `l8m9n0o1p2q3`。
-- AgentOS 外部账号绑定：`user_channel_bindings` 将已有 `users` 映射到 OpenClaw 微信 `account_id + peer_id`，数据库阻止一个微信会话归属多个用户，并保证每个用户/渠道最多一个默认收件身份；绑定支持通知、OpenClaw 入站、AgentOS 入站三个独立开关。Ops 新增账号绑定页和 `/v1/ops/users`、`/v1/ops/channel-bindings*` 管理接口；二维码登录仍由 OpenClaw 负责，入站桥接与定时 Outbox 尚未接入。
+- AgentOS 外部账号绑定：`user_channel_bindings` 将已有 `users` 映射到 OpenClaw 微信 `account_id + peer_id`，数据库阻止一个微信会话归属多个用户，并保证每个用户/渠道最多一个默认收件身份；用户登录后的 Web 页面和 Ops 邀请入口都生成绑定目标已确定的一次性配对码，OpenClaw 微信插件在模型前处理“绑定 配对码/解绑微信/确认解绑”，通过内部 Bearer callback 落库。`channel_binding_events` 对微信消息 ID 做幂等缓存，绑定控制消息不依赖模型。微信插件当前只提供 peer_id，不承诺昵称或手机号；二维码登录仍由 OpenClaw 负责；当前配对仅支持一对一会话。
+- 用户定时任务闭环：`scheduled_tasks` 保存一次性/每天/每周/每月规则、IANA 时区、下一次 UTC 执行时间和未读结果；Agent API lifespan 内调度器使用 PostgreSQL `FOR UPDATE SKIP LOCKED` 领取任务，在同一事务推进日历并创建普通 Run，复用既有 AG-UI/消息/工具/HITL/历史链路；Web 聊天工作区新增「定时任务」视图，支持新建、编辑、暂停、恢复、立即执行、软删除、执行记录和站内未读提醒。当前没有 Outbox 或 OpenClaw 出站适配器，外部通知仍未接入；迁移 `u6v7w8x9y0z1`。
 - Ops 公网部署模板：`ops-agentos.lemonbabycare.cn` + FRP `:3001` + launchd `com.local.agentos-ops`（见 `docs/14-macmini-frp-ops-deploy.md`、`infra/launchd|frpc|nginx`）。
 - Mac mini 一键脚本：`scripts/macmini-deploy.sh`（pull / sync / migrate / build / kickstart）、`scripts/install-launchd.sh`（api/web/ops plist）。
 - Ops 管理台第一期：侧栏壳子 + 概览统计；知识详情（chunks / 元数据 PATCH / 快照 payload）；Agent 列表与启停/默认。
@@ -159,7 +160,7 @@
 
 > 2026-08-27 按代码逐条核对重写；每条附代码证据。
 
-- 账号体系：邀请邮件送达（仍靠管理员手动转发链接）;magic link 再登录为半建——`auth_tokens.purpose='magic_link'` 被 schema 与 `/v1/auth/verify` 接受，但全仓没有签发点；用户禁用无写入路径（`users.status='disabled'` 仅被登录校验读取）;用户生命周期管理和管理员审计未做。外部渠道绑定已支持，但定时 Outbox、OpenClaw 出站适配器和入站桥接仍未做。
+- 账号体系：邀请邮件送达（仍靠管理员手动转发链接）;magic link 再登录为半建——`auth_tokens.purpose='magic_link'` 被 schema 与 `/v1/auth/verify` 接受，但全仓没有签发点；用户禁用无写入路径（`users.status='disabled'` 仅被登录校验读取）;用户生命周期管理和管理员审计未做。外部渠道完整 AgentOS 入站会话路由和定时 Outbox 仍需继续建设；本轮已完成绑定/解绑控制消息桥接。
 - Case:proposed fact 只能 confirm 不能 reject(`rejected` 状态无任何写入方，待确认横幅永不消）;Case 改名/归档/删除 API 缺失（`archived` 为死状态）；创建/成员/默认管理只有 API+BFF、无 UI（当前设计为对话内隐式，属预留）；高级 ACL（邀请生命周期/所有权转移/组织/临床角色）与领域扩展表（护理计划/化验时间线）未做。
 - Artifact 与记忆治理：Artifact 无列表/更新/删除 API，孤儿 Artifact 无清理，`kind='other'` 死值；Artifact 审计记录缺失；`messages.role=tool` 完整模型历史对齐未做（历史经 `run_events` 摘要重建，已是稳定做法）；用户自己的记忆无查看/删除 API（仅 Ops 侧 GET/DELETE)。
 - 数据卫生：`run_events.text_delta` 只写不读——历史回放走 messages 表、实时流走内存 broker、Ops 时间线显式排除，是 `run_events` 体积主因；`runs.status='queued'` 无任何写入路径（无入队实现）;`user_sessions`/`auth_tokens`/`ops_sessions` 三张会话类表无过期清理任务；`case_facts.source_thread_id/source_run_id` 写而不读（响应不含、Ops 无查看面）。

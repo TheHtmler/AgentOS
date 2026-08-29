@@ -1017,6 +1017,14 @@ async def complete_run(
     thread.updated_at = completed_at
     session.add(assistant_message)
 
+    from agent_api.db.notification_store import enqueue_for_completed_run
+
+    await enqueue_for_completed_run(
+        session,
+        run=run,
+        assistant_content=assistant_content,
+    )
+
     await append_run_event(
         session,
         run_id=run.id,

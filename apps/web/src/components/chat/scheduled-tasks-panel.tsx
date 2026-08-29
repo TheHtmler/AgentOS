@@ -68,6 +68,18 @@ type ScheduledTask = {
   created_at: string;
   updated_at: string;
   runs: TaskRun[];
+  notification_enabled: boolean;
+  notification_channel: string | null;
+  notification_binding_id: string | null;
+  notification_binding_name: string | null;
+  notification_last_status: string | null;
+};
+
+type ChannelBinding = {
+  id: string;
+  display_name: string;
+  status: string;
+  receive_notifications: boolean;
 };
 
 type TaskForm = {
@@ -80,6 +92,8 @@ type TaskForm = {
   daysOfWeek: number[];
   dayOfMonth: string;
   timezone: string;
+  notificationEnabled: boolean;
+  notificationBindingId: string;
 };
 
 type ScheduledTasksPanelProps = {
@@ -141,6 +155,8 @@ function emptyForm(agentId: string, timezone: string): TaskForm {
     daysOfWeek: [0, 1, 2, 3, 4],
     dayOfMonth: "1",
     timezone,
+    notificationEnabled: false,
+    notificationBindingId: "",
   };
 }
 
@@ -155,6 +171,8 @@ function formFromTask(task: ScheduledTask): TaskForm {
     daysOfWeek: task.days_of_week ?? [0],
     dayOfMonth: String(task.day_of_month ?? 1),
     timezone: task.timezone,
+    notificationEnabled: task.notification_enabled,
+    notificationBindingId: task.notification_binding_id ?? "",
   };
 }
 
@@ -209,6 +227,7 @@ export function ScheduledTasksPanel({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bindings, setBindings] = useState<ChannelBinding[]>([]);
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? tasks[0] ?? null;
 
@@ -241,6 +260,15 @@ export function ScheduledTasksPanel({
       window.clearInterval(timer);
     };
   }, [loadTasks]);
+
+  useEffect(() => {
+    void fetch("/api/channel-bindings", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((value: unknown) => {
+        if (isRecord(value) && Array.isArray(value.bindings))
+          setBindings(value.bindings as ChannelBinding[]);
+      });
+  }, []);
 
   useEffect(() => {
     if (selectedTask === null || selectedTask.unread_results === 0) return;
@@ -289,6 +317,9 @@ export function ScheduledTasksPanel({
       days_of_week: form.scheduleType === "weekly" ? form.daysOfWeek : null,
       day_of_month: form.scheduleType === "monthly" ? Number(form.dayOfMonth) : null,
       timezone: form.timezone,
+      notification_enabled: form.notificationEnabled,
+      notification_channel: form.notificationEnabled ? "openclaw-weixin" : null,
+      notification_binding_id: form.notificationEnabled ? form.notificationBindingId || null : null,
     };
 
     try {
@@ -555,6 +586,36 @@ export function ScheduledTasksPanel({
               className="mt-1.5 w-full border border-[var(--border)] bg-[var(--surface-input)] px-3 py-2.5 font-mono text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
             />
           </label>
+          <div className="mt-5 border-t border-[var(--border)] pt-4">
+            <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+              <input
+                type="checkbox"
+                checked={form.notificationEnabled}
+                onChange={(event) => updateForm("notificationEnabled", event.target.checked)}
+              />
+              推送到微信 Bot
+            </label>
+            {form.notificationEnabled ? (
+              <select
+                required
+                value={form.notificationBindingId}
+                onChange={(event) => updateForm("notificationBindingId", event.target.value)}
+                className="mt-2 w-full max-w-sm border border-[var(--border)] bg-[var(--surface-input)] px-3 py-2.5 text-sm text-[var(--text)]"
+              >
+                <option value="">选择已绑定的微信</option>
+                {bindings
+                  .filter((binding) => binding.status === "active" && binding.receive_notifications)
+                  .map((binding) => (
+                    <option key={binding.id} value={binding.id}>
+                      {binding.display_name}
+                    </option>
+                  ))}
+              </select>
+            ) : null}
+            {form.notificationEnabled && bindings.length === 0 ? (
+              <p className="mt-2 text-xs text-[var(--danger)]">请先在“微信通知”中完成账号绑定。</p>
+            ) : null}
+          </div>
           <div className="mt-5 flex justify-end gap-2">
             <button
               type="button"

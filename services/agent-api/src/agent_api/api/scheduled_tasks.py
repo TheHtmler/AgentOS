@@ -14,7 +14,7 @@ from agent_api.api.auth import get_current_user
 from agent_api.db.agent_store import AgentNotFoundError, PublishedAgentVersionNotFoundError
 from agent_api.db.case_store import CaseNotFoundError
 from agent_api.db.chat_store import ThreadBusyError, ThreadNotFoundError
-from agent_api.db.models import Agent, Run, ScheduledTask, Thread, User
+from agent_api.db.models import Agent, Run, ScheduledTask, Thread, User, UserChannelBinding
 from agent_api.db.session import session_factory
 from agent_api.scheduled_tasks import (
     ScheduledTaskScheduler,
@@ -51,6 +51,9 @@ class ScheduledTaskCreateRequest(ScheduleFields):
     prompt: str = Field(min_length=1, max_length=4_000)
     agent_id: UUID | None = None
     case_id: UUID | None = None
+    notification_enabled: bool = False
+    notification_channel: Literal["openclaw-weixin"] | None = None
+    notification_binding_id: UUID | None = None
 
     @field_validator("title", "prompt")
     @classmethod
@@ -71,6 +74,9 @@ class ScheduledTaskUpdateRequest(BaseModel):
     days_of_week: list[int] | None = None
     day_of_month: int | None = Field(default=None, ge=1, le=31)
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
+    notification_enabled: bool | None = None
+    notification_channel: Literal["openclaw-weixin"] | None = None
+    notification_binding_id: UUID | None = None
 
     @field_validator("title", "prompt")
     @classmethod
@@ -126,6 +132,13 @@ class ScheduledTaskResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     runs: list[ScheduledTaskRunResponse] = Field(default_factory=lambda: [])
+    notification_enabled: bool
+    notification_channel: str | None
+    notification_binding_id: UUID | None
+    notification_binding_name: str | None
+    notification_last_status: str | None
+    notification_last_error_code: str | None
+    notification_last_at: datetime | None
 
 
 class ScheduledTaskListResponse(BaseModel):
@@ -227,6 +240,13 @@ async def _to_response(
 ) -> ScheduledTaskResponse:
     values = _schedule_config_values(task)
     runs: list[Run] = await _recent_runs(session, task.id)
+    binding_name = None
+    if task.notification_binding_id is not None:
+        binding_name = await session.scalar(
+            select(UserChannelBinding.display_name).where(
+                UserChannelBinding.id == task.notification_binding_id
+            )
+        )
     return ScheduledTaskResponse(
         id=task.id,
         title=task.title,
@@ -251,7 +271,38 @@ async def _to_response(
         created_at=task.created_at,
         updated_at=task.updated_at,
         runs=[_run_response(run) for run in runs],
+        notification_enabled=task.notification_enabled,
+        notification_channel=task.notification_channel,
+        notification_binding_id=task.notification_binding_id,
+        notification_binding_name=binding_name,
+        notification_last_status=task.notification_last_status,
+        notification_last_error_code=task.notification_last_error_code,
+        notification_last_at=task.notification_last_at,
     )
+
+
+async def _validate_notification_target(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    enabled: bool,
+    channel: str | None,
+    binding_id: UUID | None,
+) -> None:
+    if not enabled:
+        return
+    if channel != "openclaw-weixin" or binding_id is None:
+        raise HTTPException(status_code=422, detail="启用微信推送时必须选择有效的微信绑定")
+    binding = await session.scalar(
+        select(UserChannelBinding).where(
+            UserChannelBinding.id == binding_id,
+            UserChannelBinding.user_id == user_id,
+            UserChannelBinding.channel == channel,
+            UserChannelBinding.status == "active",
+        )
+    )
+    if binding is None:
+        raise HTTPException(status_code=422, detail="微信绑定不存在或已失效")
 
 
 def _normalize_schedule(body: ScheduleFields) -> tuple[dict[str, object], datetime]:
@@ -322,6 +373,20 @@ async def create_scheduled_task(
                 schedule_config=config,
                 timezone=body.timezone,
                 next_run_at=next_at,
+                notification_enabled=body.notification_enabled,
+                notification_channel=body.notification_channel
+                if body.notification_enabled
+                else None,
+                notification_binding_id=body.notification_binding_id
+                if body.notification_enabled
+                else None,
+            )
+            await _validate_notification_target(
+                session,
+                user_id=user.id,
+                enabled=body.notification_enabled,
+                channel=task.notification_channel,
+                binding_id=task.notification_binding_id,
             )
             session.add(task)
             await session.flush()
@@ -430,6 +495,40 @@ async def update_scheduled_task(
                 task.timezone = timezone_name
                 task.next_run_at = next_at
                 task.status = "active"
+            notification_fields = {
+                "notification_enabled",
+                "notification_channel",
+                "notification_binding_id",
+            }
+            if body.model_fields_set & notification_fields:
+                enabled = bool(
+                    body.notification_enabled
+                    if "notification_enabled" in body.model_fields_set
+                    else task.notification_enabled
+                )
+                channel = (
+                    body.notification_channel
+                    if "notification_channel" in body.model_fields_set
+                    else task.notification_channel
+                )
+                binding_id = (
+                    body.notification_binding_id
+                    if "notification_binding_id" in body.model_fields_set
+                    else task.notification_binding_id
+                )
+                if not enabled:
+                    channel = None
+                    binding_id = None
+                await _validate_notification_target(
+                    session,
+                    user_id=user.id,
+                    enabled=enabled,
+                    channel=channel,
+                    binding_id=binding_id,
+                )
+                task.notification_enabled = enabled
+                task.notification_channel = channel
+                task.notification_binding_id = binding_id
             await session.flush()
             await session.refresh(task)
             return await _to_response(session, task, agent_name)

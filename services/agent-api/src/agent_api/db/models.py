@@ -15,6 +15,9 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy import (
+    text as sa_text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -31,10 +34,22 @@ class User(Base):
             "status IN ('invited', 'active', 'disabled')",
             name="ck_users_status",
         ),
+        CheckConstraint(
+            "handle IS NULL OR length(trim(handle)) > 0",
+            name="ck_users_handle",
+        ),
+        Index(
+            "uq_users_handle_ci",
+            func.lower(text("handle")),
+            unique=True,
+            postgresql_where=text("handle IS NOT NULL"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    # Stable human-readable identifier used by controlled external-channel pairing.
+    handle: Mapped[str | None] = mapped_column(String(64))
     # Only an Argon2id password hash is stored; plaintext passwords are never persisted.
     password_hash: Mapped[str | None] = mapped_column(String(255))
     password_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -193,6 +208,131 @@ class UserChannelBinding(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class ChannelBindingFlow(Base):
+    """Short-lived state for deterministic external-channel bind/unbind commands."""
+
+    __tablename__ = "channel_binding_flows"
+    __table_args__ = (
+        CheckConstraint(
+            "channel IN ('openclaw-weixin')",
+            name="ck_channel_binding_flows_channel",
+        ),
+        CheckConstraint(
+            "action IN ('bind', 'unbind')",
+            name="ck_channel_binding_flows_action",
+        ),
+        CheckConstraint(
+            "step IN ("
+            "'awaiting_handle', 'awaiting_code', 'awaiting_target', "
+            "'awaiting_unbind_confirmation'"
+            ")",
+            name="ck_channel_binding_flows_step",
+        ),
+        UniqueConstraint(
+            "channel",
+            "account_id",
+            "peer_id",
+            name="uq_channel_binding_flows_endpoint",
+        ),
+        Index(
+            "ix_channel_binding_flows_expires_at",
+            "expires_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    channel: Mapped[str] = mapped_column(String(64), nullable=False)
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    peer_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    step: Mapped[str] = mapped_column(String(32), nullable=False)
+    candidate_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+    )
+    candidate_handle: Mapped[str | None] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class ChannelBindingInvite(Base):
+    """One-time, hashed code issued for a user/channel pairing."""
+
+    __tablename__ = "channel_binding_invites"
+    __table_args__ = (
+        CheckConstraint(
+            "channel IN ('openclaw-weixin')",
+            name="ck_channel_binding_invites_channel",
+        ),
+        Index(
+            "ix_channel_binding_invites_user_channel",
+            "user_id",
+            "channel",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    channel: Mapped[str] = mapped_column(String(64), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+class ChannelBindingEvent(Base):
+    """Cached response for a control event retried by the external channel."""
+
+    __tablename__ = "channel_binding_events"
+    __table_args__ = (
+        CheckConstraint(
+            "channel IN ('openclaw-weixin')",
+            name="ck_channel_binding_events_channel",
+        ),
+        UniqueConstraint(
+            "channel",
+            "account_id",
+            "peer_id",
+            "event_id",
+            name="uq_channel_binding_events_endpoint_event",
+        ),
+        Index(
+            "ix_channel_binding_events_created_at",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    channel: Mapped[str] = mapped_column(String(64), nullable=False)
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    peer_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    handled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    reply: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
         nullable=False,
     )
 
@@ -939,6 +1079,69 @@ class ScheduledTask(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    notification_enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+    notification_channel: Mapped[str | None] = mapped_column(String(64))
+    notification_binding_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user_channel_bindings.id", ondelete="SET NULL"), index=True
+    )
+    notification_last_status: Mapped[str | None] = mapped_column(String(24))
+    notification_last_error_code: Mapped[str | None] = mapped_column(String(64))
+    notification_last_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ScheduledTaskNotification(Base):
+    """Durable at-least-once delivery record for one scheduled Run/channel."""
+
+    __tablename__ = "scheduled_task_notifications"
+    __table_args__ = (
+        CheckConstraint(
+            "channel IN ('openclaw-weixin')",
+            name="ck_scheduled_task_notifications_channel",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'sending', 'retrying', 'delivered', 'skipped', "
+            "'failed', 'unknown')",
+            name="ck_scheduled_task_notifications_status",
+        ),
+        UniqueConstraint("run_id", "channel", name="uq_scheduled_task_notifications_run_channel"),
+        Index("ix_scheduled_task_notifications_due", "status", "next_attempt_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    delivery_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), unique=True, default=uuid4)
+    task_id: Mapped[UUID] = mapped_column(
+        ForeignKey("scheduled_tasks.id", ondelete="CASCADE"), index=True
+    )
+    run_id: Mapped[UUID] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    binding_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user_channel_bindings.id", ondelete="SET NULL")
+    )
+    channel: Mapped[str] = mapped_column(String(64), nullable=False)
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    peer_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24), server_default=sa_text("'pending'"), nullable=False
+    )
+    attempts: Mapped[int] = mapped_column(Integer, server_default=sa_text("0"), nullable=False)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    openclaw_message_id: Mapped[str | None] = mapped_column(String(255))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
 

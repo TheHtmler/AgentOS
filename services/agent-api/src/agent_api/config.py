@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     # Argon2id hash from pwdlib PasswordHash.recommended(); used when set.
     ops_root_password_hash: str = ""
     ops_session_ttl_hours: int = 12
+    # Shared secret for the loopback/internal OpenClaw binding callback.
+    openclaw_binding_shared_secret: str = ""
+    # Loopback-only delivery bridge used by the scheduled notification outbox.
+    openclaw_delivery_url: str = "http://127.0.0.1:18790/internal/agentos/weixin/send"
+    openclaw_delivery_shared_secret: str = ""
+    openclaw_delivery_timeout_seconds: float = 15.0
+    scheduled_task_weixin_enabled: bool = False
     web_app_origin: str = "http://127.0.0.1:3000"
     database_url: str
     search_enabled: bool = True
