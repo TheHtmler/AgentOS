@@ -1,6 +1,6 @@
 # 实施进度
 
-最后更新：2026-08-29（新增用户定时任务与站内结果提醒）
+最后更新：2026-08-30（优化定时任务日历规则、默认微信收件人和会话自动同步）
 
 ## 当前状态
 
@@ -105,7 +105,7 @@
 - 薄评测框架：`agent_api.eval.runner` + `seed/util/foundation_eval.json`（`foundation-util-v1`）；pytest 覆盖 golden 与挂载/禁用；knowledge P0 暂未迁移到该 runner。
 - 运营后台竖切：`apps/ops`（`:3001`）+ `/v1/ops/*`；env 种子 root（`OPS_ROOT_*`）与独立 `ops_sessions` Cookie；知识文档列表 / PATCH `review_status` / 只读快照；seed upsert 前写入 `knowledge_document_snapshots`；迁移 `l8m9n0o1p2q3`。
 - AgentOS 外部账号绑定：`user_channel_bindings` 将已有 `users` 映射到 OpenClaw 微信 `account_id + peer_id`，数据库阻止一个微信会话归属多个用户，并保证每个用户/渠道最多一个默认收件身份；用户登录后的 Web 页面和 Ops 邀请入口都生成绑定目标已确定的一次性配对码，OpenClaw 微信插件在模型前处理“绑定 配对码/解绑微信/确认解绑”，通过内部 Bearer callback 落库。`channel_binding_events` 对微信消息 ID 做幂等缓存，绑定控制消息不依赖模型。微信插件当前只提供 peer_id，不承诺昵称或手机号；二维码登录仍由 OpenClaw 负责；当前配对仅支持一对一会话。
-- 用户定时任务闭环：`scheduled_tasks` 保存一次性/每天/每周/每月规则、IANA 时区、下一次 UTC 执行时间和未读结果；Agent API lifespan 内调度器使用 PostgreSQL `FOR UPDATE SKIP LOCKED` 领取任务，在同一事务推进日历并创建普通 Run，复用既有 AG-UI/消息/工具/HITL/历史链路；Web 聊天工作区新增「定时任务」视图，支持新建、编辑、暂停、恢复、立即执行、软删除、执行记录和站内未读提醒。当前没有 Outbox 或 OpenClaw 出站适配器，外部通知仍未接入；迁移 `u6v7w8x9y0z1`。
+- 用户定时任务闭环：`scheduled_tasks` 保存一次性/每天/工作日/周末/每周/每月规则、IANA 时区、下一次 UTC 执行时间和未读结果；月度规则支持指定日期、每月最后一天及短月跳过/最后一天策略。Agent API lifespan 内调度器使用 PostgreSQL `FOR UPDATE SKIP LOCKED` 领取任务，在同一事务推进日历并创建普通 Run，复用既有 AG-UI/消息/工具/HITL/历史链路；Web 聊天工作区新增「定时任务」视图，支持新建、编辑、暂停、恢复、立即执行、软删除、执行记录和站内未读提醒。定时任务会话每 5 秒自动同步后台结果。微信通知已通过 `scheduled_task_notifications` Outbox、用户默认渠道绑定与 loopback-only OpenClaw delivery adapter 接入；迁移 `u6v7w8x9y0z1` / `w8x9y0z1a2b`。
 - Ops 公网部署模板：`ops-agentos.lemonbabycare.cn` + FRP `:3001` + launchd `com.local.agentos-ops`（见 `docs/14-macmini-frp-ops-deploy.md`、`infra/launchd|frpc|nginx`）。
 - Mac mini 一键脚本：`scripts/macmini-deploy.sh`（pull / sync / migrate / build / kickstart）、`scripts/install-launchd.sh`（api/web/ops plist）。
 - Ops 管理台第一期：侧栏壳子 + 概览统计；知识详情（chunks / 元数据 PATCH / 快照 payload）；Agent 列表与启停/默认。

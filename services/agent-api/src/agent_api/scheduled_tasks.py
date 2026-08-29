@@ -82,6 +82,8 @@ def normalize_schedule_config(
     time_of_day: str | None = None,
     days_of_week: list[int] | None = None,
     day_of_month: int | None = None,
+    monthly_mode: str = "day_of_month",
+    month_end_policy: str = "skip",
     timezone_name: str = "UTC",
 ) -> dict[str, object]:
     """Validate and normalize the user-facing schedule form into stable JSON."""
@@ -111,9 +113,20 @@ def normalize_schedule_config(
             raise ScheduleValidationError("days_of_week must contain values from 0 to 6")
         return {"time_of_day": time_of_day, "days_of_week": normalized_days}
 
+    if monthly_mode == "last_day":
+        return {"time_of_day": time_of_day, "monthly_mode": "last_day"}
+    if monthly_mode != "day_of_month":
+        raise ScheduleValidationError("monthly_mode must be day_of_month or last_day")
+    if month_end_policy not in {"skip", "last_day"}:
+        raise ScheduleValidationError("month_end_policy must be skip or last_day")
     if day_of_month is None or not 1 <= day_of_month <= 31:
         raise ScheduleValidationError("day_of_month must be between 1 and 31")
-    return {"time_of_day": time_of_day, "day_of_month": day_of_month}
+    return {
+        "time_of_day": time_of_day,
+        "day_of_month": day_of_month,
+        "monthly_mode": "day_of_month",
+        "month_end_policy": month_end_policy,
+    }
 
 
 def _next_month(year: int, month: int) -> tuple[int, int]:
@@ -168,14 +181,33 @@ def next_run_at(
         raise ScheduleValidationError("weekly schedule has no future occurrence")
 
     if schedule_type == "monthly":
+        raw_mode = schedule_config.get("monthly_mode", "day_of_month")
+        if raw_mode == "last_day":
+            year, month = current.year, current.month
+            for _ in range(24):
+                candidate = datetime.combine(
+                    date(year, month, _days_in_month(year, month)),
+                    scheduled_time,
+                    tzinfo=zone,
+                )
+                if candidate > current:
+                    return candidate.astimezone(UTC)
+                year, month = _next_month(year, month)
+            raise ScheduleValidationError("monthly schedule has no future occurrence")
+        if raw_mode != "day_of_month":
+            raise ScheduleValidationError("stored monthly schedule has invalid monthly_mode")
         raw_day = schedule_config.get("day_of_month")
         if not isinstance(raw_day, int) or isinstance(raw_day, bool) or not 1 <= raw_day <= 31:
             raise ScheduleValidationError("stored monthly schedule has invalid day_of_month")
         year, month = current.year, current.month
+        raw_policy = schedule_config.get("month_end_policy", "skip")
+        if raw_policy not in {"skip", "last_day"}:
+            raise ScheduleValidationError("stored monthly schedule has invalid month_end_policy")
         for _ in range(24):
-            if raw_day <= _days_in_month(year, month):
+            days_in_month = _days_in_month(year, month)
+            if raw_day <= days_in_month or raw_policy == "last_day":
                 candidate = datetime.combine(
-                    date(year, month, raw_day),
+                    date(year, month, min(raw_day, days_in_month)),
                     scheduled_time,
                     tzinfo=zone,
                 )

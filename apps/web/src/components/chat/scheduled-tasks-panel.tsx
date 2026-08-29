@@ -29,6 +29,7 @@ import {
 import type { AgentSummary } from "@/lib/agents";
 
 type ScheduleType = "once" | "daily" | "weekly" | "monthly";
+type FormScheduleType = ScheduleType | "weekdays" | "weekends";
 
 type TaskRun = {
   id: string;
@@ -57,6 +58,8 @@ type ScheduledTask = {
   time_of_day: string | null;
   days_of_week: number[] | null;
   day_of_month: number | null;
+  monthly_mode: "day_of_month" | "last_day";
+  month_end_policy: "skip" | "last_day";
   timezone: string;
   status: "active" | "paused" | "completed";
   next_run_at: string | null;
@@ -80,17 +83,20 @@ type ChannelBinding = {
   display_name: string;
   status: string;
   receive_notifications: boolean;
+  is_default: boolean;
 };
 
 type TaskForm = {
   title: string;
   prompt: string;
   agentId: string;
-  scheduleType: ScheduleType;
+  scheduleType: FormScheduleType;
   runAt: string;
   timeOfDay: string;
   daysOfWeek: number[];
   dayOfMonth: string;
+  monthlyMode: "day_of_month" | "last_day";
+  monthEndPolicy: "skip" | "last_day";
   timezone: string;
   notificationEnabled: boolean;
   notificationBindingId: string;
@@ -100,6 +106,7 @@ type ScheduledTasksPanelProps = {
   agents: AgentSummary[];
   onOpenThread: (threadId: string, agentId?: string) => void;
   onUnreadCountChange?: (count: number) => void;
+  onScheduledThreadsChange?: (threadIds: string[]) => void;
 };
 
 const dayLabels = ["一", "二", "三", "四", "五", "六", "日"];
@@ -154,6 +161,8 @@ function emptyForm(agentId: string, timezone: string): TaskForm {
     timeOfDay: "09:00",
     daysOfWeek: [0, 1, 2, 3, 4],
     dayOfMonth: "1",
+    monthlyMode: "day_of_month",
+    monthEndPolicy: "skip",
     timezone,
     notificationEnabled: false,
     notificationBindingId: "",
@@ -165,11 +174,18 @@ function formFromTask(task: ScheduledTask): TaskForm {
     title: task.title,
     prompt: task.prompt,
     agentId: task.agent_id,
-    scheduleType: task.schedule_type,
+    scheduleType:
+      task.schedule_type === "weekly" && task.days_of_week?.join(",") === "0,1,2,3,4"
+        ? "weekdays"
+        : task.schedule_type === "weekly" && task.days_of_week?.join(",") === "5,6"
+          ? "weekends"
+          : task.schedule_type,
     runAt: task.run_at ? task.run_at.slice(0, 16) : "",
     timeOfDay: task.time_of_day ?? "09:00",
     daysOfWeek: task.days_of_week ?? [0],
     dayOfMonth: String(task.day_of_month ?? 1),
+    monthlyMode: task.monthly_mode,
+    monthEndPolicy: task.month_end_policy,
     timezone: task.timezone,
     notificationEnabled: task.notification_enabled,
     notificationBindingId: task.notification_binding_id ?? "",
@@ -194,6 +210,7 @@ function scheduleLabel(task: ScheduledTask): string {
     const days = (task.days_of_week ?? []).map((day) => `周${dayLabels[day]}`).join("、");
     return `${days} ${task.time_of_day ?? ""}`;
   }
+  if (task.monthly_mode === "last_day") return `每月最后一天 ${task.time_of_day ?? ""}`;
   return `每月 ${task.day_of_month ?? 1} 日 ${task.time_of_day ?? ""}`;
 }
 
@@ -215,6 +232,7 @@ export function ScheduledTasksPanel({
   agents,
   onOpenThread,
   onUnreadCountChange,
+  onScheduledThreadsChange,
 }: ScheduledTasksPanelProps) {
   const firstAgentId = agents[0]?.id ?? "";
   const timezone = useMemo(() => defaultTimezone(), []);
@@ -229,6 +247,12 @@ export function ScheduledTasksPanel({
   const [error, setError] = useState<string | null>(null);
   const [bindings, setBindings] = useState<ChannelBinding[]>([]);
 
+  const notificationBindings = bindings.filter(
+    (binding) => binding.status === "active" && binding.receive_notifications,
+  );
+  const defaultBinding =
+    notificationBindings.find((binding) => binding.is_default) ?? notificationBindings[0] ?? null;
+
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? tasks[0] ?? null;
 
   const loadTasks = useCallback(async () => {
@@ -238,6 +262,9 @@ export function ScheduledTasksPanel({
       const parsed = parseTasks((await response.json()) as unknown);
       if (parsed === null) throw new Error("定时任务格式无效。");
       setTasks(parsed);
+      onScheduledThreadsChange?.(
+        parsed.flatMap((task) => (task.thread_id ? [task.thread_id] : [])),
+      );
       onUnreadCountChange?.(
         parsed.reduce((total, task) => total + Math.max(0, task.unread_results), 0),
       );
@@ -250,7 +277,7 @@ export function ScheduledTasksPanel({
     } finally {
       setLoading(false);
     }
-  }, [onUnreadCountChange]);
+  }, [onScheduledThreadsChange, onUnreadCountChange]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void loadTasks(), 0);
@@ -293,7 +320,10 @@ export function ScheduledTasksPanel({
 
   function startCreate() {
     setEditingTaskId(null);
-    setForm(emptyForm(firstAgentId, timezone));
+    setForm({
+      ...emptyForm(firstAgentId, timezone),
+      notificationBindingId: defaultBinding?.id ?? "",
+    });
     setShowForm(true);
   }
 
@@ -307,15 +337,30 @@ export function ScheduledTasksPanel({
     event.preventDefault();
     setBusy(true);
     setError(null);
+    const canonicalScheduleType =
+      form.scheduleType === "weekdays" || form.scheduleType === "weekends"
+        ? "weekly"
+        : form.scheduleType;
+    const weeklyDays =
+      form.scheduleType === "weekdays"
+        ? [0, 1, 2, 3, 4]
+        : form.scheduleType === "weekends"
+          ? [5, 6]
+          : form.daysOfWeek;
     const payload = {
       title: form.title,
       prompt: form.prompt,
       agent_id: form.agentId,
-      schedule_type: form.scheduleType,
-      run_at: form.scheduleType === "once" ? form.runAt : null,
-      time_of_day: form.scheduleType === "once" ? null : form.timeOfDay,
-      days_of_week: form.scheduleType === "weekly" ? form.daysOfWeek : null,
-      day_of_month: form.scheduleType === "monthly" ? Number(form.dayOfMonth) : null,
+      schedule_type: canonicalScheduleType,
+      run_at: canonicalScheduleType === "once" ? form.runAt : null,
+      time_of_day: canonicalScheduleType === "once" ? null : form.timeOfDay,
+      days_of_week: canonicalScheduleType === "weekly" ? weeklyDays : null,
+      day_of_month:
+        canonicalScheduleType === "monthly" && form.monthlyMode === "day_of_month"
+          ? Number(form.dayOfMonth)
+          : null,
+      monthly_mode: form.monthlyMode,
+      month_end_policy: form.monthEndPolicy,
       timezone: form.timezone,
       notification_enabled: form.notificationEnabled,
       notification_channel: form.notificationEnabled ? "openclaw-weixin" : null,
@@ -499,11 +544,15 @@ export function ScheduledTasksPanel({
               重复方式
               <select
                 value={form.scheduleType}
-                onChange={(event) => updateForm("scheduleType", event.target.value as ScheduleType)}
+                onChange={(event) =>
+                  updateForm("scheduleType", event.target.value as FormScheduleType)
+                }
                 className="mt-1.5 w-full border border-[var(--border)] bg-[var(--surface-input)] px-3 py-2.5 text-[var(--text)] outline-none focus:border-[var(--accent)]"
               >
                 <option value="once">一次性</option>
                 <option value="daily">每天</option>
+                <option value="weekdays">工作日</option>
+                <option value="weekends">周末</option>
                 <option value="weekly">每周</option>
                 <option value="monthly">每月</option>
               </select>
@@ -533,7 +582,22 @@ export function ScheduledTasksPanel({
             )}
             {form.scheduleType === "monthly" ? (
               <label className="block text-sm text-[var(--text-secondary)]">
-                每月日期
+                每月执行日
+                <select
+                  value={form.monthlyMode}
+                  onChange={(event) =>
+                    updateForm("monthlyMode", event.target.value as TaskForm["monthlyMode"])
+                  }
+                  className="mt-1.5 w-full border border-[var(--border)] bg-[var(--surface-input)] px-3 py-2.5 text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                >
+                  <option value="day_of_month">指定日期</option>
+                  <option value="last_day">每月最后一天</option>
+                </select>
+              </label>
+            ) : null}
+            {form.scheduleType === "monthly" && form.monthlyMode === "day_of_month" ? (
+              <label className="block text-sm text-[var(--text-secondary)]">
+                日期
                 <input
                   required
                   type="number"
@@ -546,6 +610,21 @@ export function ScheduledTasksPanel({
               </label>
             ) : null}
           </div>
+          {form.scheduleType === "monthly" && form.monthlyMode === "day_of_month" ? (
+            <label className="mt-4 block max-w-sm text-sm text-[var(--text-secondary)]">
+              短月处理
+              <select
+                value={form.monthEndPolicy}
+                onChange={(event) =>
+                  updateForm("monthEndPolicy", event.target.value as TaskForm["monthEndPolicy"])
+                }
+                className="mt-1.5 w-full border border-[var(--border)] bg-[var(--surface-input)] px-3 py-2.5 text-[var(--text)] outline-none focus:border-[var(--accent)]"
+              >
+                <option value="skip">跳过当月</option>
+                <option value="last_day">改在当月最后一天</option>
+              </select>
+            </label>
+          ) : null}
           {form.scheduleType === "weekly" ? (
             <fieldset className="mt-4">
               <legend className="text-sm text-[var(--text-secondary)]">每周日期</legend>
@@ -578,7 +657,7 @@ export function ScheduledTasksPanel({
             </fieldset>
           ) : null}
           <label className="mt-4 block max-w-sm text-sm text-[var(--text-secondary)]">
-            时区
+            时区（默认使用当前设备）
             <input
               required
               value={form.timezone}
@@ -591,28 +670,36 @@ export function ScheduledTasksPanel({
               <input
                 type="checkbox"
                 checked={form.notificationEnabled}
-                onChange={(event) => updateForm("notificationEnabled", event.target.checked)}
+                onChange={(event) => {
+                  updateForm("notificationEnabled", event.target.checked);
+                  if (event.target.checked && !form.notificationBindingId && defaultBinding) {
+                    updateForm("notificationBindingId", defaultBinding.id);
+                  }
+                }}
               />
               推送到微信 Bot
             </label>
             {form.notificationEnabled ? (
-              <select
-                required
-                value={form.notificationBindingId}
-                onChange={(event) => updateForm("notificationBindingId", event.target.value)}
-                className="mt-2 w-full max-w-sm border border-[var(--border)] bg-[var(--surface-input)] px-3 py-2.5 text-sm text-[var(--text)]"
-              >
-                <option value="">选择已绑定的微信</option>
-                {bindings
-                  .filter((binding) => binding.status === "active" && binding.receive_notifications)
-                  .map((binding) => (
+              notificationBindings.length <= 1 ? (
+                <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                  发送至：{defaultBinding?.display_name ?? "请先绑定微信账号"}
+                </p>
+              ) : (
+                <select
+                  value={form.notificationBindingId || defaultBinding?.id || ""}
+                  onChange={(event) => updateForm("notificationBindingId", event.target.value)}
+                  className="mt-2 w-full max-w-sm border border-[var(--border)] bg-[var(--surface-input)] px-3 py-2.5 text-sm text-[var(--text)]"
+                >
+                  {notificationBindings.map((binding) => (
                     <option key={binding.id} value={binding.id}>
                       {binding.display_name}
+                      {binding.is_default ? "（默认）" : ""}
                     </option>
                   ))}
-              </select>
+                </select>
+              )
             ) : null}
-            {form.notificationEnabled && bindings.length === 0 ? (
+            {form.notificationEnabled && notificationBindings.length === 0 ? (
               <p className="mt-2 text-xs text-[var(--danger)]">请先在“微信通知”中完成账号绑定。</p>
             ) : null}
           </div>
@@ -629,7 +716,8 @@ export function ScheduledTasksPanel({
               disabled={
                 busy ||
                 !form.agentId ||
-                (form.scheduleType === "weekly" && form.daysOfWeek.length === 0)
+                (form.scheduleType === "weekly" && form.daysOfWeek.length === 0) ||
+                (form.notificationEnabled && notificationBindings.length === 0)
               }
               className="flex items-center gap-2 bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--send-fg)] disabled:cursor-not-allowed disabled:opacity-50"
             >

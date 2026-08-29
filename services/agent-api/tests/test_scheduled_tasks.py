@@ -51,6 +51,40 @@ def test_monthly_day_31_skips_short_months() -> None:
     ) == datetime(2026, 3, 31, 8, 0, tzinfo=UTC)
 
 
+def test_monthly_short_month_can_run_on_its_last_day() -> None:
+    config = normalize_schedule_config(
+        "monthly",
+        time_of_day="08:00",
+        day_of_month=31,
+        month_end_policy="last_day",
+        timezone_name="UTC",
+    )
+
+    assert next_run_at(
+        "monthly",
+        config,
+        "UTC",
+        now=datetime(2026, 1, 31, 9, 0, tzinfo=UTC),
+    ) == datetime(2026, 2, 28, 8, 0, tzinfo=UTC)
+
+
+def test_monthly_last_day_is_explicit() -> None:
+    config = normalize_schedule_config(
+        "monthly",
+        time_of_day="08:00",
+        monthly_mode="last_day",
+        timezone_name="UTC",
+    )
+
+    assert config == {"time_of_day": "08:00", "monthly_mode": "last_day"}
+    assert next_run_at(
+        "monthly",
+        config,
+        "UTC",
+        now=datetime(2026, 2, 27, 9, 0, tzinfo=UTC),
+    ) == datetime(2026, 2, 28, 8, 0, tzinfo=UTC)
+
+
 def test_one_time_schedule_converts_an_offset_to_the_named_timezone() -> None:
     config = normalize_schedule_config(
         "once",

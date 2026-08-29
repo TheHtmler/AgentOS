@@ -236,6 +236,8 @@ type ChatPanelProps = {
   agentLoadError: string | null;
   /** False when the selected agent's model cannot take image input; upload stays disabled. */
   supportsVision?: boolean;
+  /** Scheduled runs originate server-side, so their visible Thread needs a quiet history sync. */
+  isScheduledTaskThread?: boolean;
   /** When false, this panel stays mounted for background runs but must not own the URL/inspector. */
   isActive?: boolean;
   onRetryAgentLoad: () => void;
@@ -661,6 +663,7 @@ export function ChatPanel({
   agents,
   agentLoadError,
   supportsVision = true,
+  isScheduledTaskThread = false,
   isActive = true,
   onRetryAgentLoad,
   onSelectAgent,
@@ -688,6 +691,16 @@ export function ChatPanel({
   const [approvalRunId, setApprovalRunId] = useState<string | null>(null);
   const [pendingInterrupts, setPendingInterrupts] = useState<PendingInterrupt[]>([]);
   const [uploadedArtifacts, setUploadedArtifacts] = useState<UploadedArtifact[]>([]);
+
+  useEffect(() => {
+    if (!isActive || !isScheduledTaskThread || threadId === null || isStreaming) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setHistoryRefreshKey((current) => current + 1);
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [isActive, isScheduledTaskThread, isStreaming, threadId]);
   const [selectedSandboxFile, setSelectedSandboxFile] = useState<SandboxFile | null>(null);
   const [selectedUploadId, setSelectedUploadId] = useState<string | null>(null);
 

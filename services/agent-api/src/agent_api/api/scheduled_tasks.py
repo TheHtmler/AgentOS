@@ -28,6 +28,8 @@ from agent_api.scheduled_tasks import (
 router = APIRouter(prefix="/v1/scheduled-tasks", tags=["scheduled-tasks"])
 
 ScheduleType = Literal["once", "daily", "weekly", "monthly"]
+MonthlyMode = Literal["day_of_month", "last_day"]
+MonthEndPolicy = Literal["skip", "last_day"]
 
 
 class ScheduleFields(BaseModel):
@@ -38,6 +40,8 @@ class ScheduleFields(BaseModel):
     time_of_day: str | None = Field(default=None, max_length=5)
     days_of_week: list[int] | None = None
     day_of_month: int | None = Field(default=None, ge=1, le=31)
+    monthly_mode: MonthlyMode = "day_of_month"
+    month_end_policy: MonthEndPolicy = "skip"
     timezone: str = Field(min_length=1, max_length=64)
 
     @field_validator("timezone")
@@ -73,6 +77,8 @@ class ScheduledTaskUpdateRequest(BaseModel):
     time_of_day: str | None = Field(default=None, max_length=5)
     days_of_week: list[int] | None = None
     day_of_month: int | None = Field(default=None, ge=1, le=31)
+    monthly_mode: MonthlyMode | None = None
+    month_end_policy: MonthEndPolicy | None = None
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
     notification_enabled: bool | None = None
     notification_channel: Literal["openclaw-weixin"] | None = None
@@ -121,6 +127,8 @@ class ScheduledTaskResponse(BaseModel):
     time_of_day: str | None
     days_of_week: list[int] | None
     day_of_month: int | None
+    monthly_mode: MonthlyMode
+    month_end_policy: MonthEndPolicy
     timezone: str
     status: str
     next_run_at: datetime | None
@@ -150,6 +158,8 @@ class ScheduleConfigValues(TypedDict):
     time_of_day: str | None
     days_of_week: list[int] | None
     day_of_month: int | None
+    monthly_mode: MonthlyMode
+    month_end_policy: MonthEndPolicy
 
 
 def _schedule_config_values(task: ScheduledTask) -> ScheduleConfigValues:
@@ -158,6 +168,8 @@ def _schedule_config_values(task: ScheduledTask) -> ScheduleConfigValues:
     run_at = config.get("run_at")
     time_of_day = config.get("time_of_day")
     day_of_month = config.get("day_of_month")
+    monthly_mode = config.get("monthly_mode")
+    month_end_policy = config.get("month_end_policy")
     typed_days = cast(list[object], raw_days) if isinstance(raw_days, list) else []
     days_of_week = (
         [value for value in typed_days if isinstance(value, int) and not isinstance(value, bool)]
@@ -169,6 +181,8 @@ def _schedule_config_values(task: ScheduledTask) -> ScheduleConfigValues:
         "time_of_day": (time_of_day if isinstance(time_of_day, str) else None),
         "days_of_week": days_of_week,
         "day_of_month": day_of_month if isinstance(day_of_month, int) else None,
+        "monthly_mode": "last_day" if monthly_mode == "last_day" else "day_of_month",
+        "month_end_policy": "last_day" if month_end_policy == "last_day" else "skip",
     }
 
 
@@ -260,6 +274,8 @@ async def _to_response(
         time_of_day=values["time_of_day"],
         days_of_week=values["days_of_week"],
         day_of_month=values["day_of_month"],
+        monthly_mode=values["monthly_mode"],
+        month_end_policy=values["month_end_policy"],
         timezone=task.timezone,
         status=task.status,
         next_run_at=task.next_run_at,
@@ -281,28 +297,45 @@ async def _to_response(
     )
 
 
-async def _validate_notification_target(
+async def _resolve_notification_binding_id(
     session: AsyncSession,
     *,
     user_id: UUID,
     enabled: bool,
     channel: str | None,
     binding_id: UUID | None,
-) -> None:
+) -> UUID | None:
     if not enabled:
-        return
-    if channel != "openclaw-weixin" or binding_id is None:
+        return None
+    if channel != "openclaw-weixin":
         raise HTTPException(status_code=422, detail="启用微信推送时必须选择有效的微信绑定")
+    if binding_id is None:
+        binding_id = await session.scalar(
+            select(UserChannelBinding.id)
+            .where(
+                UserChannelBinding.user_id == user_id,
+                UserChannelBinding.channel == channel,
+                UserChannelBinding.status == "active",
+                UserChannelBinding.receive_notifications.is_(True),
+                UserChannelBinding.is_default.is_(True),
+            )
+            .order_by(UserChannelBinding.created_at)
+            .limit(1)
+        )
+        if binding_id is None:
+            raise HTTPException(status_code=422, detail="请先绑定可接收通知的微信账号")
     binding = await session.scalar(
         select(UserChannelBinding).where(
             UserChannelBinding.id == binding_id,
             UserChannelBinding.user_id == user_id,
             UserChannelBinding.channel == channel,
             UserChannelBinding.status == "active",
+            UserChannelBinding.receive_notifications.is_(True),
         )
     )
     if binding is None:
         raise HTTPException(status_code=422, detail="微信绑定不存在或已失效")
+    return binding.id
 
 
 def _normalize_schedule(body: ScheduleFields) -> tuple[dict[str, object], datetime]:
@@ -312,6 +345,8 @@ def _normalize_schedule(body: ScheduleFields) -> tuple[dict[str, object], dateti
         time_of_day=body.time_of_day,
         days_of_week=body.days_of_week,
         day_of_month=body.day_of_month,
+        monthly_mode=body.monthly_mode,
+        month_end_policy=body.month_end_policy,
         timezone_name=body.timezone,
     )
     current = datetime.now(UTC)
@@ -381,7 +416,7 @@ async def create_scheduled_task(
                 if body.notification_enabled
                 else None,
             )
-            await _validate_notification_target(
+            task.notification_binding_id = await _resolve_notification_binding_id(
                 session,
                 user_id=user.id,
                 enabled=body.notification_enabled,
@@ -456,6 +491,8 @@ async def update_scheduled_task(
                 "days_of_week",
                 "day_of_month",
                 "timezone",
+                "monthly_mode",
+                "month_end_policy",
             }
             if body.model_fields_set & schedule_fields:
                 current = _schedule_config_values(task)
@@ -484,6 +521,16 @@ async def update_scheduled_task(
                         body.day_of_month
                         if "day_of_month" in body.model_fields_set
                         else current["day_of_month"]
+                    ),
+                    monthly_mode=(
+                        body.monthly_mode or current["monthly_mode"]
+                        if "monthly_mode" in body.model_fields_set
+                        else current["monthly_mode"]
+                    ),
+                    month_end_policy=(
+                        body.month_end_policy or current["month_end_policy"]
+                        if "month_end_policy" in body.model_fields_set
+                        else current["month_end_policy"]
                     ),
                     timezone_name=timezone_name,
                 )
@@ -519,7 +566,7 @@ async def update_scheduled_task(
                 if not enabled:
                     channel = None
                     binding_id = None
-                await _validate_notification_target(
+                task.notification_binding_id = await _resolve_notification_binding_id(
                     session,
                     user_id=user.id,
                     enabled=enabled,
@@ -528,7 +575,6 @@ async def update_scheduled_task(
                 )
                 task.notification_enabled = enabled
                 task.notification_channel = channel
-                task.notification_binding_id = binding_id
             await session.flush()
             await session.refresh(task)
             return await _to_response(session, task, agent_name)
