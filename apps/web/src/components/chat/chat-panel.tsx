@@ -8,6 +8,7 @@ import {
   Copy,
   FileSearch,
   Hammer,
+  Mic,
   Paperclip,
   Plus,
   Sparkles,
@@ -263,6 +264,7 @@ const AUTO_SCROLL_THRESHOLD = 96;
 const SHOW_SCROLL_TO_LATEST_THRESHOLD = 180;
 const MAX_COMPOSER_HEIGHT = 200;
 const MAX_UPLOAD_FILES = 3;
+const MAX_RECORDING_MS = 120_000;
 /** Stream-loss recovery poll: 1s → 2s → 5s, then capped at 10s. */
 const RECOVERY_POLL_DELAYS_MS = [1_000, 2_000, 5_000] as const;
 const RECOVERY_POLL_MAX_DELAY_MS = 10_000;
@@ -315,6 +317,14 @@ function parseUploadedArtifact(value: unknown): UploadedArtifact | null {
     contentChars: value.content_chars,
     mimeType,
   };
+}
+
+function parseTranscription(value: unknown): string | null {
+  if (!isRecord(value) || typeof value.text !== "string" || !value.text.trim()) {
+    return null;
+  }
+
+  return value.text.trim();
 }
 
 function parseHistoryToolCalls(value: unknown): ToolCallState[] | null {
@@ -715,6 +725,8 @@ export function ChatPanel({
   };
   const [isUploading, setIsUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   // Live status-bar facts for the in-flight run (send/approval-click → first content).
   const [liveRunStats, setLiveRunStats] = useState<LiveRunStats | null>(null);
 
@@ -736,6 +748,8 @@ export function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStopTimerRef = useRef<number | null>(null);
   // SSE delivers one onMessagesChanged per streamed token; coalescing to one
   // setState per animation frame keeps re-render (and the scroll-follow effect
   // it triggers) at a smooth ~60fps instead of jittering on every token.
@@ -768,6 +782,20 @@ export function ChatPanel({
     const timeout = window.setTimeout(() => setUploadNotice(null), 4_000);
     return () => window.clearTimeout(timeout);
   }, [isUploading, uploadNotice]);
+
+  useEffect(() => {
+    return () => {
+      if (recordingStopTimerRef.current !== null) {
+        window.clearTimeout(recordingStopTimerRef.current);
+      }
+      const recorder = mediaRecorderRef.current;
+      recorder?.stream.getTracks().forEach((track) => track.stop());
+      if (recorder?.state === "recording") {
+        recorder.ondataavailable = null;
+        recorder.stop();
+      }
+    };
+  }, []);
 
   const clearApprovalState = useCallback(() => {
     setApprovalRunId(null);
@@ -2026,6 +2054,88 @@ export function ChatPanel({
     }
   }
 
+  async function transcribeRecording(blob: Blob, mimeType: string) {
+    setIsTranscribing(true);
+    setUploadNotice("正在转写语音…");
+    setError(null);
+
+    const extension = mimeType.includes("ogg") ? "ogg" : mimeType.includes("mp4") ? "m4a" : "webm";
+    const formData = new FormData();
+    formData.append("file", new File([blob], `recording.${extension}`, { type: mimeType }));
+
+    try {
+      const response = await fetch("/api/audio/transcriptions", { method: "POST", body: formData });
+      const payload: unknown = await response.json().catch(() => null);
+      const text = response.ok ? parseTranscription(payload) : null;
+      if (text === null) {
+        setError("语音转写失败。请检查语音服务配置后重试。");
+        return;
+      }
+
+      setDraft((current) => `${current.trimEnd()}${current.trim() ? "\n" : ""}${text}`);
+      setUploadNotice("已转写到输入框，请确认后发送。");
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+    } catch {
+      setError("语音转写失败，请检查网络后重试。");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }
+
+  async function startRecording() {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError("当前浏览器不支持录音，请使用最新版 Chrome、Safari 或 Edge。");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        mediaRecorderRef.current = null;
+        setIsRecording(false);
+        if (chunks.length > 0) {
+          const mimeType = recorder.mimeType || "audio/webm";
+          void transcribeRecording(new Blob(chunks, { type: mimeType }), mimeType);
+        }
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      setError(null);
+      setUploadNotice("正在录音，再次点击麦克风结束。");
+      recordingStopTimerRef.current = window.setTimeout(() => stopRecording(), MAX_RECORDING_MS);
+    } catch {
+      setError("无法使用麦克风。请在浏览器中允许 AgentOS 使用麦克风后重试。");
+    }
+  }
+
+  function stopRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (recordingStopTimerRef.current !== null) {
+      window.clearTimeout(recordingStopTimerRef.current);
+      recordingStopTimerRef.current = null;
+    }
+    if (recorder?.state === "recording") {
+      recorder.stop();
+    }
+  }
+
+  function toggleRecording() {
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+    void startRecording();
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -2610,6 +2720,28 @@ export function ChatPanel({
               <Paperclip aria-hidden="true" className="size-4" />
               <span className="agentos-codex-upload-label">{isUploading ? "上传中…" : "上传"}</span>
             </button>
+            <button
+              type="button"
+              onClick={toggleRecording}
+              disabled={
+                isStreaming ||
+                isUploading ||
+                isTranscribing ||
+                isLoadingHistory ||
+                historyLoadFailed ||
+                pendingInterrupts.length > 0
+              }
+              className={`agentos-upload-button agentos-codex-upload-button disabled:cursor-not-allowed disabled:opacity-40 ${
+                isRecording
+                  ? "text-destructive-foreground bg-destructive hover:bg-destructive/90"
+                  : ""
+              }`}
+              aria-label={isRecording ? "结束录音" : "语音输入"}
+              title={isRecording ? "结束录音" : "语音输入（最长 2 分钟）"}
+            >
+              <Mic aria-hidden="true" className="size-4" />
+              <span className="agentos-codex-upload-label">{isRecording ? "结束" : "语音"}</span>
+            </button>
             <span className="agentos-composer-meta">
               {uploadedArtifacts.length > 0
                 ? `${uploadedArtifacts.length}/${MAX_UPLOAD_FILES}`
@@ -2624,6 +2756,7 @@ export function ChatPanel({
               disabled={
                 isLoadingHistory ||
                 isUploading ||
+                isTranscribing ||
                 historyLoadFailed ||
                 pendingInterrupts.length > 0 ||
                 (!isStreaming && !draft.trim() && uploadedArtifacts.length === 0)

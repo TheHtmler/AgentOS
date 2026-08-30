@@ -97,6 +97,14 @@ class Settings(BaseSettings):
     ocr_api_key: str = ""
     ocr_text_min_chars: int = 40
     ocr_timeout_seconds: float = 60.0
+    # Speech-to-text is deliberately separate from chat/background models. Audio
+    # is forwarded in-memory to this explicit ASR endpoint and is never stored.
+    asr_enabled: bool = False
+    asr_base_url: str = ""
+    asr_api_key: str = ""
+    asr_model: str = ""
+    asr_timeout_seconds: float = 60.0
+    asr_max_bytes: int = 10_000_000
     # Read confirmed Case facts for case-enabled Agents (mounted per-run when Case bound).
     case_context_read_enabled: bool = True
     # Sandbox execution is opt-in and requires a separately supervised manager.
@@ -250,7 +258,7 @@ class Settings(BaseSettings):
 
         return value
 
-    @field_validator("background_vision_timeout_seconds")
+    @field_validator("background_vision_timeout_seconds", "asr_timeout_seconds")
     @classmethod
     def background_vision_timeout_seconds_must_be_positive(cls, value: float) -> float:
         if value <= 0:
@@ -318,11 +326,11 @@ class Settings(BaseSettings):
 
         return value
 
-    @field_validator("upload_max_bytes")
+    @field_validator("upload_max_bytes", "asr_max_bytes")
     @classmethod
     def upload_max_bytes_must_be_positive(cls, value: int) -> int:
         if value < 1:
-            raise ValueError("upload_max_bytes must be at least 1")
+            raise ValueError("upload_max_bytes / asr_max_bytes must be at least 1")
 
         return value
 
@@ -371,6 +379,12 @@ class Settings(BaseSettings):
         """Vision import endpoint key; falls back to the shared background key."""
 
         return self.background_vision_api_key.strip() or self.background_api_key.strip()
+
+    @property
+    def resolved_asr_base_url(self) -> str:
+        """Return the explicit OpenAI-compatible ASR endpoint base URL."""
+
+        return self.asr_base_url.strip().rstrip("/")
 
     @property
     def admin_emails(self) -> frozenset[str]:

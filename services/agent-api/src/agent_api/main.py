@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from agent_api.api.ag_ui import router as ag_ui_router
 from agent_api.api.agents import router as agents_router
+from agent_api.api.audio import router as audio_router
 from agent_api.api.auth import router as auth_router
 from agent_api.api.cases import router as cases_router
 from agent_api.api.channel_bindings import router as channel_bindings_router
@@ -46,6 +47,7 @@ app.include_router(cases_router)
 app.include_router(channel_bindings_router)
 app.include_router(threads_router)
 app.include_router(uploads_router)
+app.include_router(audio_router)
 app.include_router(runs_router)
 app.include_router(sandboxes_router)
 app.include_router(scheduled_tasks_router)
