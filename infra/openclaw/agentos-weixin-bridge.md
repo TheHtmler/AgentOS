@@ -1,9 +1,14 @@
 # AgentOS Weixin bridge deployment
 
-AgentOS owns the notification outbox. OpenClaw must expose a loopback-only
-`POST /internal/agentos/weixin/send` adapter that validates
+AgentOS owns the notification outbox and user-facing QR login. OpenClaw exposes
+loopback-only `POST /internal/agentos/weixin/login`,
+`GET /internal/agentos/weixin/login/{session_id}`, and
+`POST /internal/agentos/weixin/send` endpoints that validate
 `OPENCLAW_DELIVERY_SHARED_SECRET`, requires `channel=openclaw-weixin`, and calls
-the plugin's `sendText({ accountId, to: peer_id, text })` directly. It must
+the plugin's `sendText({ accountId, to: peer_id, text })` directly. QR login creates
+one OpenClaw account for the scanned Weixin user. The adapter persists the credential;
+AgentOS records only the resulting `account_id + peer_id` against the authenticated user.
+It must
 return `{ accepted: true, message_id }` and deduplicate `delivery_id` for at
 least 24 hours. It must never call `chat.send`, an agent, or a model.
 

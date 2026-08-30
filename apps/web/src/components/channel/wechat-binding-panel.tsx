@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, Link2, MessageCircle, RefreshCw, Unlink } from "lucide-react";
+import { Link2, MessageCircle, RefreshCw, Unlink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -21,10 +21,12 @@ type BindingListResponse = {
   bindings: UserChannelBinding[];
 };
 
-type PairingCodeResponse = {
-  channel: string;
-  code: string;
-  expires_at: string;
+type WeixinQrLogin = {
+  id: string;
+  status: "pending" | "completed" | "failed";
+  qrcode_url: string | null;
+  expires_at: string | null;
+  error: string | null;
 };
 
 function errorMessage(payload: unknown): string | null {
@@ -52,11 +54,10 @@ function formatExpiry(value: string): string {
 
 export function WeChatBindingPanel() {
   const [bindings, setBindings] = useState<UserChannelBinding[]>([]);
-  const [pairingCode, setPairingCode] = useState<PairingCodeResponse | null>(null);
+  const [qrLogin, setQrLogin] = useState<WeixinQrLogin | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadBindings = useCallback(async () => {
@@ -82,27 +83,36 @@ export function WeChatBindingPanel() {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [loadBindings]);
 
-  const createPairingCode = useCallback(async () => {
+  const startQrLogin = useCallback(async () => {
     setBusy(true);
     setError(null);
-    setCopied(false);
     try {
-      const response = await fetch("/api/channel-bindings", { method: "POST" });
-      if (!response.ok) throw await responseError(response, "配对码生成失败。");
-      setPairingCode((await response.json()) as PairingCodeResponse);
+      const response = await fetch("/api/channel-bindings/weixin-login", { method: "POST" });
+      if (!response.ok) throw await responseError(response, "二维码生成失败。");
+      setQrLogin((await response.json()) as WeixinQrLogin);
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "配对码生成失败。");
+      setError(createError instanceof Error ? createError.message : "二维码生成失败。");
     } finally {
       setBusy(false);
     }
   }, []);
 
-  const copyPairingCode = useCallback(async () => {
-    if (!pairingCode) return;
-    await navigator.clipboard.writeText(`绑定 ${pairingCode.code}`);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
-  }, [pairingCode]);
+  useEffect(() => {
+    if (qrLogin?.status !== "pending") return;
+    const timer = window.setInterval(() => {
+      void fetch(`/api/channel-bindings/weixin-login/${qrLogin.id}`, { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((value: unknown) => {
+          if (typeof value !== "object" || value === null || !("status" in value)) return;
+          const next = value as WeixinQrLogin;
+          setQrLogin(next);
+          if (next.status === "completed") void loadBindings();
+          if (next.status === "failed")
+            setError(next.error ?? "微信连接未完成，请重新生成二维码。");
+        });
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [loadBindings, qrLogin]);
 
   const revokeBinding = useCallback(
     async (binding: UserChannelBinding) => {
@@ -156,40 +166,34 @@ export function WeChatBindingPanel() {
                 {activeBindings.length > 0 ? "微信已连接" : "连接微信"}
               </h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                生成配对码后，在微信发送：
+                使用微信扫描二维码，即可连接当前 AgentOS 账号。
               </p>
-              <code className="mt-3 inline-flex border border-border bg-muted px-3 py-2 text-sm font-semibold text-foreground">
-                绑定 配对码
-              </code>
             </div>
-            <Button type="button" onClick={() => void createPairingCode()} disabled={busy}>
+            <Button type="button" onClick={() => void startQrLogin()} disabled={busy}>
               <RefreshCw aria-hidden="true" className="size-4" />
-              {busy ? "处理中" : "生成配对码"}
+              {busy ? "处理中" : "生成二维码"}
             </Button>
           </div>
 
-          {pairingCode ? (
-            <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-border pt-5">
-              <code className="text-2xl font-bold tracking-[0.18em] text-foreground">
-                {pairingCode.code}
-              </code>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void copyPairingCode()}
-              >
-                {copied ? (
-                  <Check aria-hidden="true" className="size-4" />
-                ) : (
-                  <Copy aria-hidden="true" className="size-4" />
-                )}
-                {copied ? "已复制" : "复制指令"}
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                {formatExpiry(pairingCode.expires_at)}
-              </span>
+          {qrLogin?.status === "pending" && qrLogin.qrcode_url ? (
+            <div className="mt-5 flex flex-wrap items-center gap-5 border-t border-border pt-5">
+              <img
+                src={qrLogin.qrcode_url}
+                alt="微信连接二维码"
+                className="size-44 border border-border bg-white p-2"
+              />
+              <div className="text-sm text-muted-foreground">
+                <p>请使用微信扫码并确认。</p>
+                {qrLogin.expires_at ? (
+                  <p className="mt-2">{formatExpiry(qrLogin.expires_at)}</p>
+                ) : null}
+              </div>
             </div>
+          ) : null}
+          {qrLogin?.status === "completed" ? (
+            <p className="mt-5 border-t border-border pt-5 text-sm text-emerald-700 dark:text-emerald-300">
+              微信已连接，可接收定时任务通知。
+            </p>
           ) : null}
         </section>
 

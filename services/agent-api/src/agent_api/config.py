@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     openclaw_delivery_url: str = "http://127.0.0.1:18790/internal/agentos/weixin/send"
     openclaw_delivery_shared_secret: str = ""
     openclaw_delivery_timeout_seconds: float = 15.0
+    openclaw_provisioning_url: str = "http://127.0.0.1:18790/internal/agentos/weixin/login"
     scheduled_task_weixin_enabled: bool = False
     web_app_origin: str = "http://127.0.0.1:3000"
     database_url: str

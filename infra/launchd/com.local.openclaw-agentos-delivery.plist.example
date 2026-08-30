@@ -10,7 +10,6 @@
   <dict>
     <key>OPENCLAW_DELIVERY_PORT</key><string>18790</string>
     <key>OPENCLAW_CONFIG</key><string>__OPENCLAW_HOME__/openclaw.json</string>
-    <key>OPENCLAW_WEIXIN_ACCOUNT_ID</key><string>582e531a918e-im-bot</string>
     <key>OPENCLAW_WEIXIN_PLUGIN_ROOT</key><string>__OPENCLAW_PLUGIN_ROOT__</string>
     <key>OPENCLAW_DELIVERY_SHARED_SECRET</key><string>__DELIVERY_SECRET__</string>
   </dict>

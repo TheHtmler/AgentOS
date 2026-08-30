@@ -51,42 +51,44 @@ uv run --directory services/agent-api python scripts/create_invitation.py admin@
 
 ## API 契约
 
-| Agent API 端点                                             | 身份要求       | 行为                                |
-| ---------------------------------------------------------- | -------------- | ----------------------------------- |
-| `POST /v1/auth/invitations/inspect`                        | 一次性 token   | 查看邀请绑定邮箱，不消费 token      |
-| `POST /v1/auth/register`                                   | 一次性 token   | 设置密码激活账号并创建 session      |
-| `POST /v1/auth/login`                                      | 邮箱+密码      | 密码登录创建 session                |
-| `POST /v1/auth/verify`                                     | 一次性 token   | 消费 token 直接创建 session(旧路径) |
-| `GET /v1/auth/me`                                          | session        | 返回当前用户和是否可管理邀请        |
-| `POST /v1/auth/logout`                                     | session        | 撤销当前 session                    |
-| `POST /v1/auth/invitations`                                | 管理员 session | 创建或替换 pending invite 链接      |
-| `/v1/chat/*`、`/v1/threads/*`、`/v1/runs/*`、`/v1/ag-ui/*` | session        | 仅访问当前用户资源                  |
-| `GET /v1/ops/users`                                        | Ops session    | 返回用户列表和绑定数量              |
-| `PATCH /v1/ops/users/{user_id}`                            | Ops session    | 配置可选的 AgentOS handle           |
-| `POST /v1/channel-bindings/pairing-codes`                  | User session   | 为当前登录用户生成一次性微信配对码  |
-| `GET /v1/channel-bindings`                                 | User session   | 查看当前用户自己的微信绑定概况      |
-| `DELETE /v1/channel-bindings/{binding_id}`                 | User session   | 撤销当前用户自己的微信绑定          |
-| `POST /v1/ops/users/{user_id}/channel-binding-invites`     | Ops session    | 为指定用户生成一次性微信配对码      |
-| `/v1/ops/channel-bindings*`                                | Ops session    | 管理用户与 OpenClaw 微信会话绑定    |
-| `POST /v1/internal/openclaw/weixin/binding-events`         | Bearer secret  | OpenClaw 发送绑定/解绑控制消息      |
+| Agent API 端点                                             | 身份要求       | 行为                                   |
+| ---------------------------------------------------------- | -------------- | -------------------------------------- |
+| `POST /v1/auth/invitations/inspect`                        | 一次性 token   | 查看邀请绑定邮箱，不消费 token         |
+| `POST /v1/auth/register`                                   | 一次性 token   | 设置密码激活账号并创建 session         |
+| `POST /v1/auth/login`                                      | 邮箱+密码      | 密码登录创建 session                   |
+| `POST /v1/auth/verify`                                     | 一次性 token   | 消费 token 直接创建 session(旧路径)    |
+| `GET /v1/auth/me`                                          | session        | 返回当前用户和是否可管理邀请           |
+| `POST /v1/auth/logout`                                     | session        | 撤销当前 session                       |
+| `POST /v1/auth/invitations`                                | 管理员 session | 创建或替换 pending invite 链接         |
+| `/v1/chat/*`、`/v1/threads/*`、`/v1/runs/*`、`/v1/ag-ui/*` | session        | 仅访问当前用户资源                     |
+| `GET /v1/ops/users`                                        | Ops session    | 返回用户列表和绑定数量                 |
+| `PATCH /v1/ops/users/{user_id}`                            | Ops session    | 配置可选的 AgentOS handle              |
+| `POST /v1/channel-bindings/weixin-login`                   | User session   | 创建当前用户专属的 OpenClaw 微信二维码 |
+| `GET /v1/channel-bindings/weixin-login/{id}`               | User session   | 轮询二维码结果并保存扫码账号绑定       |
+| `POST /v1/channel-bindings/pairing-codes`                  | User session   | 旧配对码兼容入口，不作为 Web 主流程    |
+| `GET /v1/channel-bindings`                                 | User session   | 查看当前用户自己的微信绑定概况         |
+| `DELETE /v1/channel-bindings/{binding_id}`                 | User session   | 撤销当前用户自己的微信绑定             |
+| `POST /v1/ops/users/{user_id}/channel-binding-invites`     | Ops session    | 为指定用户生成一次性微信配对码         |
+| `/v1/ops/channel-bindings*`                                | Ops session    | 管理用户与 OpenClaw 微信会话绑定       |
+| `POST /v1/internal/openclaw/weixin/binding-events`         | Bearer secret  | OpenClaw 发送绑定/解绑控制消息         |
 
 ## 外部渠道绑定
 
 绑定过程分为三个责任边界：
 
-1. OpenClaw 负责微信二维码登录、微信会话维持和实际收发；它的 `account_id` 与微信 `peer_id` 是外部渠道标识。
-2. AgentOS 登录用户或 Ops 管理员签发一次性 `channel_binding_invites` 配对码；配对码绑定目标用户，不依赖可猜的用户名，也不把外部 ID 暴露给用户。
+1. OpenClaw 负责微信二维码登录、微信会话维持和实际收发；每位扫码用户产生一套通道凭证，凭证只保存在 OpenClaw 本机。
+2. AgentOS 通过 loopback-only adapter 发起和轮询二维码；扫码成功后只接收 `account_id` 与扫码微信的 `peer_id`，二者是外部渠道标识，二维码会话仅短暂保存在 Agent API 内存。
 3. AgentOS 保存 `user_channel_bindings`，并由 Ops 配置 `receive_notifications`、`allow_openclaw`、`allow_agentos` 三个权限。自助绑定默认只开启通知，两个入站权限均关闭。
 
-用户在 AgentOS“微信通知”页面生成配对码，在微信发送“绑定 配对码”。OpenClaw 在模型调用前把消息、当前 `account_id`、`peer_id` 和 `message_id` 转给内部 callback；AgentOS 校验一次性配对码后建立绑定。绑定控制消息不依赖模型 Provider，`channel_binding_events` 缓存已处理事件，防止渠道重试造成重复状态转换。Ops 邀请入口复用相同配对码流程，作为未登录用户的兜底。
+用户在 AgentOS“微信通知”页面扫描二维码。OpenClaw 在模型调用前把消息、当前 `account_id`、`peer_id` 和 `message_id` 转给内部 callback；普通消息由 AgentOS 固定拒绝，不能进入模型。旧配对码流程仅保留给 Ops 兼容入口。绑定控制消息不依赖模型 Provider，`channel_binding_events` 缓存已处理事件，防止渠道重试造成重复状态转换。
 
 微信端发送“解绑微信”后，AgentOS 只针对当前 `account_id + peer_id` 发起二次确认；用户回复“确认解绑”后，当前绑定软停用为 `status='disabled'`，不需要输入 `peer_id` 或名称。历史 Thread、Run、Message、Case 和 Artifact 保留；Ops 管理员仍可直接停用或删除绑定记录。
 
-当前普通微信消息仍走 OpenClaw 自己的 Agent/模型链路；`allow_agentos` 对应的“从微信进入 AgentOS 用户会话”尚未实现。内部 callback 只承担绑定/解绑状态机，且必须使用仅本机或内网可达的共享 Bearer secret。
+当前普通微信消息由插件 callback 固定拒绝，不会进入 OpenClaw Agent 或模型；`allow_agentos` 对应的“从微信进入 AgentOS 用户会话”尚未实现。内部 callback 只承担绑定/解绑状态机，且必须使用仅本机或内网可达的共享 Bearer secret。
 
 当前配对只支持一对一微信会话。群聊的 `peer_id` 代表群而不是单个成员，不能直接套用个人绑定；群通知需要独立的群目标与成员权限模型。
 
-未来外部定时通知需要读取 `status='active'` 且 `receive_notifications=true` 的绑定，使用其 `account_id + peer_id` 调用独立的 OpenClaw 出站适配器。当前定时任务只提供站内结果提醒；禁用 AgentOS 用户时，所有绑定在出站和入站控制解析时都必须视为不可用。
+外部定时通知读取 `status='active'` 且 `receive_notifications=true` 的绑定，使用其 `account_id + peer_id` 调用独立的 OpenClaw 出站适配器；禁用 AgentOS 用户时，所有绑定在出站和入站控制解析时都必须视为不可用。
 
 ## 暂不实现
 
