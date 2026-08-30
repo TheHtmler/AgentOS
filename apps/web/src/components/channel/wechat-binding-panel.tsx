@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import { Link2, MessageCircle, RefreshCw, Unlink } from "lucide-react";
+import QRCode from "qrcode";
 
 import { Button } from "@/components/ui/button";
 
@@ -55,6 +57,7 @@ function formatExpiry(value: string): string {
 export function WeChatBindingPanel() {
   const [bindings, setBindings] = useState<UserChannelBinding[]>([]);
   const [qrLogin, setQrLogin] = useState<WeixinQrLogin | null>(null);
+  const [qrImage, setQrImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -86,6 +89,7 @@ export function WeChatBindingPanel() {
   const startQrLogin = useCallback(async () => {
     setBusy(true);
     setError(null);
+    setQrImage(null);
     try {
       const response = await fetch("/api/channel-bindings/weixin-login", { method: "POST" });
       if (!response.ok) throw await responseError(response, "二维码生成失败。");
@@ -113,6 +117,29 @@ export function WeChatBindingPanel() {
     }, 2_000);
     return () => window.clearInterval(timer);
   }, [loadBindings, qrLogin]);
+
+  useEffect(() => {
+    const value = qrLogin?.status === "pending" ? qrLogin.qrcode_url : null;
+    if (!value) {
+      return;
+    }
+    let active = true;
+    void QRCode.toDataURL(value, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 320,
+    }).then(
+      (image) => {
+        if (active) setQrImage(image);
+      },
+      () => {
+        if (active) setError("二维码生成失败，请重新生成。");
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [qrLogin?.qrcode_url, qrLogin?.status]);
 
   const revokeBinding = useCallback(
     async (binding: UserChannelBinding) => {
@@ -177,11 +204,20 @@ export function WeChatBindingPanel() {
 
           {qrLogin?.status === "pending" && qrLogin.qrcode_url ? (
             <div className="mt-5 flex flex-wrap items-center gap-5 border-t border-border pt-5">
-              <img
-                src={qrLogin.qrcode_url}
-                alt="微信连接二维码"
-                className="size-44 border border-border bg-white p-2"
-              />
+              {qrImage ? (
+                <Image
+                  src={qrImage}
+                  alt="微信连接二维码"
+                  width={176}
+                  height={176}
+                  unoptimized
+                  className="size-44 border border-border bg-white p-2"
+                />
+              ) : (
+                <div className="grid size-44 place-items-center border border-border bg-muted text-sm text-muted-foreground">
+                  正在生成二维码
+                </div>
+              )}
               <div className="text-sm text-muted-foreground">
                 <p>请使用微信扫码并确认。</p>
                 {qrLogin.expires_at ? (
