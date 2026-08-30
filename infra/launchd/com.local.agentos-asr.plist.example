@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Local whisper.cpp ASR: loopback only, browser audio is converted with ffmpeg. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.agentos-asr</string>
+  <key>WorkingDirectory</key>
+  <string>__AGENTOS_ROOT__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__WHISPER_SERVER_BIN__</string>
+    <string>--model</string>
+    <string>__AGENTOS_ROOT__/infra/whisper/models/ggml-base.bin</string>
+    <string>--host</string>
+    <string>127.0.0.1</string>
+    <string>--port</string>
+    <string>9000</string>
+    <string>--convert</string>
+    <string>--tmp-dir</string>
+    <string>/tmp/agentos-asr</string>
+    <string>--language</string>
+    <string>auto</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/agentos-asr.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/agentos-asr.err.log</string>
+</dict>
+</plist>

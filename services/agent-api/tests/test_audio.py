@@ -17,6 +17,7 @@ def make_settings(**updates: Any) -> Settings:
 
     return Settings(
         database_url="postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
+        _env_file=None,  # pyright: ignore[reportCallIssue]
         **updates,
     )
 
@@ -75,6 +76,41 @@ async def test_transcribe_audio_forwards_to_explicit_asr_endpoint(
     assert captured["authorization"] == "Bearer test-key"
     assert 'name="model"' in str(captured["body"])
     assert "whisper-1" in str(captured["body"])
+
+
+@pytest.mark.anyio
+async def test_transcribe_audio_uses_whisper_cpp_inference_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["body"] = request.content.decode()
+        return httpx.Response(200, json={"text": "本地转写"})
+
+    transport = httpx.MockTransport(handler)
+
+    class MockAsyncClient(httpx.AsyncClient):
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(transport=transport, **kwargs)
+
+    monkeypatch.setattr("agent_api.api.audio.httpx.AsyncClient", MockAsyncClient)
+    text = await transcribe_audio(
+        data=b"recording bytes",
+        filename="recording.webm",
+        mime_type="audio/webm",
+        settings=make_settings(
+            asr_enabled=True,
+            asr_provider="whisper_cpp",
+            asr_base_url="http://127.0.0.1:9000",
+        ),
+    )
+
+    assert text == "本地转写"
+    assert captured["url"] == "http://127.0.0.1:9000/inference"
+    assert 'name="response_format"' in str(captured["body"])
+    assert 'name="language"' in str(captured["body"])
 
 
 @pytest.mark.anyio

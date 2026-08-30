@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import field_validator
@@ -100,6 +101,7 @@ class Settings(BaseSettings):
     # Speech-to-text is deliberately separate from chat/background models. Audio
     # is forwarded in-memory to this explicit ASR endpoint and is never stored.
     asr_enabled: bool = False
+    asr_provider: Literal["openai_compatible", "whisper_cpp"] = "openai_compatible"
     asr_base_url: str = ""
     asr_api_key: str = ""
     asr_model: str = ""

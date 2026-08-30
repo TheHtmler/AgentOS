@@ -37,18 +37,28 @@ def _asr_unavailable() -> HTTPException:
 async def transcribe_audio(
     *, data: bytes, filename: str, mime_type: str, settings: Settings
 ) -> str:
-    """Forward a bounded audio blob to an OpenAI-compatible transcription endpoint."""
+    """Forward a bounded audio blob to the configured ASR sidecar or gateway."""
 
-    if not settings.asr_enabled or not settings.resolved_asr_base_url or not settings.asr_model:
+    if not settings.asr_enabled or not settings.resolved_asr_base_url:
+        raise _asr_unavailable()
+
+    if settings.asr_provider == "openai_compatible" and not settings.asr_model:
         raise _asr_unavailable()
 
     headers = {"Authorization": f"Bearer {settings.asr_api_key}"} if settings.asr_api_key else {}
+    if settings.asr_provider == "whisper_cpp":
+        endpoint = f"{settings.resolved_asr_base_url}/inference"
+        form_data = {"response_format": "json", "language": "auto"}
+    else:
+        endpoint = f"{settings.resolved_asr_base_url}/audio/transcriptions"
+        form_data = {"model": settings.asr_model}
+
     try:
         async with httpx.AsyncClient(timeout=settings.asr_timeout_seconds) as client:
             response = await client.post(
-                f"{settings.resolved_asr_base_url}/audio/transcriptions",
+                endpoint,
                 headers=headers,
-                data={"model": settings.asr_model},
+                data=form_data,
                 files={"file": (filename, data, mime_type)},
             )
     except httpx.HTTPError as error:

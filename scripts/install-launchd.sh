@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Install/refresh LaunchAgents for api / web / ops / sandbox on Mac mini.
+# Install/refresh LaunchAgents for api / web / ops / sandbox / asr on Mac mini.
 # Usage:
 #   ./scripts/install-launchd.sh           # all
 #   ./scripts/install-launchd.sh api web
 #   ./scripts/install-launchd.sh ops
 #   ./scripts/install-launchd.sh sandbox
+#   ./scripts/install-launchd.sh asr
 
 set -euo pipefail
 
@@ -48,13 +49,23 @@ resolve_uv() {
   printf '%s' "$uv_bin"
 }
 
+resolve_whisper_server() {
+  local whisper_server_bin
+  whisper_server_bin="$(command -v whisper-server || true)"
+  if [[ -z "$whisper_server_bin" ]]; then
+    echo "whisper-server not found on PATH; install with: brew install whisper-cpp" >&2
+    exit 1
+  fi
+  printf '%s' "$whisper_server_bin"
+}
+
 escape_sed() {
   printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
 }
 
 install_one() {
   local target="$1"
-  local label src dst node_bin uv_bin esc_root esc_node esc_uv
+  local label src dst node_bin uv_bin whisper_server_bin esc_root esc_node esc_uv esc_whisper_server
 
   case "$target" in
     api)
@@ -73,8 +84,12 @@ install_one() {
       label="com.local.agentos-sandbox-manager"
       src="$ROOT/infra/launchd/com.local.agentos-sandbox-manager.plist.example"
       ;;
+    asr)
+      label="com.local.agentos-asr"
+      src="$ROOT/infra/launchd/com.local.agentos-asr.plist.example"
+      ;;
     *)
-      echo "unknown target: $target (api|web|ops|sandbox)" >&2
+      echo "unknown target: $target (api|web|ops|sandbox|asr)" >&2
       exit 1
       ;;
   esac
@@ -86,17 +101,26 @@ install_one() {
 
   dst="${HOME}/Library/LaunchAgents/${label}.plist"
   mkdir -p "$(dirname "$dst")"
+  if [[ "$target" == "asr" ]]; then
+    mkdir -p /tmp/agentos-asr
+  fi
 
   esc_root="$(escape_sed "$ROOT")"
-  node_bin="$(resolve_node)"
-  uv_bin="$(resolve_uv)"
-  esc_node="$(escape_sed "$node_bin")"
-  esc_uv="$(escape_sed "$uv_bin")"
+  if [[ "$target" == "asr" ]]; then
+    whisper_server_bin="$(resolve_whisper_server)"
+    esc_whisper_server="$(escape_sed "$whisper_server_bin")"
+  else
+    node_bin="$(resolve_node)"
+    uv_bin="$(resolve_uv)"
+    esc_node="$(escape_sed "$node_bin")"
+    esc_uv="$(escape_sed "$uv_bin")"
+  fi
 
   sed \
     -e "s|__AGENTOS_ROOT__|${esc_root}|g" \
     -e "s|__NODE_BIN__|${esc_node}|g" \
     -e "s|__UV_BIN__|${esc_uv}|g" \
+    -e "s|__WHISPER_SERVER_BIN__|${esc_whisper_server}|g" \
     "$src" >"$dst"
 
   if launchctl print "${DOMAIN}/${label}" >/dev/null 2>&1; then
