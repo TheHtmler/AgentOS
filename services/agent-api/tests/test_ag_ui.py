@@ -616,6 +616,7 @@ async def test_ag_ui_rejects_provider_without_tool_support(
     transport = ASGITransport(app=app)
     default_agent_id = UUID("00000000-0000-0000-0000-000000000001")
     provider_id = uuid4()
+    original_provider_id: UUID | None = None
 
     async with session_factory() as session, session.begin():
         session.add(
@@ -646,6 +647,7 @@ async def test_ag_ui_rejects_provider_without_tool_support(
             ),
         )
         assert version is not None
+        original_provider_id = version.model_provider_id
         version.model_provider_id = provider_id
 
     try:
@@ -690,7 +692,7 @@ async def test_ag_ui_rejects_provider_without_tool_support(
                 ),
             )
             if version is not None:
-                version.model_provider_id = None
+                version.model_provider_id = original_provider_id
             provider = await session.get(ModelProvider, provider_id)
             if provider is not None:
                 await session.delete(provider)
