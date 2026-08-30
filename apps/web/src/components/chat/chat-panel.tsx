@@ -8,6 +8,7 @@ import {
   Copy,
   FileSearch,
   Hammer,
+  Keyboard,
   Mic,
   Paperclip,
   Plus,
@@ -76,6 +77,12 @@ function visibleReasoningContent(buffer: string): string {
   }
 
   return `…${buffer.slice(-MAX_VISIBLE_REASONING_CHARS)}`;
+}
+
+function idleVoiceWaveLevels(): number[] {
+  return Array.from({ length: VOICE_WAVE_BAR_COUNT }, (_, index) =>
+    index % 2 === 0 ? 0.22 : 0.34,
+  );
 }
 
 type ThreadLatestRun = {
@@ -266,6 +273,7 @@ const SHOW_SCROLL_TO_LATEST_THRESHOLD = 180;
 const MAX_COMPOSER_HEIGHT = 200;
 const MAX_UPLOAD_FILES = 3;
 const MAX_RECORDING_MS = 120_000;
+const VOICE_WAVE_BAR_COUNT = 17;
 /** Stream-loss recovery poll: 1s → 2s → 5s, then capped at 10s. */
 const RECOVERY_POLL_DELAYS_MS = [1_000, 2_000, 5_000] as const;
 const RECOVERY_POLL_MAX_DELAY_MS = 10_000;
@@ -728,6 +736,8 @@ export function ChatPanel({
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [composerMode, setComposerMode] = useState<"text" | "voice">("text");
+  const [voiceWaveLevels, setVoiceWaveLevels] = useState(idleVoiceWaveLevels);
   // Live status-bar facts for the in-flight run (send/approval-click → first content).
   const [liveRunStats, setLiveRunStats] = useState<LiveRunStats | null>(null);
 
@@ -752,6 +762,9 @@ export function ChatPanel({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingStopTimerRef = useRef<number | null>(null);
   const recordingPressRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioAnalyserRef = useRef<AnalyserNode | null>(null);
+  const audioMeterFrameRef = useRef<number | null>(null);
   // SSE delivers one onMessagesChanged per streamed token; coalescing to one
   // setState per animation frame keeps re-render (and the scroll-follow effect
   // it triggers) at a smooth ~60fps instead of jittering on every token.
@@ -790,6 +803,10 @@ export function ChatPanel({
       if (recordingStopTimerRef.current !== null) {
         window.clearTimeout(recordingStopTimerRef.current);
       }
+      if (audioMeterFrameRef.current !== null) {
+        window.cancelAnimationFrame(audioMeterFrameRef.current);
+      }
+      void audioContextRef.current?.close();
       const recorder = mediaRecorderRef.current;
       recorder?.stream.getTracks().forEach((track) => track.stop());
       if (recorder?.state === "recording") {
@@ -2070,7 +2087,17 @@ export function ChatPanel({
       const payload: unknown = await response.json().catch(() => null);
       const text = response.ok ? parseTranscription(payload) : null;
       if (text === null) {
-        setError("语音转写失败。请检查语音服务配置后重试。");
+        setError(
+          response.status === 422
+            ? "没有识别到清晰语音，请按住后再说一遍。"
+            : "语音转写失败。请检查语音服务配置后重试。",
+        );
+        return;
+      }
+
+      if (composerMode === "voice") {
+        setUploadNotice("正在发送语音消息…");
+        await sendMessage(text);
         return;
       }
 
@@ -2082,6 +2109,46 @@ export function ChatPanel({
     } finally {
       setIsTranscribing(false);
     }
+  }
+
+  function stopAudioMeter() {
+    if (audioMeterFrameRef.current !== null) {
+      window.cancelAnimationFrame(audioMeterFrameRef.current);
+      audioMeterFrameRef.current = null;
+    }
+    audioAnalyserRef.current = null;
+    const audioContext = audioContextRef.current;
+    audioContextRef.current = null;
+    if (audioContext !== null) {
+      void audioContext.close();
+    }
+    setVoiceWaveLevels(idleVoiceWaveLevels());
+  }
+
+  function startAudioMeter(stream: MediaStream) {
+    stopAudioMeter();
+    const audioContext = new AudioContext();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 64;
+    audioContext.createMediaStreamSource(stream).connect(analyser);
+    audioContextRef.current = audioContext;
+    audioAnalyserRef.current = analyser;
+    const frequencyData = new Uint8Array(analyser.frequencyBinCount);
+
+    const updateMeter = () => {
+      analyser.getByteFrequencyData(frequencyData);
+      setVoiceWaveLevels(
+        Array.from({ length: VOICE_WAVE_BAR_COUNT }, (_, index) => {
+          const sourceIndex = Math.min(
+            frequencyData.length - 1,
+            Math.floor((index / VOICE_WAVE_BAR_COUNT) * frequencyData.length),
+          );
+          return 0.16 + (frequencyData[sourceIndex] ?? 0) / 255;
+        }),
+      );
+      audioMeterFrameRef.current = window.requestAnimationFrame(updateMeter);
+    };
+    updateMeter();
   }
 
   async function startRecording() {
@@ -2097,6 +2164,7 @@ export function ChatPanel({
         return;
       }
       const recorder = new MediaRecorder(stream);
+      startAudioMeter(stream);
       const chunks: Blob[] = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -2104,6 +2172,7 @@ export function ChatPanel({
         }
       };
       recorder.onstop = () => {
+        stopAudioMeter();
         stream.getTracks().forEach((track) => track.stop());
         mediaRecorderRef.current = null;
         setIsRecording(false);
@@ -2155,6 +2224,13 @@ export function ChatPanel({
     stopRecording();
   }
 
+  function toggleComposerMode() {
+    if (isRecording || isTranscribing) {
+      return;
+    }
+    setComposerMode((current) => (current === "text" ? "voice" : "text"));
+  }
+
   function handleRecordingKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     if ((event.key !== "Enter" && event.key !== " ") || event.repeat || isRecording) {
       return;
@@ -2178,6 +2254,10 @@ export function ChatPanel({
 
     if (isStreaming) {
       stopStreaming();
+      return;
+    }
+
+    if (composerMode === "voice") {
       return;
     }
 
@@ -2702,28 +2782,64 @@ export function ChatPanel({
           </p>
         ) : null}
 
-        <textarea
-          ref={textareaRef}
-          aria-label="输入消息"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={
-            isStreaming ||
-            isUploading ||
-            isLoadingHistory ||
-            historyLoadFailed ||
-            pendingInterrupts.length > 0
-          }
-          maxLength={4_000}
-          placeholder={
-            pendingInterrupts.length > 0
-              ? "请先确认或取消上方的操作"
-              : "输入任务、问题或需要助手处理的内容"
-          }
-          rows={1}
-          className="agentos-composer-input block w-full resize-none outline-none disabled:cursor-not-allowed"
-        />
+        {composerMode === "text" ? (
+          <textarea
+            ref={textareaRef}
+            aria-label="输入消息"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={
+              isStreaming ||
+              isUploading ||
+              isLoadingHistory ||
+              historyLoadFailed ||
+              pendingInterrupts.length > 0
+            }
+            maxLength={4_000}
+            placeholder={
+              pendingInterrupts.length > 0
+                ? "请先确认或取消上方的操作"
+                : "输入任务、问题或需要助手处理的内容"
+            }
+            rows={1}
+            className="agentos-composer-input block w-full resize-none outline-none disabled:cursor-not-allowed"
+          />
+        ) : (
+          <button
+            type="button"
+            onPointerDown={beginRecording}
+            onPointerUp={finishRecording}
+            onPointerCancel={finishRecording}
+            onKeyDown={handleRecordingKeyDown}
+            onKeyUp={handleRecordingKeyUp}
+            disabled={
+              isStreaming ||
+              isUploading ||
+              isTranscribing ||
+              isLoadingHistory ||
+              historyLoadFailed ||
+              pendingInterrupts.length > 0
+            }
+            className={`flex h-16 w-full touch-none items-center justify-center gap-3 border px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+              isRecording
+                ? "border-[var(--accent)] bg-accent/10 text-foreground"
+                : "border-border bg-muted/35 text-muted-foreground active:bg-muted"
+            }`}
+            aria-label={isRecording ? "松开后发送语音消息" : "按住录制语音消息"}
+          >
+            <span className="flex h-8 items-center gap-1" aria-hidden="true">
+              {voiceWaveLevels.map((level, index) => (
+                <span
+                  key={index}
+                  className="h-7 w-1 origin-center bg-current transition-transform duration-75"
+                  style={{ transform: `scaleY(${level})` }}
+                />
+              ))}
+            </span>
+            <span>{isTranscribing ? "正在转写…" : isRecording ? "松开发送" : "按住说话"}</span>
+          </button>
+        )}
 
         <div className="agentos-composer-toolbar">
           <div className="agentos-composer-tools">
@@ -2741,6 +2857,7 @@ export function ChatPanel({
               disabled={
                 isStreaming ||
                 isUploading ||
+                composerMode === "voice" ||
                 isLoadingHistory ||
                 historyLoadFailed ||
                 pendingInterrupts.length > 0 ||
@@ -2759,11 +2876,7 @@ export function ChatPanel({
             </button>
             <button
               type="button"
-              onPointerDown={beginRecording}
-              onPointerUp={finishRecording}
-              onPointerCancel={finishRecording}
-              onKeyDown={handleRecordingKeyDown}
-              onKeyUp={handleRecordingKeyUp}
+              onClick={toggleComposerMode}
               disabled={
                 isStreaming ||
                 isUploading ||
@@ -2773,16 +2886,20 @@ export function ChatPanel({
                 pendingInterrupts.length > 0
               }
               className={`agentos-upload-button agentos-codex-upload-button disabled:cursor-not-allowed disabled:opacity-40 ${
-                isRecording
-                  ? "text-destructive-foreground bg-destructive hover:bg-destructive/90"
+                composerMode === "voice"
+                  ? "bg-accent text-accent-foreground hover:bg-accent/90"
                   : ""
               }`}
-              aria-label={isRecording ? "松开结束录音" : "按住语音输入"}
-              title={isRecording ? "松开结束录音" : "按住说话（最长 2 分钟）"}
+              aria-label={composerMode === "voice" ? "切换到键盘输入" : "切换到语音输入"}
+              title={composerMode === "voice" ? "键盘输入" : "语音输入"}
             >
-              <Mic aria-hidden="true" className="size-4" />
+              {composerMode === "voice" ? (
+                <Keyboard aria-hidden="true" className="size-4" />
+              ) : (
+                <Mic aria-hidden="true" className="size-4" />
+              )}
               <span className="agentos-codex-upload-label">
-                {isRecording ? "松开" : "按住说话"}
+                {composerMode === "voice" ? "键盘" : "语音"}
               </span>
             </button>
             <span className="agentos-composer-meta">
@@ -2793,30 +2910,32 @@ export function ChatPanel({
             </span>
           </div>
 
-          <div className="agentos-codex-composer-actions">
-            <button
-              type="submit"
-              disabled={
-                isLoadingHistory ||
-                isUploading ||
-                isTranscribing ||
-                historyLoadFailed ||
-                pendingInterrupts.length > 0 ||
-                (!isStreaming && !draft.trim() && uploadedArtifacts.length === 0)
-              }
-              className={`agentos-send-button agentos-codex-send-button disabled:cursor-not-allowed disabled:opacity-45 ${
-                isStreaming ? "agentos-stop-button" : ""
-              }`}
-              aria-label={isStreaming ? "停止执行" : "发送消息"}
-            >
-              {isStreaming ? (
-                <Square aria-hidden="true" className="size-3.5 fill-current" />
-              ) : (
-                <ArrowUp aria-hidden="true" className="size-4" />
-              )}
-              <span>{isStreaming ? "停止执行" : "发送"}</span>
-            </button>
-          </div>
+          {composerMode === "text" || isStreaming ? (
+            <div className="agentos-codex-composer-actions">
+              <button
+                type="submit"
+                disabled={
+                  isLoadingHistory ||
+                  isUploading ||
+                  isTranscribing ||
+                  historyLoadFailed ||
+                  pendingInterrupts.length > 0 ||
+                  (!isStreaming && !draft.trim() && uploadedArtifacts.length === 0)
+                }
+                className={`agentos-send-button agentos-codex-send-button disabled:cursor-not-allowed disabled:opacity-45 ${
+                  isStreaming ? "agentos-stop-button" : ""
+                }`}
+                aria-label={isStreaming ? "停止执行" : "发送消息"}
+              >
+                {isStreaming ? (
+                  <Square aria-hidden="true" className="size-3.5 fill-current" />
+                ) : (
+                  <ArrowUp aria-hidden="true" className="size-4" />
+                )}
+                <span>{isStreaming ? "停止执行" : "发送"}</span>
+              </button>
+            </div>
+          ) : null}
         </div>
       </form>
 

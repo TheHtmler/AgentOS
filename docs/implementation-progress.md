@@ -6,7 +6,7 @@
 
 前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与 MMA/PA `knowledge_search` 已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。Run、Artifact、用户记忆和多看护人基础 ACL 已绑定 Case 作用域。公共知识库已有 P0 策展切片与混合检索、运营审核与文档快照。平台 util 工具（`time_diff` / `calculate`）与薄评测 runner + foundation golden suite 已落地。聊天模型已切换为 `agentos-qwen3vl:16k`：16k 上下文、单流并发、Qwen3-VL 报告视觉输入和更大的 OCR 预览均已接入。新增用户级 Sandbox MVP：独立 Sandbox Manager、用户工作区、默认禁网/非 root/资源限制、命令输出 Artifact 和可配置策略的 `sandbox_exec` 工具；Ops Agent 版本页可逐项配置内置工具策略。
 
-聊天语音输入已接入：浏览器录音最长 120 秒，经同域 BFF 发送到显式配置的 ASR 端点，转写文字回填输入框且须用户确认发送。音频不落库、不创建 Artifact，功能默认关闭，避免未经配置的语音数据外发。
+聊天语音输入已接入：浏览器切换到语音模式后，按住录音（实时声浪）、松手转写并自动发送，经同域 BFF 发送到显式配置的 ASR 端点。音频不落库、不创建 Artifact；无效非语音转写不发送，功能默认关闭，避免未经配置的语音数据外发。
 
 本机部署使用 `whisper.cpp` 的 loopback sidecar：`com.local.agentos-asr` 固定监听 `127.0.0.1:9000`，以 `infra/whisper/models/ggml-base.bin` 运行并通过 ffmpeg 转换浏览器 WebM，转码临时文件固定在 `/tmp/agentos-asr`。Agent API 设为 `ASR_PROVIDER=whisper_cpp` 后调用 `/inference`；模型文件不进 Git。
 
