@@ -21,6 +21,7 @@ import {
   FormEvent,
   Fragment,
   KeyboardEvent,
+  PointerEvent,
   TouchEvent,
   WheelEvent,
   createElement,
@@ -750,6 +751,7 @@ export function ChatPanel({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingStopTimerRef = useRef<number | null>(null);
+  const recordingPressRef = useRef(false);
   // SSE delivers one onMessagesChanged per streamed token; coalescing to one
   // setState per animation frame keeps re-render (and the scroll-follow effect
   // it triggers) at a smooth ~60fps instead of jittering on every token.
@@ -2090,6 +2092,10 @@ export function ChatPanel({
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!recordingPressRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       const recorder = new MediaRecorder(stream);
       const chunks: Blob[] = [];
       recorder.ondataavailable = (event) => {
@@ -2110,7 +2116,7 @@ export function ChatPanel({
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
       setError(null);
-      setUploadNotice("正在录音，再次点击麦克风结束。");
+      setUploadNotice("正在录音，松开麦克风结束。");
       recordingStopTimerRef.current = window.setTimeout(() => stopRecording(), MAX_RECORDING_MS);
     } catch {
       setError("无法使用麦克风。请在浏览器中允许 AgentOS 使用麦克风后重试。");
@@ -2128,12 +2134,43 @@ export function ChatPanel({
     }
   }
 
-  function toggleRecording() {
-    if (isRecording) {
-      stopRecording();
+  function beginRecording(event: PointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0 || isRecording || isTranscribing) {
       return;
     }
+    event.preventDefault();
+    recordingPressRef.current = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
     void startRecording();
+  }
+
+  function finishRecording(event: PointerEvent<HTMLButtonElement>) {
+    if (!recordingPressRef.current) {
+      return;
+    }
+    recordingPressRef.current = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    stopRecording();
+  }
+
+  function handleRecordingKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if ((event.key !== "Enter" && event.key !== " ") || event.repeat || isRecording) {
+      return;
+    }
+    event.preventDefault();
+    recordingPressRef.current = true;
+    void startRecording();
+  }
+
+  function handleRecordingKeyUp(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    event.preventDefault();
+    recordingPressRef.current = false;
+    stopRecording();
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -2722,7 +2759,11 @@ export function ChatPanel({
             </button>
             <button
               type="button"
-              onClick={toggleRecording}
+              onPointerDown={beginRecording}
+              onPointerUp={finishRecording}
+              onPointerCancel={finishRecording}
+              onKeyDown={handleRecordingKeyDown}
+              onKeyUp={handleRecordingKeyUp}
               disabled={
                 isStreaming ||
                 isUploading ||
@@ -2736,11 +2777,13 @@ export function ChatPanel({
                   ? "text-destructive-foreground bg-destructive hover:bg-destructive/90"
                   : ""
               }`}
-              aria-label={isRecording ? "结束录音" : "语音输入"}
-              title={isRecording ? "结束录音" : "语音输入（最长 2 分钟）"}
+              aria-label={isRecording ? "松开结束录音" : "按住语音输入"}
+              title={isRecording ? "松开结束录音" : "按住说话（最长 2 分钟）"}
             >
               <Mic aria-hidden="true" className="size-4" />
-              <span className="agentos-codex-upload-label">{isRecording ? "结束" : "语音"}</span>
+              <span className="agentos-codex-upload-label">
+                {isRecording ? "松开" : "按住说话"}
+              </span>
             </button>
             <span className="agentos-composer-meta">
               {uploadedArtifacts.length > 0

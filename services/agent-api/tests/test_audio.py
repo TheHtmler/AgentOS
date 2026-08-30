@@ -26,6 +26,10 @@ def test_audio_route_is_registered() -> None:
     assert "post" in app.openapi()["paths"]["/v1/audio/transcriptions"]
 
 
+def test_audio_settings_default_to_chinese() -> None:
+    assert make_settings().asr_language == "zh"
+
+
 @pytest.mark.anyio
 async def test_transcribe_audio_rejects_unconfigured_service() -> None:
     with pytest.raises(HTTPException) as raised:
@@ -111,6 +115,33 @@ async def test_transcribe_audio_uses_whisper_cpp_inference_endpoint(
     assert captured["url"] == "http://127.0.0.1:9000/inference"
     assert 'name="response_format"' in str(captured["body"])
     assert 'name="language"' in str(captured["body"])
+    assert "zh" in str(captured["body"])
+
+
+@pytest.mark.anyio
+async def test_transcribe_audio_rejects_non_speech_placeholder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport = httpx.MockTransport(lambda _request: httpx.Response(200, json={"text": "[Music]"}))
+
+    class MockAsyncClient(httpx.AsyncClient):
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(transport=transport, **kwargs)
+
+    monkeypatch.setattr("agent_api.api.audio.httpx.AsyncClient", MockAsyncClient)
+    with pytest.raises(HTTPException) as raised:
+        await transcribe_audio(
+            data=b"recording bytes",
+            filename="recording.webm",
+            mime_type="audio/webm",
+            settings=make_settings(
+                asr_enabled=True,
+                asr_provider="whisper_cpp",
+                asr_base_url="http://127.0.0.1:9000",
+            ),
+        )
+
+    assert raised.value.status_code == 422
 
 
 @pytest.mark.anyio

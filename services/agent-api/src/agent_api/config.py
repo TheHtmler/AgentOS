@@ -105,6 +105,7 @@ class Settings(BaseSettings):
     asr_base_url: str = ""
     asr_api_key: str = ""
     asr_model: str = ""
+    asr_language: str = "zh"
     asr_timeout_seconds: float = 60.0
     asr_max_bytes: int = 10_000_000
     # Read confirmed Case facts for case-enabled Agents (mounted per-run when Case bound).

@@ -22,6 +22,16 @@ _ALLOWED_MIME_TYPES = frozenset(
         "audio/x-wav",
     }
 )
+_NON_SPEECH_TRANSCRIPTS = frozenset(
+    {
+        "[music]",
+        "[音乐]",
+        "[silence]",
+        "[静音]",
+        "[noise]",
+        "[噪音]",
+    }
+)
 
 
 class TranscriptionResponse(BaseModel):
@@ -48,7 +58,7 @@ async def transcribe_audio(
     headers = {"Authorization": f"Bearer {settings.asr_api_key}"} if settings.asr_api_key else {}
     if settings.asr_provider == "whisper_cpp":
         endpoint = f"{settings.resolved_asr_base_url}/inference"
-        form_data = {"response_format": "json", "language": "auto"}
+        form_data = {"response_format": "json", "language": settings.asr_language}
     else:
         endpoint = f"{settings.resolved_asr_base_url}/audio/transcriptions"
         form_data = {"model": settings.asr_model}
@@ -80,7 +90,14 @@ async def transcribe_audio(
     if not isinstance(text, str) or not text.strip():
         raise HTTPException(status_code=502, detail="Speech recognition service returned no text")
 
-    return text.strip()
+    normalized_text = text.strip()
+    if normalized_text.casefold() in _NON_SPEECH_TRANSCRIPTS:
+        raise HTTPException(
+            status_code=422,
+            detail="No speech detected. Hold the microphone button and speak before releasing it.",
+        )
+
+    return normalized_text
 
 
 @router.post("/transcriptions", response_model=TranscriptionResponse)
