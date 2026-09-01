@@ -762,8 +762,8 @@ export function ChatPanel({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingStopTimerRef = useRef<number | null>(null);
   const recordingPressRef = useRef(false);
+  const discardRecordingRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const audioAnalyserRef = useRef<AnalyserNode | null>(null);
   const audioMeterFrameRef = useRef<number | null>(null);
   // SSE delivers one onMessagesChanged per streamed token; coalescing to one
   // setState per animation frame keeps re-render (and the scroll-follow effect
@@ -2116,7 +2116,6 @@ export function ChatPanel({
       window.cancelAnimationFrame(audioMeterFrameRef.current);
       audioMeterFrameRef.current = null;
     }
-    audioAnalyserRef.current = null;
     const audioContext = audioContextRef.current;
     audioContextRef.current = null;
     if (audioContext !== null) {
@@ -2132,7 +2131,6 @@ export function ChatPanel({
     analyser.fftSize = 64;
     audioContext.createMediaStreamSource(stream).connect(analyser);
     audioContextRef.current = audioContext;
-    audioAnalyserRef.current = analyser;
     const frequencyData = new Uint8Array(analyser.frequencyBinCount);
 
     const updateMeter = () => {
@@ -2176,16 +2174,18 @@ export function ChatPanel({
         stream.getTracks().forEach((track) => track.stop());
         mediaRecorderRef.current = null;
         setIsRecording(false);
-        if (chunks.length > 0) {
+        if (!discardRecordingRef.current && chunks.length > 0) {
           const mimeType = recorder.mimeType || "audio/webm";
           void transcribeRecording(new Blob(chunks, { type: mimeType }), mimeType);
         }
+        discardRecordingRef.current = false;
       };
       recorder.start();
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
       setError(null);
-      setUploadNotice("正在录音，松开麦克风结束。");
+      setUploadNotice("正在录音，松开后发送。");
+      navigator.vibrate?.(12);
       recordingStopTimerRef.current = window.setTimeout(() => stopRecording(), MAX_RECORDING_MS);
     } catch {
       setError("无法使用麦克风。请在浏览器中允许 AgentOS 使用麦克风后重试。");
@@ -2209,6 +2209,7 @@ export function ChatPanel({
     }
     event.preventDefault();
     recordingPressRef.current = true;
+    discardRecordingRef.current = false;
     event.currentTarget.setPointerCapture(event.pointerId);
     void startRecording();
   }
@@ -2224,6 +2225,19 @@ export function ChatPanel({
     stopRecording();
   }
 
+  function cancelRecording(event: PointerEvent<HTMLButtonElement>) {
+    if (!recordingPressRef.current) {
+      return;
+    }
+    recordingPressRef.current = false;
+    discardRecordingRef.current = true;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    stopRecording();
+    setUploadNotice("已取消录音。");
+  }
+
   function toggleComposerMode() {
     if (isRecording || isTranscribing) {
       return;
@@ -2237,6 +2251,7 @@ export function ChatPanel({
     }
     event.preventDefault();
     recordingPressRef.current = true;
+    discardRecordingRef.current = false;
     void startRecording();
   }
 
@@ -2710,27 +2725,36 @@ export function ChatPanel({
 
       <form onSubmit={handleSubmit} className="agentos-composer">
         <div className="flex items-center justify-between gap-3 pb-1.5">
-          <Select
-            value={agentId ?? ""}
-            onValueChange={onSelectAgent}
-            disabled={agents.length === 0 || isStreaming || pendingInterrupts.length > 0}
-          >
-            <SelectTrigger
-              size="sm"
-              aria-label="选择助手"
-              className="h-7 w-auto max-w-56 gap-1.5 border-transparent bg-transparent px-1.5 text-xs font-semibold shadow-none hover:bg-accent focus-visible:ring-ring/40"
+          {composerMode === "text" ? (
+            <Select
+              value={agentId ?? ""}
+              onValueChange={onSelectAgent}
+              disabled={agents.length === 0 || isStreaming || pendingInterrupts.length > 0}
             >
-              <Sparkles aria-hidden="true" className="size-3.5 text-[var(--accent)]" />
-              <SelectValue placeholder="正在加载助手…" />
-            </SelectTrigger>
-            <SelectContent>
-              {agents.map((agent) => (
-                <SelectItem key={agent.id} value={agent.id}>
-                  {displayAgentName(agent.name)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger
+                size="sm"
+                aria-label="选择助手"
+                className="h-7 w-auto max-w-56 gap-1.5 border-transparent bg-transparent px-1.5 text-xs font-semibold shadow-none hover:bg-accent focus-visible:ring-ring/40"
+              >
+                <Sparkles aria-hidden="true" className="size-3.5 text-[var(--accent)]" />
+                <SelectValue placeholder="正在加载助手…" />
+              </SelectTrigger>
+              <SelectContent>
+                {agents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {displayAgentName(agent.name)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="flex size-6 items-center justify-center rounded-md bg-accent/15 text-[var(--accent)]">
+                <Mic aria-hidden="true" className="size-3.5" />
+              </span>
+              <span>{isRecording ? "正在聆听" : isTranscribing ? "正在转写" : "语音输入"}</span>
+            </div>
+          )}
           <span className="hidden shrink-0 text-[0.65rem] text-muted-foreground sm:inline">
             Enter 发送 · Shift + Enter 换行
           </span>
@@ -2810,7 +2834,7 @@ export function ChatPanel({
             type="button"
             onPointerDown={beginRecording}
             onPointerUp={finishRecording}
-            onPointerCancel={finishRecording}
+            onPointerCancel={cancelRecording}
             onKeyDown={handleRecordingKeyDown}
             onKeyUp={handleRecordingKeyUp}
             disabled={
@@ -2821,23 +2845,25 @@ export function ChatPanel({
               historyLoadFailed ||
               pendingInterrupts.length > 0
             }
-            className={`flex h-16 w-full touch-none items-center justify-center gap-3 border px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+            className={`flex h-[5.5rem] w-full touch-none flex-col items-center justify-center gap-1 border px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
               isRecording
-                ? "border-[var(--accent)] bg-accent/10 text-foreground"
+                ? "border-[var(--accent)] bg-accent/10 text-foreground shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_12%,transparent)]"
                 : "border-border bg-muted/35 text-muted-foreground active:bg-muted"
             }`}
             aria-label={isRecording ? "松开后发送语音消息" : "按住录制语音消息"}
           >
-            <span className="flex h-8 items-center gap-1" aria-hidden="true">
+            <span className="flex h-8 items-center gap-1.5" aria-hidden="true">
               {voiceWaveLevels.map((level, index) => (
                 <span
                   key={index}
-                  className="h-7 w-1 origin-center bg-current transition-transform duration-75"
+                  className="h-7 w-1 origin-center rounded-sm bg-current transition-transform duration-75"
                   style={{ transform: `scaleY(${level})` }}
                 />
               ))}
             </span>
-            <span>{isTranscribing ? "正在转写…" : isRecording ? "松开发送" : "按住说话"}</span>
+            <span>
+              {isTranscribing ? "正在转写…" : isRecording ? "松开发送" : "按住说话，松开后自动发送"}
+            </span>
           </button>
         )}
 
@@ -2851,29 +2877,32 @@ export function ChatPanel({
               className="sr-only"
               onChange={(event) => void handleFileSelection(event)}
             />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={
-                isStreaming ||
-                isUploading ||
-                composerMode === "voice" ||
-                isLoadingHistory ||
-                historyLoadFailed ||
-                pendingInterrupts.length > 0 ||
-                uploadedArtifacts.length >= MAX_UPLOAD_FILES
-              }
-              className="agentos-upload-button agentos-codex-upload-button disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label={isUploading ? "上传中" : "上传附件"}
-              title={
-                supportsVision
-                  ? "上传 PDF 或图片（新建会话会自动创建）"
-                  : "当前模型以文本方式读取附件（不看图），结论以 OCR 文本为准"
-              }
-            >
-              <Paperclip aria-hidden="true" className="size-4" />
-              <span className="agentos-codex-upload-label">{isUploading ? "上传中…" : "上传"}</span>
-            </button>
+            {composerMode === "text" ? (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={
+                  isStreaming ||
+                  isUploading ||
+                  isLoadingHistory ||
+                  historyLoadFailed ||
+                  pendingInterrupts.length > 0 ||
+                  uploadedArtifacts.length >= MAX_UPLOAD_FILES
+                }
+                className="agentos-upload-button agentos-codex-upload-button disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label={isUploading ? "上传中" : "上传附件"}
+                title={
+                  supportsVision
+                    ? "上传 PDF 或图片（新建会话会自动创建）"
+                    : "当前模型以文本方式读取附件（不看图），结论以 OCR 文本为准"
+                }
+              >
+                <Paperclip aria-hidden="true" className="size-4" />
+                <span className="agentos-codex-upload-label">
+                  {isUploading ? "上传中…" : "上传"}
+                </span>
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={toggleComposerMode}
@@ -2898,16 +2927,16 @@ export function ChatPanel({
               ) : (
                 <Mic aria-hidden="true" className="size-4" />
               )}
-              <span className="agentos-codex-upload-label">
-                {composerMode === "voice" ? "键盘" : "语音"}
-              </span>
+              <span className="sr-only">{composerMode === "voice" ? "键盘输入" : "语音输入"}</span>
             </button>
-            <span className="agentos-composer-meta">
-              {uploadedArtifacts.length > 0
-                ? `${uploadedArtifacts.length}/${MAX_UPLOAD_FILES}`
-                : null}
-              <span className="hidden sm:inline"> · {draft.length}/4000</span>
-            </span>
+            {composerMode === "text" ? (
+              <span className="agentos-composer-meta">
+                {uploadedArtifacts.length > 0
+                  ? `${uploadedArtifacts.length}/${MAX_UPLOAD_FILES}`
+                  : null}
+                <span className="hidden sm:inline"> · {draft.length}/4000</span>
+              </span>
+            ) : null}
           </div>
 
           {composerMode === "text" || isStreaming ? (
