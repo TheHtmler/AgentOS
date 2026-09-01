@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
-  ChevronRight,
   Link2,
   LogOut,
   MessageCircle,
@@ -544,10 +543,6 @@ export function ChatWorkspace({
             </div>
 
             <div className="agentos-codex-sidebar-section agentos-codex-tasks-section">
-              <div className="agentos-codex-sidebar-section-heading">
-                <p>会话</p>
-                <ChevronRight aria-hidden="true" className="size-3.5" />
-              </div>
               <div className="agentos-codex-conversation-host">
                 <ConversationList
                   activeThreadId={activeThreadId}
