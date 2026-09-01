@@ -891,6 +891,19 @@ body {
   word-break: break-word;
 }
 
+/* Execution is a left-anchored trace, not another centered message bubble. */
+.agentos-message-list > .agentos-process-group {
+  width: min(100%, 54rem);
+  align-self: flex-start;
+  margin-left: 0;
+}
+
+@media (max-width: 639px) {
+  .agentos-message-list > .agentos-process-group {
+    width: 100%;
+  }
+}
+
 .agentos-sandbox-result {
   display: grid;
   gap: 0.45rem;
