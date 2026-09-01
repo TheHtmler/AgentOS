@@ -14,10 +14,12 @@ import { cn } from "@/lib/utils";
 export function ProcessGroup({
   isActive,
   durationLabel,
+  stepCount,
   children,
 }: {
   isActive: boolean;
   durationLabel?: string | null;
+  stepCount: number;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(isActive);
@@ -30,12 +32,12 @@ export function ProcessGroup({
   }
 
   const title = isActive
-    ? "处理中…"
+    ? `正在执行${stepCount > 0 ? ` · ${stepCount} 步` : ""}`
     : durationLabel === "已中断"
       ? "已中断"
       : durationLabel
-        ? `已处理 ${durationLabel}`
-        : "已处理";
+        ? `已完成 · ${stepCount} 步 · ${durationLabel}`
+        : `已完成 · ${stepCount} 步`;
 
   return (
     <Collapsible
@@ -53,7 +55,7 @@ export function ProcessGroup({
           ) : null}
           <span className="truncate">{title}</span>
         </span>
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border-strong)] bg-card px-2 py-0.5 text-[0.7rem] font-semibold text-muted-foreground">
+        <span className="inline-flex shrink-0 items-center gap-1 text-[0.7rem] font-medium text-muted-foreground">
           <ChevronRight
             aria-hidden="true"
             className={cn(
@@ -61,7 +63,7 @@ export function ProcessGroup({
               open && "rotate-90",
             )}
           />
-          {open ? "收起" : "展开"}
+          {open ? "收起详情" : "查看步骤"}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent className="grid gap-1.5 border-t border-border px-2.5 pt-1.5 pb-2.5">

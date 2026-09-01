@@ -647,12 +647,17 @@ export function ToolCallCard({
   );
   const displayName = toolDisplayName(toolCall.toolName);
   const title = keyParam ? `${displayName} ${keyParam}` : displayName;
+  const summary =
+    toolCall.status === "error" && toolCall.resultSummary
+      ? truncate(toolCall.resultSummary, 96)
+      : (keyParam ?? (toolCall.resultSummary ? truncate(toolCall.resultSummary, 96) : null));
 
   return (
     <section
       className={`agentos-tool-call ${
         toolCall.status === "running" ? "agentos-tool-call-running" : ""
       } ${toolCall.status === "error" ? "agentos-tool-call-error" : ""}`}
+      data-status={toolCall.status}
     >
       <button
         type="button"
@@ -668,7 +673,7 @@ export function ToolCallCard({
           <span className="agentos-tool-call-text">
             <span className="agentos-tool-call-headline">
               <span className="agentos-tool-call-name">{displayName}</span>
-              {keyParam ? <span className="agentos-tool-call-param">{keyParam}</span> : null}
+              {summary ? <span className="agentos-tool-call-param">{summary}</span> : null}
             </span>
             <span className="agentos-tool-call-status">
               {statusLabel}

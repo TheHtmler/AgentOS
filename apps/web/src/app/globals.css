@@ -2139,6 +2139,197 @@ body {
   }
 }
 
+/* DSH-style execution rows: the conversation stays readable while each tool
+ * exposes a compact, inspectable summary rather than a competing message card. */
+.agentos-process-group {
+  margin: 0.15rem 0 0.35rem;
+}
+
+.agentos-process-group > [data-slot="collapsible-trigger"] {
+  display: flex;
+  width: 100%;
+  min-height: 2rem;
+  align-items: center;
+  padding: 0.2rem 0;
+}
+
+.agentos-process-group > [data-slot="collapsible-trigger"] > span:first-child {
+  font-size: 0.75rem;
+}
+
+.agentos-process-group > [data-slot="collapsible-content"] {
+  gap: 0;
+  margin-top: 0.1rem;
+  padding: 0.15rem 0 0.35rem 0.85rem;
+  border-left: 1px solid var(--codex-line);
+}
+
+.agentos-process-group .agentos-tool-call,
+.agentos-process-group .agentos-reasoning {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.agentos-tool-call-toggle {
+  display: grid;
+  width: 100%;
+  min-height: 2.15rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.38rem 0.45rem;
+  border-radius: 0.45rem;
+  color: var(--codex-copy);
+  text-align: left;
+}
+
+.agentos-tool-call-toggle:hover,
+.agentos-tool-call-toggle:focus-visible {
+  background: var(--codex-control-hover);
+  outline: none;
+}
+
+.agentos-tool-call-main,
+.agentos-tool-call-text,
+.agentos-tool-call-headline {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.agentos-tool-call-main {
+  gap: 0.5rem;
+}
+
+.agentos-tool-call-icon {
+  display: grid;
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  place-items: center;
+  color: var(--codex-muted);
+}
+
+.agentos-tool-call-text {
+  min-width: 0;
+  flex: 1;
+  gap: 0.55rem;
+}
+
+.agentos-tool-call-headline {
+  min-width: 0;
+  flex: 1;
+  gap: 0.5rem;
+}
+
+.agentos-tool-call-name {
+  flex: none;
+  color: var(--codex-copy);
+  font-size: 0.76rem;
+  font-weight: 520;
+  white-space: nowrap;
+}
+
+.agentos-tool-call-param {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--codex-muted);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentos-tool-call-param::before {
+  margin-right: 0.5rem;
+  color: var(--codex-faint);
+  content: "·";
+}
+
+.agentos-tool-call-status {
+  flex: none;
+  color: var(--codex-faint);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.agentos-tool-call-state {
+  display: grid;
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  place-items: center;
+  color: var(--codex-faint);
+}
+
+.agentos-tool-call[data-status="running"] .agentos-tool-call-status {
+  color: var(--accent-dim);
+}
+
+.agentos-tool-call[data-status="error"] .agentos-tool-call-status,
+.agentos-tool-call[data-status="error"] .agentos-tool-call-param {
+  color: var(--danger);
+}
+
+.agentos-tool-call[data-status="awaiting_approval"] .agentos-tool-call-status {
+  color: #d97706;
+}
+
+.agentos-tool-call-content {
+  max-height: min(24rem, 48vh);
+  margin: 0 0.2rem 0.25rem 1.45rem;
+  padding: 0.5rem 0.65rem;
+  overflow: auto;
+  border: 1px solid var(--codex-line);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--codex-control) 84%, transparent);
+  color: var(--codex-muted);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.agentos-tool-call-content p + p,
+.agentos-tool-call-content > div + p,
+.agentos-tool-call-content > p + div {
+  margin-top: 0.45rem;
+}
+
+.agentos-tool-call-content pre {
+  max-height: 14rem;
+  overflow: auto;
+}
+
+.agentos-generated-files {
+  margin: 0.05rem 0 0.2rem 1.45rem;
+}
+
+@media (max-width: 639px) {
+  .agentos-process-group > [data-slot="collapsible-content"] {
+    padding-left: 0.55rem;
+  }
+
+  .agentos-tool-call-toggle {
+    min-height: 2.35rem;
+    padding-inline: 0.35rem;
+  }
+
+  .agentos-tool-call-text {
+    gap: 0.35rem;
+  }
+
+  .agentos-tool-call-status {
+    max-width: 5.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .agentos-tool-call-content {
+    max-height: 50dvh;
+    margin-left: 1.1rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .agentos-is-streaming .agentos-chat-header::after,
   .agentos-message-streaming::before,

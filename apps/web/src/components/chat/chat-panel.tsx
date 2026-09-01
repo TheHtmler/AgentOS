@@ -2508,6 +2508,7 @@ export function ChatPanel({
                       <ProcessGroup
                         isActive={isStreaming && liveSteps.length > 0}
                         durationLabel={message.durationLabel}
+                        stepCount={processChildren.length}
                       >
                         {processChildren}
                       </ProcessGroup>
@@ -2649,7 +2650,7 @@ export function ChatPanel({
 
                     {orphanLiveSteps.length > 0 ? (
                       <>
-                        <ProcessGroup isActive={true}>
+                        <ProcessGroup isActive={true} stepCount={orphanLiveSteps.length}>
                           {orphanLiveSteps.map((step) => {
                             if (step.kind === "thinking") {
                               return <ThinkingStepCard key={step.id} step={step} />;
