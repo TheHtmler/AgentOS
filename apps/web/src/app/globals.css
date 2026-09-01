@@ -4472,16 +4472,16 @@ body {
 }
 
 .agentos-process-group .agentos-tool-call-toggle {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1rem;
   align-items: center;
-  justify-content: flex-start;
   gap: 0.45rem;
 }
 
 .agentos-process-group .agentos-tool-call-main {
   min-width: 0;
-  flex: 0 1 auto;
-  max-width: calc(100% - 1.5rem);
+  width: 100%;
+  max-width: none;
 }
 
 .agentos-process-group .agentos-tool-call-text,
@@ -4492,21 +4492,25 @@ body {
 }
 
 .agentos-process-group .agentos-tool-call-text {
-  flex: 0 1 auto;
+  flex: 1 1 0;
   gap: 0.45rem;
 }
 
 .agentos-process-group .agentos-tool-call-headline {
-  flex: 0 1 auto;
-  max-width: min(27rem, calc(100vw - 12rem));
+  flex: 1 1 0;
+  max-width: none;
+  overflow: hidden;
 }
 
 .agentos-process-group .agentos-tool-call-status {
   flex: none;
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .agentos-process-group .agentos-tool-call-state {
-  margin-left: auto;
+  margin-left: 0;
 }
 
 @media (max-width: 639px) {
@@ -4514,7 +4518,7 @@ body {
     width: 100%;
   }
 
-  .agentos-process-group .agentos-tool-call-headline {
-    max-width: calc(100vw - 10.5rem);
+  .agentos-process-group .agentos-tool-call-status {
+    max-width: 4.75rem;
   }
 }
