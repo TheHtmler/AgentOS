@@ -4132,6 +4132,12 @@ body {
   padding-right: 0.65rem;
 }
 
+.agentos-codex-pinned-host .agentos-conversation-list-scroll {
+  width: calc(100% + 0.65rem);
+  max-width: none;
+  padding-right: 0.65rem;
+}
+
 /* Keep the inline editor stable when the rail is narrow. */
 .agentos-codex-conversation-host .agentos-rename-form,
 .agentos-codex-pinned-host .agentos-rename-form,
