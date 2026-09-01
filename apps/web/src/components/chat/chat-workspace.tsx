@@ -19,12 +19,7 @@ import { PendingCaseFactsBanner } from "@/components/chat/pending-case-facts-ban
 import { ScheduledTasksPanel } from "@/components/chat/scheduled-tasks-panel";
 import { WeChatBindingPanel } from "@/components/channel/wechat-binding-panel";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import {
-  displayAgentName,
-  parseAgentSummaries,
-  resolveSelectedAgentId,
-  type AgentSummary,
-} from "@/lib/agents";
+import { parseAgentSummaries, resolveSelectedAgentId, type AgentSummary } from "@/lib/agents";
 import type { Conversation } from "@/components/chat/conversation-list";
 
 type ChatWorkspaceProps = {
@@ -440,10 +435,6 @@ export function ChatWorkspace({
     [focusSlot],
   );
 
-  const selectedAgentName =
-    agents.find((agent) => agent.id === selectedAgentId)?.name ?? "默认助手";
-  const selectedAgentLabel = displayAgentName(selectedAgentName);
-
   return (
     <>
       <header className="agentos-topbar">
@@ -624,7 +615,6 @@ export function ChatWorkspace({
                         <ChatPanel
                           selectedThreadId={slot.threadId}
                           agentId={selectedAgentId}
-                          agentName={selectedAgentLabel}
                           agents={agents}
                           agentLoadError={agentLoadError}
                           supportsVision={

@@ -240,7 +240,6 @@ async function loadRunApprovalState(runId: string): Promise<{
 type ChatPanelProps = {
   selectedThreadId: string | null | undefined;
   agentId: string | null;
-  agentName: string;
   agents: AgentSummary[];
   agentLoadError: string | null;
   /** False when the selected agent's model cannot take image input; upload stays disabled. */
@@ -678,7 +677,6 @@ async function loadRunDurationLabel(runId: string): Promise<string | null> {
 export function ChatPanel({
   selectedThreadId,
   agentId,
-  agentName,
   agents,
   agentLoadError,
   supportsVision = true,
@@ -2355,7 +2353,6 @@ export function ChatPanel({
     >
       <header className="agentos-chat-header">
         <div className="agentos-thread-heading">
-          <p className="agentos-thread-kicker">{agentName}</p>
           <div className="agentos-thread-title-row">
             <h1 className="agentos-chat-heading">{displayThreadTitle}</h1>
             {statusLabel ? (
@@ -2365,9 +2362,6 @@ export function ChatPanel({
               </p>
             ) : null}
           </div>
-          <p className="agentos-chat-subheading">
-            {threadId === null ? "准备开始新的任务" : "AgentOS 会话"}
-          </p>
         </div>
 
         <div className="agentos-chat-header-actions">
