@@ -10,6 +10,7 @@ import {
   Folder,
   Link2,
   Search,
+  Terminal,
   Wrench,
 } from "lucide-react";
 
@@ -36,6 +37,9 @@ export function ToolIcon({ toolName, className }: { toolName: string; className?
   }
   if (toolName === "knowledge_search") {
     return <BookOpen className={cls} aria-hidden="true" />;
+  }
+  if (toolName === "sandbox_exec") {
+    return <Terminal className={cls} aria-hidden="true" />;
   }
   if (toolName.startsWith("case_")) {
     return <Folder className={cls} aria-hidden="true" />;

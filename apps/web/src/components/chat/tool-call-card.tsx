@@ -435,6 +435,11 @@ export function toolCallKeyParam(toolCall: ToolCallState): string | null {
     return expression ? truncate(expression) : null;
   }
 
+  if (name === "sandbox_exec") {
+    const command = stringField(record, "command");
+    return command ? truncate(command) : null;
+  }
+
   if (name === "time_diff") {
     const start = stringField(record, "start");
     if (!start) {
@@ -630,6 +635,24 @@ export function ToolCallCard({
   const artifactTruncated =
     toolCall.toolName === "read_artifact" && toolCall.resultData?.truncated === true;
   const files = toolCall.files ?? sandboxFilesFromValue(toolCall.resultData?.files);
+  const sandboxCommand =
+    toolCall.toolName === "sandbox_exec"
+      ? stringField(parseArgsRecord(toolCall.argsText) ?? {}, "command")
+      : null;
+  const sandboxExitCode =
+    toolCall.toolName === "sandbox_exec"
+      ? numberField(toolCall.resultData ?? {}, "exit_code")
+      : null;
+  const sandboxStdout =
+    toolCall.toolName === "sandbox_exec" ? stringField(toolCall.resultData ?? {}, "stdout") : null;
+  const sandboxStderr =
+    toolCall.toolName === "sandbox_exec" ? stringField(toolCall.resultData ?? {}, "stderr") : null;
+  const sandboxOutputTruncated =
+    toolCall.toolName === "sandbox_exec" && toolCall.resultData?.output_truncated === true;
+  const sandboxOutputArtifactId =
+    toolCall.toolName === "sandbox_exec"
+      ? stringField(toolCall.resultData ?? {}, "output_artifact_id")
+      : null;
 
   useEffect(() => {
     if (!running || toolCall.durationMs !== undefined || toolCall.startedAt === undefined) {
@@ -771,6 +794,34 @@ export function ToolCallCard({
               {toolCall.provider}
             </p>
           ) : null}
+          {sandboxCommand !== null ? (
+            <div className="agentos-sandbox-result">
+              <div className="agentos-sandbox-result-head">
+                <span className="agentos-tool-call-label">命令</span>
+                {sandboxExitCode !== null ? (
+                  <span data-error={toolCall.status === "error" || undefined}>
+                    退出码 {sandboxExitCode}
+                  </span>
+                ) : null}
+              </div>
+              <pre className="agentos-sandbox-command">$ {sandboxCommand}</pre>
+              {sandboxStdout ? (
+                <pre className="agentos-sandbox-output" aria-label="标准输出">
+                  {sandboxStdout}
+                </pre>
+              ) : null}
+              {sandboxStderr ? (
+                <pre className="agentos-sandbox-output is-error" aria-label="标准错误">
+                  {sandboxStderr}
+                </pre>
+              ) : null}
+              {sandboxOutputTruncated ? (
+                <p className="agentos-sandbox-notice">
+                  输出已截断{sandboxOutputArtifactId ? "，可在后续回复中继续读取完整结果。" : "。"}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {artifactText !== null ? (
             <div className="agentos-tool-call-artifact">
               <span className="agentos-tool-call-label">正文</span>
@@ -781,7 +832,7 @@ export function ToolCallCard({
               <pre>{artifactText}</pre>
             </div>
           ) : null}
-          {toolCall.resultSummary && artifactText === null ? (
+          {toolCall.resultSummary && artifactText === null && sandboxCommand === null ? (
             <p>
               <span className="agentos-tool-call-label">
                 {toolCall.status === "error" ? "提示" : "结果"}

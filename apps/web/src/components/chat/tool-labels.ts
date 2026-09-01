@@ -6,6 +6,7 @@ const TOOL_LABELS: Record<string, string> = {
   time_diff: "计算时间差",
   growth_assess: "分析成长数据",
   knowledge_search: "查询知识库",
+  sandbox_exec: "执行工作区命令",
   case_slot_collect: "补充当前资料",
   case_attribution_confirm: "确认当前资料",
 };
