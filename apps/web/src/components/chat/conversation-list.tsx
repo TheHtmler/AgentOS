@@ -203,6 +203,39 @@ export function ConversationList({
     };
   }, [refreshKey]);
 
+  useEffect(() => {
+    if (menuThreadId === null) {
+      return;
+    }
+
+    function closeMenu(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (
+        target.closest(".agentos-conversation-menu") === null &&
+        target.closest(".agentos-conversation-menu-button") === null
+      ) {
+        setMenuThreadId(null);
+      }
+    }
+
+    function closeMenuOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMenuThreadId(null);
+      }
+    }
+
+    document.addEventListener("pointerdown", closeMenu);
+    document.addEventListener("keydown", closeMenuOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeMenu);
+      document.removeEventListener("keydown", closeMenuOnEscape);
+    };
+  }, [menuThreadId]);
+
   const isLoadingCurrentAgent = isLoading;
   const currentError = error;
 
@@ -473,7 +506,13 @@ export function ConversationList({
                                   <CalendarClock aria-hidden="true" className="size-3" />
                                 </span>
                               ) : null}
-                              {conversationLabel(conversation)}
+                              <span
+                                className={`agentos-conversation-title-text ${
+                                  conversationLabel(conversation).length > 18 ? "is-scrollable" : ""
+                                }`}
+                              >
+                                {conversationLabel(conversation)}
+                              </span>
                               {isStreaming ? (
                                 <span className="agentos-conversation-status is-streaming">
                                   处理中

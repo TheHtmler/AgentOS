@@ -2650,8 +2650,37 @@ body {
   white-space: nowrap;
 }
 
+.agentos-conversation-title-text {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.agentos-conversation-title-text.is-scrollable {
+  will-change: transform;
+}
+
+.agentos-conversation-item:hover .agentos-conversation-title-text.is-scrollable,
+.agentos-conversation-item:focus-within .agentos-conversation-title-text.is-scrollable {
+  animation: agentos-conversation-title-scroll 7s ease-in-out infinite alternate;
+}
+
+@keyframes agentos-conversation-title-scroll {
+  0%,
+  25% {
+    transform: translateX(0);
+  }
+
+  75%,
+  100% {
+    transform: translateX(-20%);
+  }
+}
+
 .agentos-conversation-time {
   flex-shrink: 0;
+  display: block;
+  margin-top: 0.15rem;
   color: var(--muted);
   font-size: 0.62rem;
 }
@@ -2682,10 +2711,23 @@ body {
 
 .agentos-conversation-menu-button {
   flex: none;
+  opacity: 0;
   padding: 0 0.45rem;
   color: var(--muted);
   font-size: 1rem;
   line-height: 1;
+}
+
+.agentos-conversation-item:hover .agentos-conversation-menu-button,
+.agentos-conversation-item:focus-within .agentos-conversation-menu-button,
+.agentos-conversation-menu-button:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .agentos-conversation-menu-button {
+    opacity: 1;
+  }
 }
 
 .agentos-conversation-menu-button:hover {
@@ -4192,6 +4234,21 @@ body {
   width: 2rem;
   padding-inline: 0;
   color: var(--codex-muted);
+}
+
+/* Keep metadata on its own line and reveal row actions only on intent. */
+.agentos-codex-conversation-host .agentos-conversation-title-row,
+.agentos-mobile-conversation-host .agentos-conversation-title-row,
+.agentos-codex-pinned-host .agentos-conversation-title-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.agentos-codex-conversation-host .agentos-conversation-time,
+.agentos-mobile-conversation-host .agentos-conversation-time,
+.agentos-codex-pinned-host .agentos-conversation-time {
+  justify-self: start;
+  margin-top: 0.12rem;
 }
 
 .agentos-codex-pinned-host .agentos-list-feedback {
