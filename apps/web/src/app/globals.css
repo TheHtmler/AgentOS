@@ -4344,3 +4344,63 @@ body {
     padding-inline: 0.4rem;
   }
 }
+
+/* Reasoning shares the tool-row interaction: live detail is visible while
+ * streaming, then a finished turn remains scannable until inspected. */
+.agentos-reasoning-head {
+  display: flex;
+  width: 100%;
+  min-height: 2.15rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  padding: 0.38rem 0.45rem;
+  border-radius: 0.45rem;
+  color: var(--codex-muted);
+  text-align: left;
+}
+
+.agentos-reasoning-head:hover,
+.agentos-reasoning-head:focus-visible {
+  background: var(--codex-control-hover);
+  outline: none;
+}
+
+.agentos-reasoning-title {
+  min-width: 0;
+  color: inherit;
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.agentos-reasoning-duration,
+.agentos-reasoning-state {
+  color: var(--codex-faint);
+}
+
+.agentos-reasoning-state {
+  display: grid;
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  place-items: center;
+}
+
+.agentos-reasoning-content {
+  max-height: min(20rem, 42vh);
+  margin: 0 0.2rem 0.25rem 1.45rem;
+  padding: 0.5rem 0.65rem;
+  overflow: auto;
+  border: 1px solid var(--codex-line);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--codex-control) 84%, transparent);
+  color: var(--codex-muted);
+  font-size: 0.74rem;
+}
+
+@media (max-width: 639px) {
+  .agentos-reasoning-content {
+    max-height: 50dvh;
+    margin-left: 1.1rem;
+  }
+}

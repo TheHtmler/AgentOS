@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-Web 聊天执行流按 DSH Web 的信息层级收敛：每轮步骤以可折叠的执行组承载，默认将工具调用压缩为单行摘要（工具、关键参数或结果、状态、耗时），完整参数、结构化结果、文件和错误详情按需展开并限制自身滚动高度。现有 AG-UI、run_events 历史回放、HITL 和 sandbox 文件预览接口保持不变。
+Web 聊天执行流按 DSH Web 的信息层级收敛：每轮步骤以可折叠的执行组承载，工具调用和 Thinking 均压缩为单行摘要（工具或阶段、关键参数或结果、状态、耗时），完整内容、结构化结果、文件和错误详情按需展开并限制自身滚动高度。现有 AG-UI、run_events 历史回放、HITL 和 sandbox 文件预览接口保持不变。
 
 前后端工程骨架、健康检查链路、统一格式化配置、流式聊天、PostgreSQL 会话持久化、模型历史恢复、invite-only 认证和 Thread 所有权隔离已完成。只读 `web_search` 工具（Tavily 优先、DuckDuckGo 降级）已接入 Agent Runtime。多 Agent 选择与用户长期记忆（首个 Phase 2.5 竖切）已落地。内建 `growth_assess`（WHO 2006 / anthro + NHC WS/T 423-2022）与 MMA/PA `knowledge_search` 已接入。平台级 Case 档案（`cases` / `case_facts`，非 `patient_*`）已落地：懒创建默认档案、确认事实注入、归属抽取与 HITL/`proposed`、REST + 侧栏切换。Run、Artifact、用户记忆和多看护人基础 ACL 已绑定 Case 作用域。公共知识库已有 P0 策展切片与混合检索、运营审核与文档快照。平台 util 工具（`time_diff` / `calculate`）与薄评测 runner + foundation golden suite 已落地。聊天模型已切换为 `agentos-qwen3vl:16k`：16k 上下文、单流并发、Qwen3-VL 报告视觉输入和更大的 OCR 预览均已接入。新增用户级 Sandbox MVP：独立 Sandbox Manager、用户工作区、默认禁网/非 root/资源限制、命令输出 Artifact 和可配置策略的 `sandbox_exec` 工具；Ops Agent 版本页可逐项配置内置工具策略。
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 export type ThinkingStepState = {
   kind: "thinking";
@@ -17,6 +18,14 @@ export function ThinkingStepCard({ step }: { step: ThinkingStepState }) {
   const running = step.status === "running";
   const label = running ? step.phase : "思考完成";
   const [now, setNow] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState(running);
+  const [previousRunning, setPreviousRunning] = useState(running);
+
+  // A live step stays open, then settles back into the compact timeline.
+  if (running !== previousRunning) {
+    setPreviousRunning(running);
+    setExpanded(running);
+  }
 
   useEffect(() => {
     if (!running) {
@@ -48,7 +57,12 @@ export function ThinkingStepCard({ step }: { step: ThinkingStepState }) {
       className={`agentos-reasoning ${running ? "agentos-reasoning-running" : ""}`}
       aria-live="polite"
     >
-      <div className="agentos-reasoning-head">
+      <button
+        type="button"
+        className="agentos-reasoning-head"
+        onClick={() => setExpanded((current) => !current)}
+        aria-expanded={expanded}
+      >
         <span className="agentos-reasoning-title">
           <span aria-hidden="true" className="agentos-reasoning-indicator" />
           {label}
@@ -56,8 +70,13 @@ export function ThinkingStepCard({ step }: { step: ThinkingStepState }) {
             <span className="agentos-reasoning-duration">{durationLabel}</span>
           ) : null}
         </span>
-      </div>
-      {step.content ? <pre className="agentos-reasoning-content">{step.content}</pre> : null}
+        <span className="agentos-reasoning-state" aria-hidden="true">
+          {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+        </span>
+      </button>
+      {expanded && step.content ? (
+        <pre className="agentos-reasoning-content">{step.content}</pre>
+      ) : null}
     </section>
   );
 }
