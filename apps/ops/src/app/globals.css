@@ -103,6 +103,18 @@ textarea {
   gap: 8px;
 }
 
+.brand-mark__icon {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  flex: none;
+  border: 1px solid #cfd3da;
+  border-radius: 6px;
+  background: #f3f4f6;
+  color: var(--ink);
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -540,6 +552,15 @@ a.row__title:hover,
   z-index: 20;
 }
 
+.ops-top > .brand-mark {
+  min-width: 0;
+  flex: 1;
+}
+
+.ops-top > .brand-mark > div {
+  min-width: 0;
+}
+
 .ops-top-right {
   display: flex;
   align-items: center;
@@ -621,6 +642,12 @@ a.row__title:hover,
 }
 
 .ops-nav .brand {
+  color: #fff;
+}
+
+.ops-nav .brand-mark__icon {
+  border-color: rgb(255 255 255 / 14%);
+  background: rgb(255 255 255 / 8%);
   color: #fff;
 }
 
@@ -893,6 +920,28 @@ button.secondary.is-selected {
 }
 
 @media (max-width: 640px) {
+  .ops-top {
+    padding: 8px 10px;
+  }
+
+  .ops-top-right {
+    min-width: 0;
+  }
+
+  .ops-subject {
+    max-width: min(30vw, 120px);
+  }
+
+  .ops-top-right > .ghost {
+    padding-inline: 8px;
+  }
+
+  .brand {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .tool-detail-meta,
   .tool-schema-grid {
     grid-template-columns: 1fr;

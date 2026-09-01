@@ -2164,6 +2164,10 @@ body {
 
 @media (max-width: 639px) {
   .agentos-topbar-inner {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.65rem;
     padding: 0 0.75rem;
   }
 
@@ -3072,6 +3076,11 @@ body {
 @media (max-width: 1023px) {
   .agentos-topbar-inner {
     padding: 0 0.85rem;
+  }
+
+  .agentos-mobile-agentos-brand {
+    min-width: 0;
+    justify-self: start;
   }
 
   .agentos-workspace {
@@ -4370,7 +4379,16 @@ body {
   }
 
   .agentos-thread-title-row .agentos-chat-heading {
-    max-width: min(12rem, calc(100vw - 9rem));
+    display: -webkit-box;
+    min-width: 0;
+    flex: 1 1 auto;
+    max-width: none;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.3;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .agentos-message-list {
