@@ -2710,8 +2710,12 @@ body {
 }
 
 .agentos-conversation-menu-button {
+  display: grid;
+  align-self: stretch;
+  place-items: center;
   flex: none;
   opacity: 0;
+  background: transparent;
   padding: 0 0.45rem;
   color: var(--muted);
   font-size: 1rem;
@@ -2731,6 +2735,7 @@ body {
 }
 
 .agentos-conversation-menu-button:hover {
+  background: transparent;
   color: var(--text);
 }
 
@@ -4173,7 +4178,7 @@ body {
 
 .agentos-codex-pinned-host .agentos-conversation-list-scroll {
   max-height: 9rem;
-  padding: 0 0.65rem 0 0;
+  padding: 0;
   overflow-y: auto;
 }
 
@@ -4233,6 +4238,7 @@ body {
 .agentos-codex-pinned-host .agentos-conversation-menu-button {
   width: 2rem;
   padding-inline: 0;
+  background: transparent;
   color: var(--codex-muted);
 }
 
