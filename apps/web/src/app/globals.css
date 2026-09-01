@@ -4243,6 +4243,19 @@ body {
   color: var(--codex-muted);
 }
 
+/* The hover surface belongs to the full row, including the action column. */
+.agentos-codex-conversation-host .agentos-conversation-item:hover,
+.agentos-codex-pinned-host .agentos-conversation-item:hover {
+  background: var(--codex-sidebar-hover);
+}
+
+.agentos-codex-conversation-host .agentos-conversation-button,
+.agentos-codex-conversation-host .agentos-conversation-menu-button,
+.agentos-codex-pinned-host .agentos-conversation-button,
+.agentos-codex-pinned-host .agentos-conversation-menu-button {
+  background: transparent;
+}
+
 /* Keep metadata on its own line and reveal row actions only on intent. */
 .agentos-codex-conversation-host .agentos-conversation-title-row,
 .agentos-mobile-conversation-host .agentos-conversation-title-row,
