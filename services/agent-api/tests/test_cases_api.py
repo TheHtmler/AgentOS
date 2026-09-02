@@ -20,7 +20,7 @@ async def dispose_database_pool():
 
 
 @pytest.mark.anyio
-async def test_cases_list_create_default_and_confirm(
+async def test_cases_list_create_default_confirm_and_reject(
     authenticated_api_user: UUID,
 ) -> None:
     transport = ASGITransport(app=app)
@@ -67,6 +67,14 @@ async def test_cases_list_create_default_and_confirm(
         assert sum(1 for item in cases if item["is_default"]) == 1
 
     async with session_factory() as session, session.begin():
+        rejected_fact = CaseFact(
+            id=uuid4(),
+            case_id=UUID(case_id),
+            key="weight_kg",
+            content="体重 12 kg",
+            tags=["体重"],
+            status="proposed",
+        )
         session.add(
             CaseFact(
                 id=uuid4(),
@@ -77,14 +85,24 @@ async def test_cases_list_create_default_and_confirm(
                 status="proposed",
             ),
         )
+        session.add(rejected_fact)
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         facts = await client.get(f"/v1/cases/{case_id}/facts")
         assert facts.status_code == 200
-        fact_id = facts.json()["facts"][0]["id"]
+        proposed = {item["key"]: item["id"] for item in facts.json()["facts"]}
+        fact_id = proposed["height_cm"]
         confirmed = await client.post(f"/v1/cases/{case_id}/facts/{fact_id}/confirm")
         assert confirmed.status_code == 200
         assert confirmed.json()["status"] == "confirmed"
+
+        rejected = await client.post(f"/v1/cases/{case_id}/facts/{proposed['weight_kg']}/reject")
+        assert rejected.status_code == 200
+        assert rejected.json()["status"] == "rejected"
+
+        facts = await client.get(f"/v1/cases/{case_id}/facts")
+        assert facts.status_code == 200
+        assert [item["status"] for item in facts.json()["facts"]] == ["confirmed"]
 
 
 @pytest.mark.anyio

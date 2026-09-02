@@ -95,7 +95,7 @@ Web 聊天执行流按 DSH Web 的信息层级收敛：每轮步骤与回答和 
 - 运维：`scripts/seed_agents.py` 可重复 upsert 内置 Agent 配置。
 - Case 档案（平台通用）：`cases` / `case_memberships` / `case_facts` / `user_agent_default_cases`；`threads.case_id`；`agent_versions.case_enabled`（`imd` 开启）；迁移 `f2a3b4c5d6e7`。
 - Case 读写：新建 Thread 自动绑定默认 Case；Run 注入 confirmed facts；`case_context_read`；完成后异步抽取（`self`→confirmed，`other`/`hypothetical` 不写，`unknown`→proposed）；`case_attribution_confirm`（ASK/HITL）。
-- Case API：`GET/POST /v1/cases`、设默认、facts/confirm；可选 `X-AgentOS-Case-Id`（API 级）。Web **不展示**档案切换——默认 Case 全隐式；额外主体靠对话归因 + HITL。
+- Case API：`GET/POST /v1/cases`、设默认、facts/confirm/reject；可选 `X-AgentOS-Case-Id`（API 级）。Web **不展示**档案切换——默认 Case 全隐式；额外主体靠对话归因 + HITL。
 - Case 数据边界：`runs.case_id` 从 Thread 作用域快照；带 Case 的 Artifact 创建与读取要求当前用户属于该 Case；`user_memories.case_id` 区分全局记忆与 Case 记忆，召回和抽取均按 Case 隔离。迁移 `i5j6k7l8m9n0`，并增加跨 Case 安全测试。
 - Case 成员 ACL：`owner` 管理成员，`editor` 可写 Case 事实/Artifact/Case 记忆，`viewer` 只读；成员 API 只接受已有 active 用户，不创建登录邀请。迁移 `j6k7l8m9n0`。
 - `knowledge_search` seed 扩充为 4 个独立来源文档、32 条 MMA/PA 教育切片；每个来源记录来源类型、来源日期、版本和审核状态，覆盖 GeneReviews 孤立型 MMA、GeneReviews PA、JIMD 2021 指南及综合教育摘要。

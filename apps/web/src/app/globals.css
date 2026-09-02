@@ -1522,21 +1522,10 @@ body {
   color: var(--text);
 }
 
-.agentos-pending-facts-confirm {
-  min-width: 4rem;
-  min-height: 1.9rem;
-  border-radius: 8px;
-  border: 1px solid var(--accent-border);
-  background: var(--accent);
-  color: var(--accent-contrast, #04120f);
-  font-size: 0.75rem;
-  font-weight: 600;
+.agentos-pending-facts-actions {
+  display: flex;
+  gap: 0.4rem;
   flex-shrink: 0;
-}
-
-.agentos-pending-facts-confirm:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 /* ── Invite dialog (portaled to body; never inherit drawer flex quirks) ── */

@@ -18,6 +18,7 @@ from agent_api.db.case_store import (
     list_case_members,
     list_cases_for_user,
     list_facts_for_case,
+    reject_case_fact,
     remove_case_member,
     set_default_case,
     user_can_access_case,
@@ -283,6 +284,33 @@ async def post_confirm_fact(
     try:
         async with session_factory() as session, session.begin():
             fact = await confirm_case_fact(
+                session,
+                user_id=user.id,
+                case_id=case_id,
+                fact_id=fact_id,
+            )
+            return CaseFactResponse(
+                id=fact.id,
+                key=fact.key,
+                content=fact.content,
+                tags=list(fact.tags or []),
+                status=fact.status,
+            )
+    except CaseNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/{case_id}/facts/{fact_id}/reject", response_model=CaseFactResponse)
+async def post_reject_fact(
+    case_id: UUID,
+    fact_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+) -> CaseFactResponse:
+    """Reject a proposed Case fact while retaining its audit record."""
+
+    try:
+        async with session_factory() as session, session.begin():
+            fact = await reject_case_fact(
                 session,
                 user_id=user.id,
                 case_id=case_id,

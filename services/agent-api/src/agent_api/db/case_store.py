@@ -543,3 +543,27 @@ async def confirm_case_fact(
     fact.updated_at = datetime.now(UTC)
     await session.flush()
     return fact
+
+
+async def reject_case_fact(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    case_id: UUID,
+    fact_id: UUID,
+) -> CaseFact:
+    """Mark a proposed fact rejected after write-permission check."""
+
+    if not await user_can_write_case(session, user_id=user_id, case_id=case_id):
+        raise CaseNotFoundError(f"Case {case_id} is not accessible")
+    fact = await session.get(CaseFact, fact_id)
+    if fact is None or fact.case_id != case_id:
+        raise CaseNotFoundError(f"Case fact {fact_id} not found")
+    if fact.status == "rejected":
+        return fact
+    if fact.status != "proposed":
+        raise CaseNotFoundError(f"Case fact {fact_id} is not rejectable")
+    fact.status = "rejected"
+    fact.updated_at = datetime.now(UTC)
+    await session.flush()
+    return fact

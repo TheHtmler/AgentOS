@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { parseCaseFacts, parseCaseSummaries, type CaseFact } from "@/lib/cases";
 
 type PendingCaseFactsBannerProps = {
@@ -43,7 +44,7 @@ export function PendingCaseFactsBanner({
   const [caseId, setCaseId] = useState<string | null>(null);
   const [facts, setFacts] = useState<CaseFact[]>([]);
   const [expanded, setExpanded] = useState(false);
-  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [actioningId, setActioningId] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -80,21 +81,21 @@ export function PendingCaseFactsBanner({
     };
   }, [agentId, caseEnabled, refreshKey]);
 
-  const handleConfirm = useCallback(
-    async (factId: string) => {
+  const handleFactAction = useCallback(
+    async (factId: string, action: "confirm" | "reject") => {
       if (caseId === null) {
         return;
       }
-      setConfirmingId(factId);
+      setActioningId(factId);
       try {
-        const response = await fetch(`/api/cases/${caseId}/facts/${factId}/confirm`, {
+        const response = await fetch(`/api/cases/${caseId}/facts/${factId}/${action}`, {
           method: "POST",
         });
         if (response.ok) {
           setFacts((current) => current.filter((fact) => fact.id !== factId));
         }
       } finally {
-        setConfirmingId(null);
+        setActioningId(null);
       }
     },
     [caseId],
@@ -121,14 +122,27 @@ export function PendingCaseFactsBanner({
           {facts.map((fact) => (
             <li key={fact.id} className="agentos-pending-facts-item">
               <span className="agentos-pending-facts-content">{fact.content}</span>
-              <button
-                type="button"
-                className="agentos-pending-facts-confirm"
-                disabled={confirmingId === fact.id}
-                onClick={() => void handleConfirm(fact.id)}
-              >
-                {confirmingId === fact.id ? "确认中…" : "确认"}
-              </button>
+              <div className="agentos-pending-facts-actions">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-w-14"
+                  disabled={actioningId === fact.id}
+                  onClick={() => void handleFactAction(fact.id, "reject")}
+                >
+                  {actioningId === fact.id ? "处理中…" : "否定"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="min-w-14"
+                  disabled={actioningId === fact.id}
+                  onClick={() => void handleFactAction(fact.id, "confirm")}
+                >
+                  {actioningId === fact.id ? "处理中…" : "确认"}
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
