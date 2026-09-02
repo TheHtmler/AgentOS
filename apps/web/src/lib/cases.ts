@@ -42,6 +42,24 @@ export type CaseFact = {
   status: string;
 };
 
+const CASE_FACT_LABELS: Record<string, string> = {
+  height_cm: "身高",
+  weight_kg: "体重",
+  sex: "性别",
+  date_of_birth: "出生日期",
+  age_months: "月龄",
+  diagnosis_subtype: "诊断分型/基因",
+};
+
+/** Add the stable field label when an extractor returned only its raw value. */
+export function displayCaseFactContent(fact: CaseFact): string {
+  const label = fact.key === null ? undefined : CASE_FACT_LABELS[fact.key];
+  if (label === undefined || fact.content.startsWith(label)) {
+    return fact.content;
+  }
+  return `${label}：${fact.content}`;
+}
+
 function isCaseFact(value: unknown): value is CaseFact {
   return (
     isRecord(value) &&

@@ -315,6 +315,12 @@ def parse_case_extract_payload(raw: object) -> ExtractedCasePayload:
                 key = infer_case_fact_key(content, tags)
                 if key is None:
                     keyless += 1
+            if key == "diagnosis_subtype":
+                gene_match = _GENE_RE.fullmatch(content)
+                if gene_match is not None:
+                    content = f"诊断分型/基因 {gene_match.group(1).upper()}"
+                    if not tags:
+                        tags = ["诊断分型"]
             updates.append(CaseFactUpdate(key=key, content=content, tags=tags))
     if keyless:
         logger.warning("case extract had %s keyless updates after inference", keyless)

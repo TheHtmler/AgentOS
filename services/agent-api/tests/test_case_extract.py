@@ -82,6 +82,22 @@ def test_parse_and_policy_branches() -> None:
     assert apply_attribution_policy(empty) == "skip"
 
 
+def test_parse_normalizes_a_bare_diagnosis_gene() -> None:
+    raw: dict[str, object] = {
+        "attribution": "self",
+        "updates": [{"key": "diagnosis_subtype", "content": "MMUT", "tags": []}],
+    }
+    payload = parse_case_extract_payload(raw)
+
+    assert payload.updates == [
+        CaseFactUpdate(
+            key="diagnosis_subtype",
+            content="诊断分型/基因 MMUT",
+            tags=["诊断分型"],
+        ),
+    ]
+
+
 def test_slot_hints_cover_sex_dob_and_age() -> None:
     hints = {
         item.key: item.content

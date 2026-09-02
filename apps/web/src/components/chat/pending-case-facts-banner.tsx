@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { parseCaseFacts, parseCaseSummaries, type CaseFact } from "@/lib/cases";
+import {
+  displayCaseFactContent,
+  parseCaseFacts,
+  parseCaseSummaries,
+  type CaseFact,
+} from "@/lib/cases";
 
 type PendingCaseFactsBannerProps = {
   agentId: string | null;
@@ -121,7 +126,14 @@ export function PendingCaseFactsBanner({
         <ul className="agentos-pending-facts-list">
           {facts.map((fact) => (
             <li key={fact.id} className="agentos-pending-facts-item">
-              <span className="agentos-pending-facts-content">{fact.content}</span>
+              <div className="agentos-pending-facts-detail">
+                <span className="agentos-pending-facts-content">
+                  {displayCaseFactContent(fact)}
+                </span>
+                {fact.tags.length > 0 ? (
+                  <span className="agentos-pending-facts-tags">{fact.tags.join(" · ")}</span>
+                ) : null}
+              </div>
               <div className="agentos-pending-facts-actions">
                 <Button
                   type="button"
