@@ -1508,9 +1508,9 @@ body {
 }
 
 .agentos-pending-facts-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 0.75rem;
   padding: 0.45rem 0.6rem;
   border-radius: 8px;
@@ -1519,13 +1519,26 @@ body {
 }
 
 .agentos-pending-facts-content {
+  min-width: 0;
   color: var(--text);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .agentos-pending-facts-actions {
   display: flex;
   gap: 0.4rem;
   flex-shrink: 0;
+}
+
+@media (max-width: 30rem) {
+  .agentos-pending-facts-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agentos-pending-facts-actions {
+    justify-self: end;
+  }
 }
 
 /* ── Invite dialog (portaled to body; never inherit drawer flex quirks) ── */
