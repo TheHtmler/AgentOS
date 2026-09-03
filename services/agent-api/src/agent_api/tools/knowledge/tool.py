@@ -29,6 +29,31 @@ _TOKEN_CAP = 24
 _VECTOR_WEIGHT = 10.0
 _MIN_VECTOR_KEEP = 0.28
 
+# Family-facing synonyms: users type everyday words ("发烧", "吐") while the
+# curated chunks use clinical terms ("发热", "呕吐"). Without expansion the
+# keyword path misses even the well-tagged seed chunks; the embedding path
+# cannot be relied on to bridge the gap (small local embedding models score
+# short queries low, and _MIN_VECTOR_KEEP then drops them). Each frozenset is
+# added as a whole when ANY member appears, same shape as memory/recall.py.
+SYNONYM_GROUPS: tuple[frozenset[str], ...] = (
+    frozenset(("发烧", "发热", "热")),
+    frozenset(("吐", "呕吐", "吐奶")),
+    frozenset(("拉肚子", "腹泻", "稀便")),
+    frozenset(("没精神", "嗜睡", "精神差", "萎靡", "昏睡")),
+    frozenset(("胃口", "食欲", "进食", "喂养", "吃")),
+    frozenset(("喝", "饮水", "补水", "禁食")),
+    frozenset(("昏迷", "意识改变", "抽搐", "惊厥")),
+    frozenset(("呼吸快", "呼吸急促", "呼吸深快", "喘")),
+    frozenset(("嘴唇发紫", "发紫", "青紫", "紫绀")),
+    frozenset(("尿", "尿液", "小便")),
+    frozenset(("大便", "粪便", "便")),
+    frozenset(("没力气", "乏力", "无力", "软")),
+    frozenset(("眼睛", "眼", "视力", "视觉")),
+    frozenset(("耳朵", "听力", "听")),
+    frozenset(("肚子", "腹部", "腹")),
+    frozenset(("皮肤", "皮疹", "湿疹")),
+)
+
 
 def tokenize_query(query: str) -> list[str]:
     tokens = [token.lower() for token in _TOKEN_RE.findall(query) if len(token) >= 2]
@@ -40,7 +65,20 @@ def tokenize_query(query: str) -> list[str]:
         if len(token) > 4 and _CJK_RE.search(token)
         for index in range(len(token) - 1)
     ]
-    return list(dict.fromkeys([*tokens, *bigrams]))[:_TOKEN_CAP]
+    expanded = list(dict.fromkeys([*tokens, *bigrams]))
+    # Expand colloquial query words to their clinical synonyms so keyword
+    # matching works for family-facing phrasing. If the user wrote 发烧, also
+    # match 发热; if 吐, also match 呕吐/吐奶. Trigger on the original tokens
+    # (not bigrams) to avoid noise from a coincidental 2-char overlap.
+    lowered = query.lower()
+    for group in SYNONYM_GROUPS:
+        # Only multi-char terms trigger a group: a bare 热/吃/尿 must not
+        # drag the whole clinical group in on a coincidental substring.
+        if any(len(term) >= 2 and term in lowered for term in group):
+            # Single-char synonyms (热/尿/吃) are too noisy for keyword
+            # scoring and ILIKE filtering — keep only 2+ char additions.
+            expanded.extend(term for term in group if len(term) >= 2 and term not in expanded)
+    return expanded[:_TOKEN_CAP]
 
 
 def _parse_disease_tags(raw: str | None) -> list[str]:

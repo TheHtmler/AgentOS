@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Install/refresh LaunchAgents for api / web / ops / sandbox / asr on Mac mini.
+# Install/refresh LaunchAgents for api / web / ops / sandbox / asr / backup / health on Mac mini.
 # Usage:
 #   ./scripts/install-launchd.sh           # all
 #   ./scripts/install-launchd.sh api web
 #   ./scripts/install-launchd.sh ops
 #   ./scripts/install-launchd.sh sandbox
 #   ./scripts/install-launchd.sh asr
+#   ./scripts/install-launchd.sh backup    # daily pg_dump (03:30, keeps 14)
+#   ./scripts/install-launchd.sh health    # HTTP watchdog every 60s
 
 set -euo pipefail
 
@@ -65,7 +67,7 @@ escape_sed() {
 
 install_one() {
   local target="$1"
-  local label src dst node_bin uv_bin whisper_server_bin esc_root esc_node esc_uv esc_whisper_server
+  local label src dst node_bin uv_bin whisper_server_bin esc_root esc_node esc_uv esc_whisper_server=""
 
   case "$target" in
     api)
@@ -88,8 +90,16 @@ install_one() {
       label="com.local.agentos-asr"
       src="$ROOT/infra/launchd/com.local.agentos-asr.plist.example"
       ;;
+    backup)
+      label="com.local.agentos-backup"
+      src="$ROOT/infra/launchd/com.local.agentos-backup.plist.example"
+      ;;
+    health)
+      label="com.local.agentos-health-watch"
+      src="$ROOT/infra/launchd/com.local.agentos-health-watch.plist.example"
+      ;;
     *)
-      echo "unknown target: $target (api|web|ops|sandbox|asr)" >&2
+      echo "unknown target: $target (api|web|ops|sandbox|asr|backup|health)" >&2
       exit 1
       ;;
   esac
@@ -106,22 +116,34 @@ install_one() {
   fi
 
   esc_root="$(escape_sed "$ROOT")"
-  if [[ "$target" == "asr" ]]; then
-    whisper_server_bin="$(resolve_whisper_server)"
-    esc_whisper_server="$(escape_sed "$whisper_server_bin")"
-  else
-    node_bin="$(resolve_node)"
-    uv_bin="$(resolve_uv)"
-    esc_node="$(escape_sed "$node_bin")"
-    esc_uv="$(escape_sed "$uv_bin")"
-  fi
-
-  sed \
-    -e "s|__AGENTOS_ROOT__|${esc_root}|g" \
-    -e "s|__NODE_BIN__|${esc_node}|g" \
-    -e "s|__UV_BIN__|${esc_uv}|g" \
-    -e "s|__WHISPER_SERVER_BIN__|${esc_whisper_server}|g" \
-    "$src" >"$dst"
+  case "$target" in
+    backup|health)
+      # Plain bash scripts; no node/uv/whisper binary to resolve.
+      sed \
+        -e "s|__AGENTOS_ROOT__|${esc_root}|g" \
+        "$src" >"$dst"
+      ;;
+    asr)
+      whisper_server_bin="$(resolve_whisper_server)"
+      esc_whisper_server="$(escape_sed "$whisper_server_bin")"
+      sed \
+        -e "s|__AGENTOS_ROOT__|${esc_root}|g" \
+        -e "s|__WHISPER_SERVER_BIN__|${esc_whisper_server}|g" \
+        "$src" >"$dst"
+      ;;
+    *)
+      node_bin="$(resolve_node)"
+      uv_bin="$(resolve_uv)"
+      esc_node="$(escape_sed "$node_bin")"
+      esc_uv="$(escape_sed "$uv_bin")"
+      sed \
+        -e "s|__AGENTOS_ROOT__|${esc_root}|g" \
+        -e "s|__NODE_BIN__|${esc_node}|g" \
+        -e "s|__UV_BIN__|${esc_uv}|g" \
+        -e "s|__WHISPER_SERVER_BIN__|${esc_whisper_server}|g" \
+        "$src" >"$dst"
+      ;;
+  esac
 
   if launchctl print "${DOMAIN}/${label}" >/dev/null 2>&1; then
     launchctl bootout "${DOMAIN}/${label}" 2>/dev/null || true

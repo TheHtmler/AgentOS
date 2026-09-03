@@ -42,6 +42,7 @@ from agent_api.knowledge.vision_extract import (
     extract_image_text_vision,
     extract_pdf_text_vision,
 )
+from agent_api.memory.embed import embed_texts
 from agent_api.runtime import AgentRuntime
 
 router = APIRouter(prefix="/v1/ops/knowledge", tags=["ops-knowledge"])
@@ -83,6 +84,12 @@ class KnowledgeDocumentOut(BaseModel):
     import_error: str | None
     import_progress_done: int | None
     import_progress_total: int | None
+    # Vector health: how many chunks actually carry an embedding for this
+    # document. A document can import "successfully" while every chunk has
+    # embedding=null (endpoint down, key missing) — those chunks then only
+    # match keyword searches and the vector leg of hybrid search is dead.
+    embedded_chunks: int = 0
+    embedding_model: str | None = None
 
 
 class KnowledgeDocumentListResponse(BaseModel):
@@ -96,6 +103,10 @@ class KnowledgeChunkOut(BaseModel):
     content: str
     section_label: str | None
     tags: list[str]
+    # Vector health per chunk: whether an embedding exists and which model
+    # produced it (null when the chunk only matches keyword searches).
+    embedded: bool = False
+    embedding_model: str | None = None
 
 
 class KnowledgeDocumentDetailOut(KnowledgeDocumentOut):
@@ -153,7 +164,12 @@ class ImportResponse(BaseModel):
     documents: list[ImportDocumentOut]
 
 
-def _document_out(doc: KnowledgeDocument, chunk_count: int) -> KnowledgeDocumentOut:
+def _document_out(
+    doc: KnowledgeDocument,
+    chunk_count: int,
+    embedded_chunks: int = 0,
+    embedding_model: str | None = None,
+) -> KnowledgeDocumentOut:
     return KnowledgeDocumentOut(
         id=doc.id,
         slug=doc.slug,
@@ -170,6 +186,8 @@ def _document_out(doc: KnowledgeDocument, chunk_count: int) -> KnowledgeDocument
         import_error=doc.import_error,
         import_progress_done=doc.import_progress_done,
         import_progress_total=doc.import_progress_total,
+        embedded_chunks=embedded_chunks,
+        embedding_model=embedding_model,
     )
 
 
@@ -488,15 +506,41 @@ async def list_knowledge_documents(
             .correlate(KnowledgeDocument)
             .scalar_subquery()
         )
+        embedded_count = (
+            select(func.count())
+            .select_from(KnowledgeChunk)
+            .where(
+                KnowledgeChunk.document_id == KnowledgeDocument.id,
+                KnowledgeChunk.embedding.isnot(None),
+            )
+            .correlate(KnowledgeDocument)
+            .scalar_subquery()
+        )
+        # All embedded chunks of one document share the model that produced
+        # them; any non-null value names it (null when nothing is embedded).
+        embedding_model = (
+            select(func.max(KnowledgeChunk.embedding_model))
+            .where(KnowledgeChunk.document_id == KnowledgeDocument.id)
+            .correlate(KnowledgeDocument)
+            .scalar_subquery()
+        )
         result = await session.execute(
-            select(KnowledgeDocument, chunk_count)
+            select(KnowledgeDocument, chunk_count, embedded_count, embedding_model)
             .where(KnowledgeDocument.knowledge_base_id == kb.id)
             .order_by(KnowledgeDocument.slug),
         )
         rows = result.all()
 
     return KnowledgeDocumentListResponse(
-        documents=[_document_out(doc, int(count or 0)) for doc, count in rows],
+        documents=[
+            _document_out(
+                doc,
+                int(count or 0),
+                embedded_chunks=int(embedded or 0),
+                embedding_model=model,
+            )
+            for doc, count, embedded, model in rows
+        ],
     )
 
 
@@ -516,7 +560,17 @@ async def get_knowledge_document(
                 .order_by(KnowledgeChunk.chunk_index),
             ),
         )
-        base = _document_out(document, len(chunks))
+        embedded_chunks = sum(1 for chunk in chunks if chunk.embedding is not None)
+        embedding_model = next(
+            (chunk.embedding_model for chunk in chunks if chunk.embedding_model is not None),
+            None,
+        )
+        base = _document_out(
+            document,
+            len(chunks),
+            embedded_chunks=embedded_chunks,
+            embedding_model=embedding_model,
+        )
     return KnowledgeDocumentDetailOut(
         **base.model_dump(),
         chunks=[
@@ -527,6 +581,8 @@ async def get_knowledge_document(
                 content=chunk.content,
                 section_label=chunk.section_label,
                 tags=list(chunk.tags or []),
+                embedded=chunk.embedding is not None,
+                embedding_model=chunk.embedding_model,
             )
             for chunk in chunks
         ],
@@ -563,7 +619,29 @@ async def patch_knowledge_document(
             document.source_date = updates["source_date"]
 
         await session.flush()
-        out = _document_out(document, await _chunk_count(session, document.id))
+        chunk_count = await _chunk_count(session, document.id)
+        embedded_chunks = int(
+            await session.scalar(
+                select(func.count())
+                .select_from(KnowledgeChunk)
+                .where(
+                    KnowledgeChunk.document_id == document.id,
+                    KnowledgeChunk.embedding.isnot(None),
+                ),
+            )
+            or 0,
+        )
+        embedding_model = await session.scalar(
+            select(func.max(KnowledgeChunk.embedding_model)).where(
+                KnowledgeChunk.document_id == document.id,
+            ),
+        )
+        out = _document_out(
+            document,
+            chunk_count,
+            embedded_chunks=embedded_chunks,
+            embedding_model=embedding_model,
+        )
     return out
 
 
@@ -682,6 +760,7 @@ def _spec_from_snapshot(document: KnowledgeDocument, payload: dict[str, Any]) ->
 async def restore_document_snapshot(
     document_id: UUID,
     snapshot_id: UUID,
+    request: Request,
     subject: Annotated[str, Depends(get_ops_subject)],
 ) -> KnowledgeDocumentDetailOut:
     async with session_factory() as session, session.begin():
@@ -705,11 +784,27 @@ async def restore_document_snapshot(
                 detail=f"invalid snapshot payload: {exc}",
             ) from exc
 
+        # Re-embed the restored chunks OUTSIDE the short replace transaction,
+        # exactly like import_jobs does — a restored document whose chunks have
+        # embedding=null silently loses the vector leg of hybrid search and
+        # drops to keyword-only (a real hit-rate trap).
+        settings = get_settings()
+        embeddings: list[list[float] | None] | None = None
+        embedding_client = _background_http_client(request)
+        if embedding_client is not None and settings.knowledge_embedding_enabled and spec.chunks:
+            embeddings = await embed_texts(
+                [f"{chunk.title}\n{chunk.content}" for chunk in spec.chunks],
+                embedding_client,
+                settings=settings,
+                enabled=True,
+            )
+
         await upsert_knowledge_document(
             session,
             base_slug=base.slug,
             spec=spec,
             created_by=subject,
+            embeddings=embeddings,
         )
         restored = await session.get(KnowledgeDocument, document_id)
         if restored is None:
@@ -721,8 +816,18 @@ async def restore_document_snapshot(
                 .order_by(KnowledgeChunk.chunk_index),
             ),
         )
+        embedded_chunks = sum(1 for chunk in chunks if chunk.embedding is not None)
+        embedding_model = next(
+            (chunk.embedding_model for chunk in chunks if chunk.embedding_model is not None),
+            None,
+        )
         out = KnowledgeDocumentDetailOut(
-            **_document_out(restored, len(chunks)).model_dump(),
+            **_document_out(
+                restored,
+                len(chunks),
+                embedded_chunks=embedded_chunks,
+                embedding_model=embedding_model,
+            ).model_dump(),
             chunks=[
                 KnowledgeChunkOut(
                     id=chunk.id,
@@ -731,6 +836,8 @@ async def restore_document_snapshot(
                     content=chunk.content,
                     section_label=chunk.section_label,
                     tags=list(chunk.tags or []),
+                    embedded=chunk.embedding is not None,
+                    embedding_model=chunk.embedding_model,
                 )
                 for chunk in chunks
             ],

@@ -27,7 +27,33 @@ def testtokenize_query_adds_cjk_bigrams() -> None:
 
 
 def testtokenize_query_keeps_short_cjk_tokens_whole() -> None:
-    assert tokenize_query("失代偿 发热") == ["失代偿", "发热"]
+    tokens = tokenize_query("失代偿 发热")
+    assert tokens[0] == "失代偿"
+    assert "发热" in tokens
+    # 热 is a single-char synonym member — it must not be expanded in.
+    assert "热" not in tokens
+
+
+def testtokenize_query_expands_colloquial_synonyms() -> None:
+    # 发烧 is the family-facing word; the curated chunks use 发热. The group
+    # is added as a whole when any member appears.
+    tokens = tokenize_query("宝宝发烧了怎么办")
+    assert "发烧" in tokens
+    assert "发热" in tokens
+
+
+def testtokenize_query_synonyms_do_not_scan_short_terms() -> None:
+    # A bare single-char group member (热/尿/吃) must not drag the whole
+    # clinical group in via substring coincidence.
+    assert "发热" not in tokenize_query("天气很热")
+    assert "进食" not in tokenize_query("记得吃早餐")
+
+
+def testtokenize_query_does_not_trigger_unrelated_groups() -> None:
+    # An unrelated query must stay within its own tokens (plus bigrams) and
+    # must not pull in every group a substring happens to touch.
+    tokens = tokenize_query("今天股票涨停怎么看")
+    assert all(term not in tokens for term in ("发热", "呕吐", "嗜睡", "腹泻"))
 
 
 @pytest.mark.anyio
@@ -218,6 +244,32 @@ async def test_knowledge_base_scope_isolates_verticals(database_session: AsyncSe
         # ON DELETE CASCADE ripples base -> document -> chunk.
         await database_session.delete(base)
         await database_session.commit()
+
+
+@pytest.mark.anyio
+async def test_family_colloquial_query_surfaces_seed_chunk(
+    database_session: AsyncSession,
+) -> None:
+    """Colloquial phrasing ('发烧' / '吐') must reach the clinical seed chunks.
+
+    Regression for knowledge-hit rate: family users type everyday words while
+    the curated chunks use clinical terms; without synonym expansion the
+    keyword path misses them entirely (and the embedding path is too weak to
+    reliably bridge the gap for short queries).
+    """
+
+    await upsert_mma_pa_knowledge(database_session)
+    await database_session.commit()
+
+    hits = await search_knowledge_chunks(
+        database_session,
+        query="宝宝发烧了怎么办",
+        disease_tags=[],
+        max_results=5,
+        knowledge_base_slugs=["mma-pa"],
+    )
+    assert hits
+    assert any("失代偿" in hit["title"] or "失代偿" in hit["content"] for hit in hits)
 
 
 @pytest.mark.anyio

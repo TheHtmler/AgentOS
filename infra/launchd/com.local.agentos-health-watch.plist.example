@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  HTTP health watchdog: kickstarts api/web/ops launchd jobs after 3
+  consecutive probe failures (catches wedged-but-alive processes that
+  launchd KeepAlive cannot see). Runs every 60s.
+  Install: ./scripts/install-launchd.sh health
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.agentos-health-watch</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__AGENTOS_ROOT__/scripts/health-watch.sh</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>60</integer>
+  <key>StandardOutPath</key>
+  <string>/tmp/agentos-health-watch.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/agentos-health-watch.err.log</string>
+</dict>
+</plist>

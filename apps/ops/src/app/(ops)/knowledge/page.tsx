@@ -22,6 +22,8 @@ type KnowledgeDocument = {
   import_error: string | null;
   import_progress_done: number | null;
   import_progress_total: number | null;
+  embedded_chunks?: number;
+  embedding_model?: string | null;
 };
 
 const REVIEW_OPTIONS = ["curated", "clinically_reviewed", "withdrawn"] as const;
@@ -182,6 +184,16 @@ export default function KnowledgePage() {
                   <span>{doc.slug}</span>
                   <span>v{doc.version_label ?? "—"}</span>
                   <span>{doc.chunk_count} 条</span>
+                  {doc.chunk_count > 0 &&
+                  (doc.embedded_chunks ?? 0) < doc.chunk_count ? (
+                    <span className="error" title="部分切片缺少向量，混合检索的向量通道对这些切片失效（仅关键词可命中）。可在部署侧检查 BACKGROUND_* embedding 配置后重新导入。">
+                      向量 {doc.embedded_chunks ?? 0}/{doc.chunk_count}
+                    </span>
+                  ) : doc.chunk_count > 0 ? (
+                    <span title={doc.embedding_model ? `embedding 模型: ${doc.embedding_model}` : undefined}>
+                      向量 {doc.embedded_chunks ?? 0}/{doc.chunk_count} ✓
+                    </span>
+                  ) : null}
                   {doc.import_status === "processing" ? (
                     <span>
                       导入中
