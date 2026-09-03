@@ -40,6 +40,21 @@ async function readDedupe() {
   }
 }
 
+async function readContextToken(accountId, peerId) {
+  const tokenPath = path.join(
+    path.dirname(dedupePath),
+    "openclaw-weixin",
+    "accounts",
+    `${accountId}.context-tokens.json`,
+  );
+  try {
+    const tokens = JSON.parse(await readFile(tokenPath, "utf8"));
+    return typeof tokens?.[peerId] === "string" ? tokens[peerId] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function json(response, status, body) {
   response.writeHead(status, { "content-type": "application/json" });
   response.end(JSON.stringify(body));
@@ -158,10 +173,16 @@ const server = createServer(async (request, response) => {
     const account = resolveWeixinAccount(config, payload.account_id);
     if (!account.configured || !account.token)
       return json(response, 409, { error_code: "account_not_configured" });
+    const contextToken = await readContextToken(payload.account_id, payload.peer_id);
     const result = await sendMessageWeixin({
       to: payload.peer_id,
       text: payload.text,
-      opts: { baseUrl: account.baseUrl, token: account.token, runId: payload.delivery_id },
+      opts: {
+        baseUrl: account.baseUrl,
+        token: account.token,
+        contextToken,
+        runId: payload.delivery_id,
+      },
     });
     dedupe[payload.delivery_id] = result.messageId;
     const entries = Object.entries(dedupe).slice(-2000);

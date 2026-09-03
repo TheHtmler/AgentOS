@@ -396,13 +396,11 @@ body {
 }
 
 .agentos-main-column,
-
 .agentos-main-column > section {
   height: 100%;
 }
 
 .agentos-conversation-rail,
-
 .agentos-conversation-rail {
   overflow: hidden;
 }
@@ -434,9 +432,6 @@ body {
 /* ── Chat panel ── */
 
 .agentos-chat-header,
-
-
-
 .agentos-chat-status span {
   width: 0.4rem;
   height: 0.4rem;
@@ -774,13 +769,11 @@ body {
   background: color-mix(in srgb, var(--panel-muted) 55%, transparent);
 }
 
-
 .agentos-chat-subheading {
   color: var(--text-secondary);
 }
 
 /* ── Reasoning step ── */
-
 
 .agentos-reasoning-content {
   max-height: 18rem;
@@ -806,45 +799,25 @@ body {
   }
 }
 
-
-
 .agentos-sandbox-result-head [data-error] {
   color: var(--danger);
 }
 
 .agentos-sandbox-command,
-
 .agentos-sandbox-output.is-error {
   border-color: color-mix(in srgb, var(--danger) 38%, var(--codex-line));
   color: var(--danger);
 }
 
-
-
-
-
-
-
 .agentos-process-note .agentos-md {
   font-size: 0.88rem;
 }
-
 
 .agentos-reasoning-running .agentos-reasoning-indicator {
   animation: agentos-thinking-pulse 1.2s ease-in-out infinite;
 }
 
 /* ── Tool call (icon + toolName + key params) ── */
-
-
-
-
-
-
-
-
-
-
 
 .agentos-tool-call-content pre {
   margin: 0;
@@ -853,7 +826,6 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
-
 
 .agentos-tool-call-hits > span {
   display: inline-block;
@@ -872,8 +844,6 @@ body {
   color: var(--muted);
 }
 
-
-
 .agentos-tool-call-hits a {
   color: var(--accent, #2563eb);
   text-decoration: underline;
@@ -886,17 +856,7 @@ body {
   margin-bottom: 0.3rem;
 }
 
-
-
-
-
-
 .agentos-generated-file-row:hover,
-
-
-
-
-
 .agentos-chat-body {
   display: flex;
   min-height: 0;
@@ -915,9 +875,6 @@ body {
   border-left: 1px solid var(--border);
   background: var(--panel-muted);
 }
-
-
-
 
 .agentos-file-preview-heading strong {
   overflow: hidden;
@@ -943,7 +900,6 @@ body {
   color: var(--text);
 }
 
-
 .agentos-file-preview-body pre {
   min-height: 100%;
   margin: 0;
@@ -967,8 +923,6 @@ body {
   object-fit: contain;
 }
 
-
-
 .agentos-file-preview-footer a {
   color: var(--accent, #2563eb);
   font-size: 0.72rem;
@@ -989,15 +943,6 @@ body {
   color: var(--danger);
 }
 
-
-
-
-
-
-
-
-
-
 .agentos-approval-reason input,
 .agentos-approval-field input {
   min-height: 2.25rem;
@@ -1008,15 +953,8 @@ body {
   color: var(--text);
 }
 
-
-
-
 .agentos-approval-approve,
-
-
-
 .agentos-approval-approve:disabled,
-
 .agentos-pending-facts-banner {
   margin: 0.75rem 1rem 0;
   border: 1px solid var(--border-strong);
@@ -1327,8 +1265,6 @@ body {
 .agentos-scroll-latest-bar > .agentos-scroll-latest {
   pointer-events: auto;
 }
-
-
 
 .agentos-composer-input {
   overflow-y: hidden;
@@ -1715,7 +1651,6 @@ body {
     padding: 0;
   }
 
-
   .agentos-chat-body {
     flex-direction: column;
   }
@@ -1760,25 +1695,14 @@ body {
   background: transparent;
 }
 
-
 .agentos-tool-call-toggle:hover,
-
 .agentos-tool-call-main,
 .agentos-tool-call-text,
-
-
-
-
-
-
-
 .agentos-tool-call-param::before {
   margin-right: 0.5rem;
   color: var(--codex-faint);
   content: "·";
 }
-
-
 
 .agentos-tool-call[data-status="running"] .agentos-tool-call-status {
   color: var(--accent-dim);
@@ -1793,7 +1717,6 @@ body {
   color: #d97706;
 }
 
-
 .agentos-tool-call-content p + p,
 .agentos-tool-call-content > div + p,
 .agentos-tool-call-content > p + div {
@@ -1805,15 +1728,10 @@ body {
   overflow: auto;
 }
 
-
 @media (max-width: 639px) {
   .agentos-process-group > [data-slot="collapsible-content"] {
     padding-left: 0.55rem;
   }
-
-
-
-
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1862,7 +1780,6 @@ body {
   background: transparent;
 }
 
-
 .agentos-workspace {
   height: calc(100dvh - 3.5rem);
   max-width: none;
@@ -1876,7 +1793,6 @@ body {
 }
 
 .agentos-conversation-rail,
-
 .agentos-conversation-rail {
   border-right: 1px solid var(--border);
   background: var(--panel-muted);
@@ -1933,9 +1849,7 @@ body {
 }
 
 .agentos-list-new-button,
-
 .agentos-list-new-button:hover,
-
 .agentos-search-input {
   display: block;
   margin-top: 0.6rem;
@@ -2187,7 +2101,6 @@ body {
 
 /* Thread header, messages and composer */
 
-
 .agentos-thread-title-row,
 .agentos-chat-header-actions,
 .agentos-message-toolbar,
@@ -2196,7 +2109,6 @@ body {
   display: flex;
   align-items: center;
 }
-
 
 .agentos-thread-title-row .agentos-chat-heading {
   font-size: 1rem;
@@ -2210,7 +2122,6 @@ body {
   font-size: 0.7rem;
 }
 
-
 .agentos-chat-status span {
   width: 0.35rem;
   height: 0.35rem;
@@ -2218,8 +2129,6 @@ body {
   background: var(--success);
   box-shadow: none;
 }
-
-
 
 .agentos-message-viewport {
   background: linear-gradient(180deg, var(--accent-softer), transparent 30%), var(--surface-chat);
@@ -2286,28 +2195,15 @@ body {
   transform: none;
 }
 
-
-
-
-
-
 .agentos-message-user::after {
   display: none;
 }
-
 
 .agentos-message-assistant::before {
   top: 0.65rem;
   bottom: 0.65rem;
   background: var(--accent-border);
 }
-
-
-
-
-
-
-
 
 .agentos-upload-pending-list {
   display: flex;
@@ -2416,20 +2312,13 @@ body {
     display: none;
   }
 
-
   .agentos-message-list {
     gap: 0.55rem;
     padding: 1rem;
   }
-
-
-
-  .agentos-approval-wrap,
 }
 
 @media (max-width: 639px) {
-
-
   .agentos-thread-title-row .agentos-chat-heading {
     max-width: 11.5rem;
     overflow: hidden;
@@ -2456,10 +2345,6 @@ body {
   .agentos-chat-header-actions .agentos-new-chat-button span {
     font-size: 1.15rem;
   }
-
-
-
-
 
   .agentos-composer-meta {
     max-width: 4rem;
@@ -2510,7 +2395,6 @@ body {
 }
 
 .agentos-conversation-rail,
-
 .agentos-conversation-rail {
   overflow: hidden;
   background: var(--codex-sidebar);
@@ -2787,8 +2671,6 @@ body {
 }
 
 .agentos-main-column,
-
-
 .agentos-codex-empty-state ~ * {
   display: none;
 }
@@ -2845,8 +2727,6 @@ body {
   margin-top: 1.45rem;
 }
 
-
-
 .agentos-codex-starter-icon {
   color: #66a9ff;
   font-size: 0.85rem;
@@ -2864,7 +2744,6 @@ body {
   color: #ff986c;
 }
 
-
 .agentos-codex-agent-picker,
 .agentos-composer-input,
 .agentos-composer-toolbar {
@@ -2872,7 +2751,6 @@ body {
   border-left: 1px solid var(--codex-line);
   background: var(--codex-control);
 }
-
 
 .agentos-codex-agent-picker button {
   color: var(--codex-copy);
@@ -3005,8 +2883,6 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     padding: 0 0.2rem;
   }
-
-
 }
 
 /* Keep the conversation column and execution steps on the same sender axis. */
@@ -3049,9 +2925,6 @@ body {
 
 .agentos-message-wrap,
 .agentos-message-wrap-user,
-
-
-
 .agentos-message-wrap-user .agentos-message {
   max-width: min(72%, 42rem);
 }
@@ -3060,11 +2933,9 @@ body {
   max-width: min(100%, 54rem);
 }
 
-
 .agentos-message-assistant::before {
   display: none;
 }
-
 
 .agentos-codex-turn-steps::before {
   display: block;
@@ -3101,7 +2972,6 @@ body {
   .agentos-message-wrap-user .agentos-message {
     max-width: 88%;
   }
-
 }
 
 /* Prevent sidebar content from widening its flex/grid track on narrow screens. */
@@ -3242,18 +3112,13 @@ body {
 .agentos-message-wrap,
 .agentos-message-wrap-user,
 .agentos-message-wrap-assistant,
-
 .agentos-message-wrap-user,
 .agentos-message-wrap-assistant,
-
-
-
 .agentos-message-wrap-assistant .agentos-message,
 .agentos-message-wrap-assistant .agentos-message-meta {
   width: 100%;
   max-width: 100%;
 }
-
 
 .agentos-codex-upload-button {
   flex: none;
@@ -3513,20 +3378,11 @@ body {
   background: color-mix(in srgb, var(--codex-control) 64%, transparent);
 }
 
-
-
-
-
-
-
-
 .agentos-main-column,
 .agentos-chat-panel,
 .agentos-chat-body,
 .agentos-message-viewport,
 .agentos-message-list,
-
-
 .agentos-composer > div:first-child,
 .agentos-composer-input,
 .agentos-composer-toolbar,
@@ -3536,8 +3392,6 @@ body {
 }
 
 @media (max-width: 639px) {
-
-
   .agentos-thread-title-row .agentos-chat-heading {
     display: -webkit-box;
     min-width: 0;
@@ -3565,7 +3419,6 @@ body {
     padding-left: 0.5rem;
   }
 
-
   .agentos-composer-toolbar {
     gap: 0.35rem;
     padding-inline: 0.4rem;
@@ -3576,11 +3429,7 @@ body {
  * streaming, then a finished turn remains scannable until inspected. */
 
 .agentos-reasoning-head:hover,
-
-
 .agentos-reasoning-duration,
-
-
 .agentos-reasoning-content {
   max-height: min(20rem, 42vh);
   margin: 0 0.2rem 0.25rem 1.45rem;
