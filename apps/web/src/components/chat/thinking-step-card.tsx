@@ -1,5 +1,10 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export type ThinkingStepState = {
   kind: "thinking";
@@ -54,28 +59,44 @@ export function ThinkingStepCard({ step }: { step: ThinkingStepState }) {
 
   return (
     <section
-      className={`agentos-reasoning ${running ? "agentos-reasoning-running" : ""}`}
+      className={cn(
+        "group flex flex-col overflow-hidden rounded-lg border bg-card/70 backdrop-blur-sm transition-colors",
+        running && "border-primary/30 bg-primary/[0.03]",
+      )}
       aria-live="polite"
     >
       <button
         type="button"
-        className="agentos-reasoning-head"
+        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         onClick={() => setExpanded((current) => !current)}
         aria-expanded={expanded}
       >
-        <span className="agentos-reasoning-title">
-          <span aria-hidden="true" className="agentos-reasoning-indicator" />
-          {label}
+        <span className="flex min-w-0 items-center gap-2 text-[0.78rem] font-semibold text-foreground">
+          <span
+            aria-hidden="true"
+            className={cn(
+              "size-1.5 shrink-0 rounded-full",
+              running ? "animate-pulse bg-primary" : "bg-muted-foreground/50",
+            )}
+          />
+          <span className="truncate">{label}</span>
           {durationLabel ? (
-            <span className="agentos-reasoning-duration">{durationLabel}</span>
+            <Badge variant="secondary" className="px-1.5 py-0 text-[0.65rem] font-medium">
+              {durationLabel}
+            </Badge>
           ) : null}
         </span>
-        <span className="agentos-reasoning-state" aria-hidden="true">
+        <span
+          aria-hidden="true"
+          className="inline-flex shrink-0 items-center text-muted-foreground"
+        >
           {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </span>
       </button>
       {expanded && step.content ? (
-        <pre className="agentos-reasoning-content">{step.content}</pre>
+        <pre className="max-h-64 overflow-y-auto border-t border-border bg-muted/30 px-3 py-2.5 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground [scrollbar-width:thin]">
+          {step.content}
+        </pre>
       ) : null}
     </section>
   );

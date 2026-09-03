@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, X } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { ToolIcon } from "./tool-icons";
 import { toolDisplayName, toolProgressLabel } from "./tool-labels";
 
@@ -127,27 +128,32 @@ export function GeneratedFileList({
   }
 
   return (
-    <div className="agentos-generated-files">
-      <span className="agentos-generated-files-label">生成文件</span>
-      <div className="agentos-generated-files-list">
+    <div className="border-t border-border px-3 py-2">
+      <span className="mb-1.5 block text-[0.68rem] font-semibold text-muted-foreground">
+        生成文件
+      </span>
+      <div className="grid gap-1">
         {files.map((file) => (
           <button
             key={file.path}
             type="button"
-            className={`agentos-generated-file-row ${
-              selectedPath === file.path ? "agentos-generated-file-row-selected" : ""
-            }`}
+            className={cn(
+              "flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors",
+              selectedPath === file.path
+                ? "border-primary/40 bg-primary/10 text-foreground"
+                : "border-border bg-muted/20 hover:bg-muted/40",
+            )}
             aria-pressed={selectedPath === file.path}
             title="在右侧预览文件"
             onClick={() => onSelect?.(file)}
           >
-            <span className="agentos-generated-file-main">
-              <span className="agentos-generated-file-name">{file.path}</span>
-              <span className="agentos-generated-file-meta">
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-xs font-medium text-foreground">{file.path}</span>
+              <span className="text-[0.65rem] text-muted-foreground">
                 {file.mimeType} · {formatFileSize(file.size)}
               </span>
             </span>
-            <span className="agentos-generated-file-action" aria-hidden="true">
+            <span aria-hidden="true" className="text-xs text-muted-foreground">
               ›
             </span>
           </button>
@@ -194,37 +200,55 @@ export function SandboxFilePreviewPane({
 
   return (
     <aside
-      className="agentos-file-preview-pane"
+      className="flex h-full w-full min-w-0 flex-col overflow-hidden border-l border-border bg-card/95 backdrop-blur-sm"
       aria-label="文件预览"
       style={width === null ? undefined : { width }}
     >
-      <div className="agentos-file-preview-resize" onPointerDown={startResize} aria-hidden="true" />
-      <header className="agentos-file-preview-header">
-        <div className="agentos-file-preview-heading">
-          <strong title={file.path}>{file.path}</strong>
-          <span>
+      <div
+        className="absolute inset-y-0 left-0 w-1 cursor-col-resize hover:bg-primary/40"
+        onPointerDown={startResize}
+        aria-hidden="true"
+      />
+      <header className="flex items-center justify-between gap-2 border-b border-border px-3.5 py-2.5">
+        <div className="flex min-w-0 flex-col">
+          <strong className="truncate text-xs font-semibold text-foreground" title={file.path}>
+            {file.path}
+          </strong>
+          <span className="text-[0.65rem] text-muted-foreground">
             {file.mimeType} · {formatFileSize(file.size)}
           </span>
         </div>
-        <button type="button" onClick={onClose} aria-label="关闭文件预览" title="关闭预览">
-          ×
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="关闭文件预览"
+          title="关闭预览"
+          className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <X aria-hidden="true" className="size-3.5" />
         </button>
       </header>
-      <div className="agentos-file-preview-body">
+      <div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-3 [scrollbar-width:thin]">
         {textFile ? (
           <SandboxTextPreview key={`${file.path}:${file.size}`} url={previewUrl} />
         ) : file.mimeType.startsWith("image/") ? (
           // The endpoint checks the session and owner before serving this URL.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={previewUrl} alt={file.path} />
+          <img src={previewUrl} alt={file.path} className="rounded-md" />
         ) : file.mimeType === "application/pdf" ? (
-          <iframe src={previewUrl} title={file.path} sandbox="" />
+          <iframe src={previewUrl} title={file.path} sandbox="" className="h-full w-full rounded-md" />
         ) : (
-          <p className="agentos-file-preview-unavailable">此文件类型暂不支持在线预览。</p>
+          <p className="text-xs text-muted-foreground">此文件类型暂不支持在线预览。</p>
         )}
       </div>
-      <footer className="agentos-file-preview-footer">
-        <a href={sandboxFileUrl(file, true)}>下载文件</a>
+      <footer className="flex items-center justify-end border-t border-border px-3.5 py-2">
+        <a
+          href={sandboxFileUrl(file, true)}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+        >
+          <Download aria-hidden="true" className="size-3.5" />
+          下载文件
+        </a>
       </footer>
     </aside>
   );
@@ -295,39 +319,54 @@ export function UploadPreviewPane({
 
   return (
     <aside
-      className="agentos-file-preview-pane"
+      className="flex h-full w-full min-w-0 flex-col overflow-hidden border-l border-border bg-card/95 backdrop-blur-sm"
       aria-label="附件预览"
       style={width === null ? undefined : { width }}
     >
-      <div className="agentos-file-preview-resize" onPointerDown={startResize} aria-hidden="true" />
-      <header className="agentos-file-preview-header">
-        <div className="agentos-file-preview-heading">
-          <strong>用户附件</strong>
-          <span>{artifactId.slice(0, 8)}…</span>
+      <div
+        className="absolute inset-y-0 left-0 w-1 cursor-col-resize hover:bg-primary/40"
+        onPointerDown={startResize}
+        aria-hidden="true"
+      />
+      <header className="flex items-center justify-between gap-2 border-b border-border px-3.5 py-2.5">
+        <div className="flex min-w-0 flex-col">
+          <strong className="truncate text-xs font-semibold text-foreground">用户附件</strong>
+          <span className="text-[0.65rem] text-muted-foreground">{artifactId.slice(0, 8)}…</span>
         </div>
-        <button type="button" onClick={onClose} aria-label="关闭附件预览" title="关闭预览">
-          ×
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="关闭附件预览"
+          title="关闭预览"
+          className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <X aria-hidden="true" className="size-3.5" />
         </button>
       </header>
-      <div className="agentos-file-preview-body">
+      <div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-3 [scrollbar-width:thin]">
         {state.kind === "loading" ? (
-          <pre>正在读取…</pre>
+          <pre className="text-xs text-muted-foreground">正在读取…</pre>
         ) : state.kind === "error" ? (
-          <p className="agentos-file-preview-unavailable">{state.message}</p>
+          <p className="text-xs text-destructive">{state.message}</p>
         ) : state.kind === "text" ? (
-          <pre>{state.text}</pre>
+          <pre className="whitespace-pre-wrap font-mono text-xs text-foreground/90">{state.text}</pre>
         ) : state.mimeType.startsWith("image/") ? (
           // The endpoint checks the session and owner before serving these bytes.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={state.objectUrl} alt="用户附件" />
+          <img src={state.objectUrl} alt="用户附件" className="rounded-md" />
         ) : state.mimeType === "application/pdf" ? (
-          <iframe src={state.objectUrl} title="用户附件 PDF" sandbox="" />
+          <iframe src={state.objectUrl} title="用户附件 PDF" sandbox="" className="h-full w-full rounded-md" />
         ) : (
-          <p className="agentos-file-preview-unavailable">此文件类型暂不支持在线预览。</p>
+          <p className="text-xs text-muted-foreground">此文件类型暂不支持在线预览。</p>
         )}
       </div>
-      <footer className="agentos-file-preview-footer">
-        <a href={url} download>
+      <footer className="flex items-center justify-end border-t border-border px-3.5 py-2">
+        <a
+          href={url}
+          download
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+        >
+          <Download aria-hidden="true" className="size-3.5" />
           下载附件
         </a>
       </footer>
@@ -677,34 +716,48 @@ export function ToolCallCard({
 
   return (
     <section
-      className={`agentos-tool-call ${
-        toolCall.status === "running" ? "agentos-tool-call-running" : ""
-      } ${toolCall.status === "error" ? "agentos-tool-call-error" : ""}`}
+      className={cn(
+        "group overflow-hidden rounded-lg border bg-card/70 backdrop-blur-sm transition-colors",
+        toolCall.status === "running" && "border-primary/30 bg-primary/[0.03]",
+        toolCall.status === "error" && "border-destructive/40 bg-destructive/[0.03]",
+      )}
       data-status={toolCall.status}
     >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={toolCall.expanded}
-        className="agentos-tool-call-toggle"
+        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         title={title}
       >
-        <span className="agentos-tool-call-main">
-          <span className="agentos-tool-call-icon" aria-hidden="true">
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span
+            aria-hidden="true"
+            className={cn(
+              "flex size-6 shrink-0 items-center justify-center rounded-md border",
+              toolCall.status === "error"
+                ? "border-destructive/30 bg-destructive/10 text-destructive"
+                : "border-border bg-muted/40 text-muted-foreground",
+            )}
+          >
             <ToolIcon toolName={toolCall.toolName} />
           </span>
-          <span className="agentos-tool-call-text">
-            <span className="agentos-tool-call-headline">
-              <span className="agentos-tool-call-name">{displayName}</span>
-              {summary ? <span className="agentos-tool-call-param">{summary}</span> : null}
+          <span className="flex min-w-0 flex-col">
+            <span className="flex min-w-0 items-baseline gap-1.5">
+              <span className="truncate text-[0.78rem] font-semibold text-foreground">
+                {displayName}
+              </span>
+              {summary ? (
+                <span className="truncate text-[0.72rem] text-muted-foreground">{summary}</span>
+              ) : null}
             </span>
-            <span className="agentos-tool-call-status">
+            <span className="text-[0.68rem] font-medium text-muted-foreground">
               {statusLabel}
               {durationLabel ? ` · ${durationLabel}` : null}
             </span>
           </span>
         </span>
-        <span className="agentos-tool-call-state" aria-hidden="true">
+        <span aria-hidden="true" className="inline-flex shrink-0 items-center text-muted-foreground">
           {toolCall.expanded ? (
             <ChevronDown className="size-3.5" />
           ) : (
@@ -718,54 +771,64 @@ export function ToolCallCard({
       ) : null}
 
       {toolCall.expanded ? (
-        <div className="agentos-tool-call-content">
+        <div className="grid gap-2 border-t border-border bg-muted/20 px-3 py-2.5 text-xs text-foreground/90">
           {query ? (
             <p>
-              <span className="agentos-tool-call-label">查询内容</span>
+              <span className="mr-1.5 font-semibold text-muted-foreground">查询内容</span>
               {query}
             </p>
           ) : null}
           {url && fetchLinkUrl === null ? (
             <p>
-              <span className="agentos-tool-call-label">网页</span>
+              <span className="mr-1.5 font-semibold text-muted-foreground">网页</span>
               {url}
             </p>
           ) : null}
           {expression ? (
             <p>
-              <span className="agentos-tool-call-label">计算内容</span>
+              <span className="mr-1.5 font-semibold text-muted-foreground">计算内容</span>
               {expression}
             </p>
           ) : null}
           {extraArgs.map(([key, value]) => (
             <p key={key}>
-              <span className="agentos-tool-call-label">{key}</span>
+              <span className="mr-1.5 font-semibold text-muted-foreground">{key}</span>
               {value}
             </p>
           ))}
           {toolCall.argsText.trim() && !query && !url && !expression && extraArgs.length === 0 ? (
-            <pre>{toolCall.argsText.trim()}</pre>
+            <pre className="overflow-x-auto rounded-md bg-muted/50 p-2 font-mono text-[0.7rem] whitespace-pre-wrap">
+              {toolCall.argsText.trim()}
+            </pre>
           ) : null}
           {fetchLinkUrl !== null ? (
             <p>
-              <span className="agentos-tool-call-label">链接</span>
-              <a href={fetchLinkUrl} target="_blank" rel="noreferrer">
+              <span className="mr-1.5 font-semibold text-muted-foreground">链接</span>
+              <a href={fetchLinkUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
                 {fetchLinkTitle ?? fetchLinkUrl}
               </a>
             </p>
           ) : null}
           {knowledgeHits.length > 0 ? (
-            <div className="agentos-tool-call-hits">
-              <span className="agentos-tool-call-label">命中片段</span>
-              <ul>
+            <div>
+              <span className="mb-1 inline-block font-semibold text-muted-foreground">命中片段</span>
+              <ul className="grid gap-1.5">
                 {knowledgeHits.map((hit, index) => (
-                  <li key={`${hit.title}-${index}`}>
-                    <p className="agentos-tool-call-hit-title">{hit.title}</p>
+                  <li
+                    key={`${hit.title}-${index}`}
+                    className="rounded-md border border-border bg-card/60 px-2.5 py-1.5"
+                  >
+                    <p className="font-semibold text-foreground">{hit.title}</p>
                     {hit.snippet ? (
-                      <p className="agentos-tool-call-hit-snippet">{hit.snippet}</p>
+                      <p className="mt-0.5 text-muted-foreground">{hit.snippet}</p>
                     ) : null}
                     {hit.sourceUrl ? (
-                      <a href={hit.sourceUrl} target="_blank" rel="noreferrer">
+                      <a
+                        href={hit.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-0.5 inline-block text-primary hover:underline"
+                      >
                         {hit.sourceLabel ?? hit.sourceUrl}
                       </a>
                     ) : null}
@@ -775,12 +838,12 @@ export function ToolCallCard({
             </div>
           ) : null}
           {searchLinks.length > 0 ? (
-            <div className="agentos-tool-call-hits">
-              <span className="agentos-tool-call-label">搜索结果</span>
-              <ul>
+            <div>
+              <span className="mb-1 inline-block font-semibold text-muted-foreground">搜索结果</span>
+              <ul className="grid gap-1">
                 {searchLinks.map((link, index) => (
                   <li key={`${link.url}-${index}`}>
-                    <a href={link.url} target="_blank" rel="noreferrer">
+                    <a href={link.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
                       {link.title}
                     </a>
                   </li>
@@ -790,51 +853,60 @@ export function ToolCallCard({
           ) : null}
           {toolCall.provider ? (
             <p>
-              <span className="agentos-tool-call-label">来源</span>
+              <span className="mr-1.5 font-semibold text-muted-foreground">来源</span>
               {toolCall.provider}
             </p>
           ) : null}
           {sandboxCommand !== null ? (
-            <div className="agentos-sandbox-result">
-              <div className="agentos-sandbox-result-head">
-                <span className="agentos-tool-call-label">命令</span>
+            <div className="grid gap-1.5 rounded-md border border-border bg-card/60 p-2">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-muted-foreground">命令</span>
                 {sandboxExitCode !== null ? (
-                  <span data-error={toolCall.status === "error" || undefined}>
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5 text-[0.65rem] font-medium",
+                      toolCall.status === "error"
+                        ? "bg-destructive/10 text-destructive"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
                     退出码 {sandboxExitCode}
                   </span>
                 ) : null}
               </div>
-              <pre className="agentos-sandbox-command">$ {sandboxCommand}</pre>
+              <pre className="overflow-x-auto rounded-md bg-muted/50 p-2 font-mono text-[0.7rem] whitespace-pre-wrap">$ {sandboxCommand}</pre>
               {sandboxStdout ? (
-                <pre className="agentos-sandbox-output" aria-label="标准输出">
+                <pre className="max-h-40 overflow-y-auto rounded-md bg-muted/40 p-2 font-mono text-[0.7rem] whitespace-pre-wrap text-foreground/90 [scrollbar-width:thin]">
                   {sandboxStdout}
                 </pre>
               ) : null}
               {sandboxStderr ? (
-                <pre className="agentos-sandbox-output is-error" aria-label="标准错误">
+                <pre className="max-h-40 overflow-y-auto rounded-md bg-destructive/5 p-2 font-mono text-[0.7rem] whitespace-pre-wrap text-destructive [scrollbar-width:thin]">
                   {sandboxStderr}
                 </pre>
               ) : null}
               {sandboxOutputTruncated ? (
-                <p className="agentos-sandbox-notice">
+                <p className="text-[0.68rem] text-muted-foreground">
                   输出已截断{sandboxOutputArtifactId ? "，可在后续回复中继续读取完整结果。" : "。"}
                 </p>
               ) : null}
             </div>
           ) : null}
           {artifactText !== null ? (
-            <div className="agentos-tool-call-artifact">
-              <span className="agentos-tool-call-label">正文</span>
-              <span className="agentos-tool-call-artifact-meta">
+            <div>
+              <span className="mr-1.5 font-semibold text-muted-foreground">正文</span>
+              <span className="text-[0.68rem] text-muted-foreground">
                 {artifactTitle ?? "附件"} · 共 {artifactTotalChars ?? "?"} 字符
                 {artifactTruncated ? " · 本段为截取片段" : ""}
               </span>
-              <pre>{artifactText}</pre>
+              <pre className="mt-1 max-h-40 overflow-y-auto rounded-md bg-muted/50 p-2 font-mono text-[0.7rem] whitespace-pre-wrap [scrollbar-width:thin]">
+                {artifactText}
+              </pre>
             </div>
           ) : null}
           {toolCall.resultSummary && artifactText === null && sandboxCommand === null ? (
             <p>
-              <span className="agentos-tool-call-label">
+              <span className="mr-1.5 font-semibold text-muted-foreground">
                 {toolCall.status === "error" ? "提示" : "结果"}
               </span>
               {toolCall.resultSummary}

@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ListChecks } from "lucide-react";
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
 /**
- * Codex-style process group: thinking + tool rows live outside the reply bubble.
- * While the run is active the group stays expanded; on active→idle it auto-collapses
- * into a single "已处理 {duration}" row that can be reopened manually.
+ * shadcn-style process group: thinking + tool rows live outside the reply
+ * bubble. While the run is active the group stays expanded; on active→idle it
+ * auto-collapses into a single "已完成 {duration}" row that can be reopened.
  */
 export function ProcessGroup({
   isActive,
@@ -43,25 +43,27 @@ export function ProcessGroup({
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className={cn("agentos-process-group", isActive && "is-active")}
+      className={cn(
+        "overflow-hidden rounded-xl border border-border bg-card/70 backdrop-blur-sm transition-colors",
+        isActive && "border-primary/30 bg-primary/[0.03]",
+      )}
     >
-      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-3.5 py-2 text-left">
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-3.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
         <span className="flex min-w-0 items-center gap-2 text-[0.78rem] font-semibold text-foreground">
           {isActive ? (
             <span
               aria-hidden="true"
-              className="size-1.5 shrink-0 animate-pulse rounded-full bg-[var(--accent)]"
+              className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary"
             />
-          ) : null}
+          ) : (
+            <ListChecks aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+          )}
           <span className="truncate">{title}</span>
         </span>
         <span className="inline-flex shrink-0 items-center gap-1 text-[0.7rem] font-medium text-muted-foreground">
           <ChevronRight
             aria-hidden="true"
-            className={cn(
-              "size-3 text-[var(--accent-dim)] transition-transform",
-              open && "rotate-90",
-            )}
+            className={cn("size-3 transition-transform", open && "rotate-90")}
           />
           {open ? "收起详情" : "查看步骤"}
         </span>

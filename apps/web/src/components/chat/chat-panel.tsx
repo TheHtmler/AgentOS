@@ -2347,29 +2347,31 @@ export function ChatPanel({
 
   return (
     <section
-      className={`agentos-chat-panel flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden ${
+      className={`flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden ${
         isStreaming ? "agentos-is-streaming" : ""
       }`}
     >
-      <header className="agentos-chat-header">
-        <div className="agentos-thread-heading">
-          <div className="agentos-thread-title-row">
-            <h1 className="agentos-chat-heading">{displayThreadTitle}</h1>
+      <header className="flex flex-none items-center justify-between gap-3 border-b border-border bg-card/80 px-5 py-3 backdrop-blur-md">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <h1 className="truncate text-base font-semibold tracking-tight text-foreground">
+              {displayThreadTitle}
+            </h1>
             {statusLabel ? (
-              <p aria-live="polite" className="agentos-chat-status">
-                <span aria-hidden="true" />
+              <p aria-live="polite" className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-primary shadow-[0_0_6px_var(--accent-glow)]" />
                 {statusLabel}
               </p>
             ) : null}
           </div>
         </div>
 
-        <div className="agentos-chat-header-actions">
+        <div className="flex flex-none items-center gap-2">
           <button
             type="button"
             onClick={startNewConversation}
             disabled={isLoadingHistory}
-            className="agentos-new-chat-button disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus aria-hidden="true" className="size-4" />
             新建对话
@@ -2378,12 +2380,12 @@ export function ChatPanel({
       </header>
 
       {agentLoadError !== null ? (
-        <div role="alert" className="agentos-chat-error border-b px-5 py-3 text-sm">
+        <div role="alert" className="flex items-center border-b border-border bg-destructive/5 px-5 py-2.5 text-sm text-destructive">
           无法加载助手列表，将使用默认助手继续对话。
           <button
             type="button"
             onClick={onRetryAgentLoad}
-            className="ml-3 underline underline-offset-2"
+            className="ml-3 font-medium underline underline-offset-2"
           >
             重试
           </button>
@@ -2417,14 +2419,16 @@ export function ChatPanel({
                     />
                   </svg>
                 </span>
-                <p className="agentos-chat-heading">准备开始什么任务？</p>
+                <p className="text-lg font-semibold tracking-tight text-foreground">
+                  准备开始什么任务？
+                </p>
                 <div className="agentos-starter-prompts">
                   {STARTER_PROMPTS.map((prompt) => (
                     <button
                       key={prompt.label}
                       type="button"
                       onClick={() => applyStarterPrompt(prompt.label)}
-                      className="agentos-starter-prompt agentos-codex-starter-prompt max-w-full text-left text-sm"
+                      className="agentos-starter-prompt max-w-full text-left text-sm"
                     >
                       <span className="agentos-codex-starter-icon" aria-hidden="true">
                         {createElement(prompt.icon, { className: "size-4" })}
@@ -2508,17 +2512,15 @@ export function ChatPanel({
                       </ProcessGroup>
                     ) : null}
                     <div
-                      className={`agentos-message-wrap ${
-                        message.role === "user"
-                          ? "agentos-message-wrap-user"
-                          : "agentos-message-wrap-assistant"
+                      className={`flex w-full ${
+                        message.role === "user" ? "justify-end" : "justify-start"
                       }`}
                     >
                       <article
-                        className={`agentos-message ${
+                        className={`max-w-[85%] ${
                           message.role === "user"
-                            ? "agentos-message-user"
-                            : `agentos-message-assistant ${
+                            ? "rounded-2xl rounded-br-md border border-primary/30 bg-primary/10 px-4 py-3 text-[0.875rem] leading-relaxed text-foreground shadow-sm"
+                            : `rounded-2xl rounded-bl-md border border-border bg-card/80 px-4 py-3 text-[0.875rem] leading-relaxed text-foreground shadow-sm backdrop-blur-sm ${
                                 isStreaming && index === currentAssistantMessageIndex
                                   ? "agentos-message-streaming"
                                   : ""
@@ -2537,7 +2539,7 @@ export function ChatPanel({
                                 <div className="space-y-2">
                                   {artifactIds.length > 0 ? (
                                     <div
-                                      className="agentos-message-attachments flex flex-wrap gap-2"
+                                      className="flex flex-wrap gap-2"
                                       aria-label="附件"
                                     >
                                       {artifactIds.map((artifactId) => (
@@ -2552,7 +2554,7 @@ export function ChatPanel({
                                           <img
                                             src={uploadContentUrl(artifactId)}
                                             alt=""
-                                            className="agentos-upload-thumb-image h-20 w-20 object-cover"
+                                            className="h-20 w-20 rounded-lg object-cover"
                                             onError={(event) => {
                                               const target = event.currentTarget;
                                               target.style.display = "none";
@@ -2564,7 +2566,7 @@ export function ChatPanel({
                                           />
                                           <span
                                             hidden
-                                            className="agentos-upload-chip inline-flex h-20 w-20 items-center justify-center px-2 text-center text-[11px] leading-tight"
+                                            className="inline-flex h-20 w-20 items-center justify-center rounded-lg border border-border bg-muted px-2 text-center text-[11px] leading-tight"
                                           >
                                             文件
                                           </span>
@@ -2580,35 +2582,33 @@ export function ChatPanel({
                             })()
                           )
                         ) : message.role === "assistant" && isStreaming ? (
-                          <p aria-live="polite" className="agentos-chat-subheading">
+                          <p aria-live="polite" className="text-muted-foreground">
                             {processChildren.length > 0 ? "继续生成中…" : "正在生成最终回答..."}
                           </p>
                         ) : null}
                       </article>
 
                       {message.role === "assistant" && (message.content || hasMessageMeta) ? (
-                        <div className="agentos-message-meta">
+                        <div className="flex items-center gap-3 text-[0.68rem] text-muted-foreground">
                           {message.content ? (
-                            <div className="agentos-message-toolbar">
-                              <button
-                                type="button"
-                                onClick={() => void copyAssistantMessage(message)}
-                                className="agentos-copy-button"
-                                aria-label={
-                                  copiedMessageId === message.id ? "已复制回复" : "复制回复"
-                                }
-                                title={copiedMessageId === message.id ? "已复制" : "复制回复"}
-                              >
-                                {copiedMessageId === message.id ? (
-                                  <Check aria-hidden="true" className="size-3.5" />
-                                ) : (
-                                  <Copy aria-hidden="true" className="size-3.5" />
-                                )}
-                              </button>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void copyAssistantMessage(message)}
+                              className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-medium transition-colors hover:bg-muted hover:text-foreground"
+                              aria-label={
+                                copiedMessageId === message.id ? "已复制回复" : "复制回复"
+                              }
+                              title={copiedMessageId === message.id ? "已复制" : "复制回复"}
+                            >
+                              {copiedMessageId === message.id ? (
+                                <Check aria-hidden="true" className="size-3.5" />
+                              ) : (
+                                <Copy aria-hidden="true" className="size-3.5" />
+                              )}
+                            </button>
                           ) : null}
                           {hasMessageMeta ? (
-                            <div className="agentos-message-time agentos-message-time-assistant">
+                            <span className="inline-flex items-center gap-1.5">
                               {message.createdAt ? (
                                 <time dateTime={message.createdAt}>
                                   {formatMessageTimestamp(message.createdAt)}
@@ -2616,16 +2616,16 @@ export function ChatPanel({
                               ) : null}
                               {message.durationLabel ? (
                                 <span>
-                                  {message.createdAt ? " · " : ""}
+                                  {message.createdAt ? "·" : ""}
                                   {message.durationLabel}
                                 </span>
                               ) : null}
-                            </div>
+                            </span>
                           ) : null}
                         </div>
                       ) : message.role === "user" && hasMessageMeta ? (
-                        <div className="agentos-message-meta agentos-message-meta-user">
-                          <div className="agentos-message-time agentos-message-time-user">
+                        <div className="flex items-center gap-3 text-[0.68rem] text-muted-foreground">
+                          <span className="inline-flex items-center gap-1.5">
                             {message.createdAt ? (
                               <time dateTime={message.createdAt}>
                                 {formatMessageTimestamp(message.createdAt)}
@@ -2633,11 +2633,11 @@ export function ChatPanel({
                             ) : null}
                             {message.durationLabel ? (
                               <span>
-                                {message.createdAt ? " · " : ""}
+                                {message.createdAt ? "·" : ""}
                                 {message.durationLabel}
                               </span>
                             ) : null}
-                          </div>
+                          </span>
                         </div>
                       ) : null}
                     </div>
@@ -2690,13 +2690,13 @@ export function ChatPanel({
       </div>
 
       {error ? (
-        <p role="alert" className="agentos-chat-error border-t px-5 py-3 text-sm">
+        <p role="alert" className="border-t border-border bg-destructive/5 px-5 py-3 text-sm text-destructive">
           {error}
         </p>
       ) : null}
 
       {approvalRunId !== null && pendingInterrupts.length > 0 ? (
-        <div className="agentos-approval-wrap">
+        <div className="px-5 pb-3">
           <ApprovalPanel
             runId={approvalRunId}
             interrupts={pendingInterrupts}
@@ -2707,18 +2707,21 @@ export function ChatPanel({
       ) : null}
 
       {showScrollToLatest ? (
-        <div className="agentos-scroll-latest-bar">
+        <div className="flex justify-center pb-2">
           <button
             type="button"
             onClick={scrollToLatest}
-            className="agentos-scroll-latest px-3 py-2 text-xs font-medium"
+            className="rounded-full border border-border bg-card/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-muted"
           >
             回到最新消息
           </button>
         </div>
       ) : null}
 
-      <form onSubmit={handleSubmit} className="agentos-composer">
+      <form
+        onSubmit={handleSubmit}
+        className="mx-auto w-full max-w-3xl flex-none border-t border-border bg-card/80 px-4 pt-3 pb-3 backdrop-blur-md"
+      >
         <div className="flex items-center justify-between gap-3 pb-1.5">
           {composerMode === "text" ? (
             <Select

@@ -153,13 +153,6 @@ body {
 }
 
 /* ── Shared utilities ── */
-.agentos-glass {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-}
 
 .agentos-accent-glow {
   box-shadow: 0 0 18px var(--accent-glow);
@@ -403,23 +396,12 @@ body {
 }
 
 .agentos-main-column,
-.agentos-chat-panel {
-  min-height: 0;
-}
 
 .agentos-main-column > section {
   height: 100%;
 }
 
 .agentos-conversation-rail,
-.agentos-chat-panel {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: var(--shadow);
-}
 
 .agentos-conversation-rail {
   overflow: hidden;
@@ -450,30 +432,10 @@ body {
 }
 
 /* ── Chat panel ── */
-.agentos-chat-panel {
-  overflow: hidden;
-  background: var(--surface-chat);
-}
 
 .agentos-chat-header,
-.agentos-composer {
-  flex: none;
-  border-color: var(--border);
-  background: var(--surface-header);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
 
-.agentos-chat-header {
-  background: linear-gradient(100deg, var(--accent-softer), transparent 44%), var(--surface-header);
-}
 
-.agentos-chat-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--muted);
-}
 
 .agentos-chat-status span {
   width: 0.4rem;
@@ -484,14 +446,8 @@ body {
 }
 
 .agentos-new-chat-button,
-.agentos-copy-button {
-  color: var(--accent-dim);
-}
 
 .agentos-new-chat-button:hover,
-.agentos-copy-button:hover {
-  color: var(--accent);
-}
 
 /* ── Message viewport ── */
 .agentos-message-viewport {
@@ -529,64 +485,26 @@ body {
 }
 
 /* ── Messages ── */
-.agentos-message {
-  padding: 0.85rem 1rem;
-  font-size: 0.875rem;
-  line-height: 1.7;
+/* Streaming bubble: a soft breathing ring around the assistant card while
+   tokens are flowing (the old left-bar pseudo-elements were removed with the
+   bubble redesign in docs/18). */
+
+.agentos-message-streaming {
+  animation: agentos-stream-pulse 1.6s ease-in-out infinite;
 }
 
-.agentos-message-user {
-  position: relative;
-  border: 1px solid var(--accent-border);
-  border-radius: 15px 5px 15px 15px;
-  background: var(--message-user-bg);
-  color: var(--message-user-fg);
-  box-shadow: var(--shadow);
-}
-
-.agentos-message-user::after {
-  position: absolute;
-  top: -1px;
-  right: -1px;
-  width: 1.1rem;
-  height: 1.1rem;
-  border-top: 1px solid var(--accent-border);
-  border-right: 1px solid var(--accent-border);
-  border-radius: 0 5px 0 0;
-  background: var(--surface-header);
-  content: "";
-}
-
-.agentos-message-assistant {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 5px 14px 14px 14px;
-  background: var(--message-assistant-bg);
-  color: var(--message-assistant-fg);
-  box-shadow: var(--shadow);
-}
-
-.agentos-message-assistant::before {
-  position: absolute;
-  top: 0.75rem;
-  bottom: 0.75rem;
-  left: 0;
-  width: 2px;
-  border-radius: 999px;
-  background: var(--accent-dim);
-  content: "";
-}
-
-.agentos-message-streaming::before {
-  background: var(--accent);
-  box-shadow: 0 0 12px var(--accent-glow);
-  animation: agentos-stream-pulse 1.4s ease-in-out infinite;
-}
-
-.agentos-message p:last-child {
-  position: relative;
-  z-index: 1;
+@keyframes agentos-stream-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px var(--accent-border),
+      0 2px 10px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px var(--accent-border),
+      0 4px 22px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
 }
 
 /* ── Markdown ── */
@@ -856,29 +774,13 @@ body {
   background: color-mix(in srgb, var(--panel-muted) 55%, transparent);
 }
 
-.agentos-chat-heading {
-  color: var(--text);
-}
 
 .agentos-chat-subheading {
   color: var(--text-secondary);
 }
 
 /* ── Reasoning step ── */
-.agentos-reasoning {
-  overflow: hidden;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  box-shadow: none;
-}
 
-.agentos-reasoning-head {
-  display: flex;
-  align-items: center;
-  padding: 0.35rem 0.5rem;
-  color: var(--text-secondary);
-}
 
 .agentos-reasoning-content {
   max-height: 18rem;
@@ -904,190 +806,45 @@ body {
   }
 }
 
-.agentos-sandbox-result {
-  display: grid;
-  gap: 0.45rem;
-}
 
-.agentos-sandbox-result-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  color: var(--codex-faint);
-  font-size: 0.68rem;
-}
 
 .agentos-sandbox-result-head [data-error] {
   color: var(--danger);
 }
 
 .agentos-sandbox-command,
-.agentos-sandbox-output {
-  margin: 0;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--codex-line);
-  border-radius: 0.35rem;
-  background: var(--surface-code);
-  color: var(--codex-copy);
-  font-size: 0.72rem;
-  line-height: 1.5;
-}
 
 .agentos-sandbox-output.is-error {
   border-color: color-mix(in srgb, var(--danger) 38%, var(--codex-line));
   color: var(--danger);
 }
 
-.agentos-sandbox-notice {
-  color: var(--codex-faint);
-  font-size: 0.72rem;
-}
 
-.agentos-reasoning-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
 
-.agentos-reasoning-duration {
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 500;
-}
 
-.agentos-reasoning-indicator {
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: 999px;
-  background: var(--success);
-  box-shadow: 0 0 6px var(--accent-glow);
-}
 
-.agentos-process-note {
-  margin-top: 0.15rem;
-  border-top: 1px dashed var(--border);
-  padding: 0.45rem 0.35rem 0.15rem;
-}
 
-.agentos-process-note-label {
-  margin-bottom: 0.35rem;
-  color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 600;
-}
 
 .agentos-process-note .agentos-md {
   font-size: 0.88rem;
 }
 
-.agentos-reasoning-running {
-  border-color: var(--border);
-  background: var(--accent-softer);
-}
 
 .agentos-reasoning-running .agentos-reasoning-indicator {
   animation: agentos-thinking-pulse 1.2s ease-in-out infinite;
 }
 
 /* ── Tool call (icon + toolName + key params) ── */
-.agentos-tool-call {
-  overflow: hidden;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--panel-muted);
-  box-shadow: none;
-}
 
-.agentos-tool-call-toggle {
-  display: flex;
-  width: 100%;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.45rem 0.65rem;
-  color: var(--text-secondary);
-  text-align: left;
-}
 
-.agentos-tool-call-main {
-  display: inline-flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  min-width: 0;
-  flex: 1 1 auto;
-}
 
-.agentos-tool-call-icon {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  margin-top: 0.1rem;
-  color: var(--text-secondary);
-  opacity: 0.95;
-}
 
-.agentos-tool-call-text {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 0.1rem;
-}
 
-.agentos-tool-call-headline {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 0.45rem;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 0.8125rem;
-  line-height: 1.35;
-  white-space: nowrap;
-}
 
-.agentos-tool-call-name {
-  flex-shrink: 0;
-  color: var(--text);
-  font-weight: 600;
-  font-size: 0.78rem;
-}
 
-.agentos-tool-call-param {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.agentos-tool-call-status {
-  color: var(--muted);
-  font-size: 0.7rem;
-  line-height: 1.3;
-}
 
-.agentos-tool-call-state {
-  flex-shrink: 0;
-  margin-top: 0.15rem;
-  color: var(--muted);
-  font-size: 0.7rem;
-  opacity: 0.7;
-}
 
-.agentos-tool-call-content {
-  display: grid;
-  gap: 0.55rem;
-  border-top: 1px solid var(--border);
-  padding: 0.55rem 0.65rem;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  line-height: 1.65;
-}
 
 .agentos-tool-call-content pre {
   margin: 0;
@@ -1097,13 +854,6 @@ body {
   word-break: break-word;
 }
 
-.agentos-tool-call-label {
-  display: inline-block;
-  min-width: 4.5rem;
-  margin-right: 0.5rem;
-  color: var(--muted);
-  font-weight: 600;
-}
 
 .agentos-tool-call-hits > span {
   display: inline-block;
@@ -1122,14 +872,7 @@ body {
   color: var(--muted);
 }
 
-.agentos-tool-call-hit-title {
-  font-weight: 600;
-  color: var(--text);
-}
 
-.agentos-tool-call-hit-snippet {
-  color: var(--text-secondary);
-}
 
 .agentos-tool-call-hits a {
   color: var(--accent, #2563eb);
@@ -1143,81 +886,16 @@ body {
   margin-bottom: 0.3rem;
 }
 
-.agentos-tool-call-artifact-meta {
-  color: var(--muted);
-}
 
-.agentos-generated-files {
-  display: grid;
-  gap: 0.35rem;
-  margin-top: 0.35rem;
-  padding: 0 0.45rem 0.05rem;
-}
 
-.agentos-generated-files-label {
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 650;
-}
 
-.agentos-generated-files-list {
-  display: grid;
-  gap: 0.25rem;
-}
 
-.agentos-generated-file-row {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  padding: 0.42rem 0.55rem;
-  color: inherit;
-  text-align: left;
-  transition:
-    border-color 150ms ease,
-    background 150ms ease;
-}
 
 .agentos-generated-file-row:hover,
-.agentos-generated-file-row-selected {
-  border-color: var(--accent-border);
-  background: var(--panel-muted);
-}
 
-.agentos-generated-file-main {
-  display: grid;
-  min-width: 0;
-  gap: 0.12rem;
-}
 
-.agentos-generated-file-name {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.agentos-generated-file-meta {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 0.68rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.agentos-generated-file-action {
-  flex-shrink: 0;
-  color: var(--accent-dim);
-  font-size: 1.15rem;
-  line-height: 1;
-}
 
 .agentos-chat-body {
   display: flex;
@@ -1238,32 +916,8 @@ body {
   background: var(--panel-muted);
 }
 
-.agentos-file-preview-resize {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  bottom: 0;
-  left: -3px;
-  width: 7px;
-  cursor: col-resize;
-  touch-action: none;
-}
 
-.agentos-file-preview-header {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  border-bottom: 1px solid var(--border);
-  padding: 0.8rem 0.9rem;
-}
 
-.agentos-file-preview-heading {
-  display: grid;
-  min-width: 0;
-  gap: 0.2rem;
-}
 
 .agentos-file-preview-heading strong {
   overflow: hidden;
@@ -1289,12 +943,6 @@ body {
   color: var(--text);
 }
 
-.agentos-file-preview-body {
-  min-height: 0;
-  flex: 1;
-  overflow: auto;
-  padding: 0.6rem;
-}
 
 .agentos-file-preview-body pre {
   min-height: 100%;
@@ -1319,18 +967,7 @@ body {
   object-fit: contain;
 }
 
-.agentos-file-preview-unavailable {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-}
 
-.agentos-file-preview-footer {
-  display: flex;
-  gap: 0.4rem;
-  border-top: 1px solid var(--border);
-  padding: 0.65rem 0.9rem;
-}
 
 .agentos-file-preview-footer a {
   color: var(--accent, #2563eb);
@@ -1352,66 +989,14 @@ body {
   color: var(--danger);
 }
 
-.agentos-approval-panel {
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  background: var(--panel-solid);
-  padding: 0.85rem 1rem;
-}
 
-.agentos-approval-panel-title {
-  margin: 0;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text);
-}
 
-.agentos-approval-panel-subtitle {
-  margin: 0.35rem 0 0;
-  font-size: 0.75rem;
-  line-height: 1.45;
-  color: var(--text-muted);
-}
 
-.agentos-approval-list {
-  margin: 0.75rem 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 0.5rem;
-}
 
-.agentos-approval-item {
-  display: grid;
-  gap: 0.15rem;
-  padding: 0.5rem 0.65rem;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  font-size: 0.8rem;
-}
 
-.agentos-approval-tool {
-  font-weight: 600;
-  color: var(--text);
-}
 
-.agentos-approval-args {
-  color: var(--text-muted);
-  word-break: break-all;
-}
 
-.agentos-approval-expires {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-}
 
-.agentos-approval-reason {
-  display: grid;
-  gap: 0.35rem;
-  margin-top: 0.75rem;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
 
 .agentos-approval-reason input,
 .agentos-approval-field input {
@@ -1423,54 +1008,14 @@ body {
   color: var(--text);
 }
 
-.agentos-approval-field-label {
-  display: grid;
-  gap: 0.15rem;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text);
-}
 
-.agentos-approval-field-reason {
-  font-size: 0.72rem;
-  font-weight: 400;
-  color: var(--text-muted);
-}
 
-.agentos-approval-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 0.85rem;
-}
 
 .agentos-approval-approve,
-.agentos-approval-deny {
-  min-width: 4.5rem;
-  min-height: 2.25rem;
-  border-radius: 8px;
-  padding: 0.4rem 0.85rem;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
 
-.agentos-approval-approve {
-  border: 1px solid var(--accent-border);
-  background: var(--accent);
-  color: var(--accent-contrast, #04120f);
-}
 
-.agentos-approval-deny {
-  border: 1px solid var(--border-strong);
-  background: transparent;
-  color: var(--text);
-}
 
 .agentos-approval-approve:disabled,
-.agentos-approval-deny:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 
 .agentos-pending-facts-banner {
   margin: 0.75rem 1rem 0;
@@ -1778,31 +1323,12 @@ body {
 }
 
 /* ── Composer & actions ── */
-.agentos-scroll-latest-bar {
-  display: flex;
-  flex: none;
-  justify-content: center;
-  padding: 0.35rem 0.75rem 0.15rem;
-  pointer-events: none;
-}
 
 .agentos-scroll-latest-bar > .agentos-scroll-latest {
   pointer-events: auto;
 }
 
-.agentos-scroll-latest {
-  border: 1px solid var(--accent-border);
-  border-radius: 999px;
-  background: var(--surface-elevated);
-  color: var(--accent-dim);
-  box-shadow: 0 0 16px var(--accent-glow);
-}
 
-.agentos-chat-error {
-  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
-  background: var(--danger-soft);
-  color: var(--danger);
-}
 
 .agentos-composer-input {
   overflow-y: hidden;
@@ -2189,12 +1715,6 @@ body {
     padding: 0;
   }
 
-  .agentos-chat-panel {
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 0;
-  }
 
   .agentos-chat-body {
     flex-direction: column;
@@ -2212,9 +1732,6 @@ body {
 
 /* DSH-style execution rows: the conversation stays readable while each tool
  * exposes a compact, inspectable summary rather than a competing message card. */
-.agentos-process-group {
-  margin: 0.15rem 0 0.35rem;
-}
 
 .agentos-process-group > [data-slot="collapsible-trigger"] {
   display: flex;
@@ -2243,74 +1760,17 @@ body {
   background: transparent;
 }
 
-.agentos-tool-call-toggle {
-  display: grid;
-  width: 100%;
-  min-height: 2.15rem;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.38rem 0.45rem;
-  border-radius: 0.45rem;
-  color: var(--codex-copy);
-  text-align: left;
-}
 
 .agentos-tool-call-toggle:hover,
-.agentos-tool-call-toggle:focus-visible {
-  background: var(--codex-control-hover);
-  outline: none;
-}
 
 .agentos-tool-call-main,
 .agentos-tool-call-text,
-.agentos-tool-call-headline {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-}
 
-.agentos-tool-call-main {
-  gap: 0.5rem;
-}
 
-.agentos-tool-call-icon {
-  display: grid;
-  width: 1rem;
-  height: 1rem;
-  flex: none;
-  place-items: center;
-  color: var(--codex-muted);
-}
 
-.agentos-tool-call-text {
-  min-width: 0;
-  flex: 1;
-  gap: 0.55rem;
-}
 
-.agentos-tool-call-headline {
-  min-width: 0;
-  flex: 1;
-  gap: 0.5rem;
-}
 
-.agentos-tool-call-name {
-  flex: none;
-  color: var(--codex-copy);
-  font-size: 0.76rem;
-  font-weight: 520;
-  white-space: nowrap;
-}
 
-.agentos-tool-call-param {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--codex-muted);
-  font-size: 0.74rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .agentos-tool-call-param::before {
   margin-right: 0.5rem;
@@ -2318,21 +1778,7 @@ body {
   content: "·";
 }
 
-.agentos-tool-call-status {
-  flex: none;
-  color: var(--codex-faint);
-  font-size: 0.68rem;
-  white-space: nowrap;
-}
 
-.agentos-tool-call-state {
-  display: grid;
-  width: 1rem;
-  height: 1rem;
-  flex: none;
-  place-items: center;
-  color: var(--codex-faint);
-}
 
 .agentos-tool-call[data-status="running"] .agentos-tool-call-status {
   color: var(--accent-dim);
@@ -2347,18 +1793,6 @@ body {
   color: #d97706;
 }
 
-.agentos-tool-call-content {
-  max-height: min(24rem, 48vh);
-  margin: 0 0.2rem 0.25rem 1.45rem;
-  padding: 0.5rem 0.65rem;
-  overflow: auto;
-  border: 1px solid var(--codex-line);
-  border-radius: 0.45rem;
-  background: color-mix(in srgb, var(--codex-control) 84%, transparent);
-  color: var(--codex-muted);
-  font-size: 0.75rem;
-  line-height: 1.55;
-}
 
 .agentos-tool-call-content p + p,
 .agentos-tool-call-content > div + p,
@@ -2371,34 +1805,15 @@ body {
   overflow: auto;
 }
 
-.agentos-generated-files {
-  margin: 0.05rem 0 0.2rem 1.45rem;
-}
 
 @media (max-width: 639px) {
   .agentos-process-group > [data-slot="collapsible-content"] {
     padding-left: 0.55rem;
   }
 
-  .agentos-tool-call-toggle {
-    min-height: 2.35rem;
-    padding-inline: 0.35rem;
-  }
 
-  .agentos-tool-call-text {
-    gap: 0.35rem;
-  }
 
-  .agentos-tool-call-status {
-    max-width: 5.25rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 
-  .agentos-tool-call-content {
-    max-height: 50dvh;
-    margin-left: 1.1rem;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2447,11 +1862,6 @@ body {
   background: transparent;
 }
 
-.agentos-header-action-icon {
-  color: var(--accent-dim);
-  font-size: 1rem;
-  line-height: 1;
-}
 
 .agentos-workspace {
   height: calc(100dvh - 3.5rem);
@@ -2466,14 +1876,6 @@ body {
 }
 
 .agentos-conversation-rail,
-.agentos-chat-panel {
-  border: 0;
-  border-radius: 0;
-  background: var(--surface-chat);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
 
 .agentos-conversation-rail {
   border-right: 1px solid var(--border);
@@ -2486,13 +1888,6 @@ body {
 }
 
 .agentos-empty-eyebrow,
-.agentos-thread-kicker {
-  color: var(--accent-dim);
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
 
 /* Conversation rail */
 .agentos-conversation-list {
@@ -2538,29 +1933,8 @@ body {
 }
 
 .agentos-list-new-button,
-.agentos-new-chat-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  background: transparent;
-  padding: 0.38rem 0.55rem;
-  color: var(--text-secondary);
-  font-size: 0.7rem;
-  font-weight: 650;
-  transition:
-    border-color 150ms ease,
-    background 150ms ease,
-    color 150ms ease;
-}
 
 .agentos-list-new-button:hover,
-.agentos-new-chat-button:hover {
-  border-color: var(--accent-border);
-  background: var(--accent-softer);
-  color: var(--accent-dim);
-}
 
 .agentos-search-input {
   display: block;
@@ -2812,24 +2186,7 @@ body {
 }
 
 /* Thread header, messages and composer */
-.agentos-chat-header {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  min-height: 4.5rem;
-  border-bottom: 1px solid var(--border);
-  padding: 0.8rem max(2rem, calc((100% - 64rem) / 2));
-  background: var(--surface-header);
-  box-shadow: 0 1px 0 var(--accent-softer);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
 
-.agentos-thread-heading {
-  min-width: 0;
-}
 
 .agentos-thread-title-row,
 .agentos-chat-header-actions,
@@ -2840,11 +2197,6 @@ body {
   align-items: center;
 }
 
-.agentos-thread-title-row {
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  margin-top: 0.2rem;
-}
 
 .agentos-thread-title-row .agentos-chat-heading {
   font-size: 1rem;
@@ -2858,17 +2210,6 @@ body {
   font-size: 0.7rem;
 }
 
-.agentos-chat-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.2rem 0.45rem;
-  color: var(--muted);
-  font-size: 0.62rem;
-  white-space: nowrap;
-}
 
 .agentos-chat-status span {
   width: 0.35rem;
@@ -2878,14 +2219,7 @@ body {
   box-shadow: none;
 }
 
-.agentos-chat-header-actions {
-  flex: none;
-  gap: 0.5rem;
-}
 
-.agentos-new-chat-button {
-  padding: 0.48rem 0.65rem;
-}
 
 .agentos-message-viewport {
   background: linear-gradient(180deg, var(--accent-softer), transparent 30%), var(--surface-chat);
@@ -2952,49 +2286,15 @@ body {
   transform: none;
 }
 
-.agentos-message {
-  width: fit-content;
-  max-width: 100%;
-  padding: 0.7rem 0.85rem;
-  border-radius: 9px;
-  box-shadow: none;
-  font-size: 0.84rem;
-  line-height: 1.6;
-}
 
-.agentos-message-wrap {
-  display: flex;
-  width: fit-content;
-  max-width: min(100%, 42rem);
-  flex-direction: column;
-  gap: 0.25rem;
-}
 
-.agentos-message-wrap-user {
-  align-self: flex-end;
-  max-width: min(70%, 28rem);
-}
 
-.agentos-message-wrap-assistant {
-  align-self: flex-start;
-  max-width: min(100%, 42rem);
-}
 
-.agentos-message-user {
-  border: 1px solid var(--accent-border);
-  background: color-mix(in srgb, var(--accent-soft) 72%, var(--surface-elevated));
-  color: var(--message-user-fg);
-}
 
 .agentos-message-user::after {
   display: none;
 }
 
-.agentos-message-assistant {
-  border: 1px solid var(--border);
-  background: var(--surface-elevated);
-  color: var(--message-assistant-fg);
-}
 
 .agentos-message-assistant::before {
   top: 0.65rem;
@@ -3002,50 +2302,12 @@ body {
   background: var(--accent-border);
 }
 
-.agentos-message-toolbar {
-  justify-content: flex-start;
-  margin-top: 0.15rem;
-}
 
-.agentos-message-time {
-  padding-inline: 0.25rem;
-  color: var(--muted);
-  font-size: 0.62rem;
-  line-height: 1.2;
-}
 
-.agentos-message-time-user {
-  text-align: right;
-}
 
-.agentos-copy-button {
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 0.2rem 0.4rem;
-  color: var(--muted);
-  font-size: 0.62rem;
-}
 
-.agentos-copy-button:hover {
-  border-color: var(--accent-border);
-  background: var(--accent-softer);
-}
 
-.agentos-approval-wrap {
-  flex: none;
-  border-top: 1px solid var(--border);
-  padding: 0.75rem max(2rem, calc((100% - 64rem) / 2));
-}
 
-.agentos-composer {
-  flex: none;
-  border-top: 0;
-  padding: 0.8rem max(2rem, calc((100% - 64rem) / 2)) 1.1rem;
-  background: var(--surface-chat);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
 
 .agentos-upload-pending-list {
   display: flex;
@@ -3154,39 +2416,19 @@ body {
     display: none;
   }
 
-  .agentos-chat-header {
-    min-height: 4.5rem;
-    padding: 0.85rem 1rem;
-  }
 
   .agentos-message-list {
     gap: 0.55rem;
     padding: 1rem;
   }
 
-  .agentos-message-user {
-    max-width: 100%;
-  }
 
-  .agentos-message-wrap-user {
-    max-width: 88%;
-  }
 
   .agentos-approval-wrap,
-  .agentos-composer {
-    padding-right: 1rem;
-    padding-left: 1rem;
-  }
 }
 
 @media (max-width: 639px) {
-  .agentos-thread-kicker {
-    font-size: 0.58rem;
-  }
 
-  .agentos-thread-title-row {
-    gap: 0.45rem;
-  }
 
   .agentos-thread-title-row .agentos-chat-heading {
     max-width: 11.5rem;
@@ -3215,24 +2457,9 @@ body {
     font-size: 1.15rem;
   }
 
-  .agentos-chat-status {
-    max-width: 7.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 
-  .agentos-message {
-    max-width: 100%;
-    padding: 0.65rem 0.75rem;
-  }
 
-  .agentos-message-user {
-    max-width: 100%;
-  }
 
-  .agentos-message-wrap-user {
-    max-width: 90%;
-  }
 
   .agentos-composer-meta {
     max-width: 4rem;
@@ -3283,13 +2510,6 @@ body {
 }
 
 .agentos-conversation-rail,
-.agentos-chat-panel {
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
 
 .agentos-conversation-rail {
   overflow: hidden;
@@ -3567,17 +2787,7 @@ body {
 }
 
 .agentos-main-column,
-.agentos-chat-panel {
-  background: var(--codex-main);
-}
 
-.agentos-chat-header {
-  min-height: 3.4rem;
-  padding: 0.75rem 1.1rem;
-  border-bottom: 1px solid var(--codex-line);
-  background: var(--codex-main);
-  box-shadow: none;
-}
 
 .agentos-codex-empty-state ~ * {
   display: none;
@@ -3635,27 +2845,7 @@ body {
   margin-top: 1.45rem;
 }
 
-.agentos-codex-starter-prompt {
-  display: flex;
-  min-height: 4.5rem;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.7rem;
-  padding: 0.7rem 0.72rem;
-  border: 1px solid var(--codex-line);
-  border-radius: 0.7rem;
-  background: transparent;
-  color: var(--codex-copy);
-  font-size: 0.76rem;
-  line-height: 1.15;
-}
 
-.agentos-codex-starter-prompt:hover {
-  border-color: color-mix(in srgb, var(--codex-copy) 32%, transparent);
-  background: var(--codex-control);
-  box-shadow: none;
-}
 
 .agentos-codex-starter-icon {
   color: #66a9ff;
@@ -3674,14 +2864,6 @@ body {
   color: #ff986c;
 }
 
-.agentos-composer {
-  width: min(100% - 2rem, 38rem);
-  margin: 0 auto 0.55rem;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
 
 .agentos-codex-agent-picker,
 .agentos-composer-input,
@@ -3691,17 +2873,6 @@ body {
   background: var(--codex-control);
 }
 
-.agentos-codex-agent-picker {
-  display: flex;
-  align-items: center;
-  gap: 0.38rem;
-  min-height: 2rem;
-  padding: 0.42rem 0.7rem 0;
-  border-top: 1px solid var(--codex-line);
-  border-radius: 0.85rem 0.85rem 0 0;
-  color: var(--codex-muted);
-  font-size: 0.72rem;
-}
 
 .agentos-codex-agent-picker button {
   color: var(--codex-copy);
@@ -3835,13 +3006,7 @@ body {
     padding: 0 0.2rem;
   }
 
-  .agentos-codex-starter-prompt {
-    min-height: 4rem;
-  }
 
-  .agentos-composer {
-    width: min(100% - 1rem, 38rem);
-  }
 }
 
 /* Keep the conversation column and execution steps on the same sender axis. */
@@ -3884,18 +3049,8 @@ body {
 
 .agentos-message-wrap,
 .agentos-message-wrap-user,
-.agentos-message-wrap-assistant {
-  width: 100%;
-  max-width: none;
-}
 
-.agentos-message-wrap-user {
-  align-items: flex-end;
-}
 
-.agentos-message-wrap-assistant {
-  align-items: flex-start;
-}
 
 .agentos-message-wrap-user .agentos-message {
   max-width: min(72%, 42rem);
@@ -3905,22 +3060,11 @@ body {
   max-width: min(100%, 54rem);
 }
 
-.agentos-message-assistant {
-  border: 0;
-  background: transparent;
-  padding: 0.15rem 0;
-}
 
 .agentos-message-assistant::before {
   display: none;
 }
 
-.agentos-codex-turn-steps {
-  width: min(100%, 54rem);
-  margin: 0 0 0.2rem;
-  padding-left: 0.8rem;
-  border-left: 1px solid var(--codex-line);
-}
 
 .agentos-codex-turn-steps::before {
   display: block;
@@ -3958,9 +3102,6 @@ body {
     max-width: 88%;
   }
 
-  .agentos-codex-turn-steps {
-    padding-left: 0.55rem;
-  }
 }
 
 /* Prevent sidebar content from widening its flex/grid track on narrow screens. */
@@ -4101,25 +3242,11 @@ body {
 .agentos-message-wrap,
 .agentos-message-wrap-user,
 .agentos-message-wrap-assistant,
-.agentos-process-group {
-  width: var(--agentos-message-axis);
-  max-width: 100%;
-  min-width: 0;
-}
 
 .agentos-message-wrap-user,
 .agentos-message-wrap-assistant,
-.agentos-process-group {
-  align-self: center;
-}
 
-.agentos-message-wrap-user {
-  align-items: flex-end;
-}
 
-.agentos-message-wrap-assistant {
-  align-items: flex-start;
-}
 
 .agentos-message-wrap-assistant .agentos-message,
 .agentos-message-wrap-assistant .agentos-message-meta {
@@ -4127,12 +3254,6 @@ body {
   max-width: 100%;
 }
 
-.agentos-process-group {
-  margin-bottom: -0.2rem;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
 
 .agentos-codex-upload-button {
   flex: none;
@@ -4392,69 +3513,19 @@ body {
   background: color-mix(in srgb, var(--codex-control) 64%, transparent);
 }
 
-.agentos-message-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  min-height: 1.65rem;
-  margin-top: 0.05rem;
-}
 
-.agentos-message-meta-user {
-  align-self: flex-end;
-  justify-content: flex-end;
-}
 
-.agentos-message-toolbar {
-  min-height: 1.5rem;
-  padding-inline: 0.05rem;
-}
 
-.agentos-message-time {
-  min-height: 1.1rem;
-  padding-inline: 0.05rem;
-  color: var(--codex-faint);
-  font-size: 0.63rem;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-}
 
-.agentos-message-time-user {
-  align-self: flex-end;
-  text-align: right;
-}
 
-.agentos-copy-button {
-  display: inline-grid;
-  width: 1.65rem;
-  height: 1.65rem;
-  place-items: center;
-  border: 0;
-  border-radius: 0.35rem;
-  padding: 0;
-  color: var(--codex-faint);
-}
 
-.agentos-copy-button:hover {
-  border-color: transparent;
-  background: var(--codex-control);
-  color: var(--codex-copy);
-}
 
 .agentos-main-column,
 .agentos-chat-panel,
 .agentos-chat-body,
 .agentos-message-viewport,
 .agentos-message-list,
-.agentos-composer {
-  min-width: 0;
-  max-width: 100%;
-}
 
-.agentos-composer {
-  box-sizing: border-box;
-  width: min(100% - 2rem, 38rem);
-}
 
 .agentos-composer > div:first-child,
 .agentos-composer-input,
@@ -4465,15 +3536,7 @@ body {
 }
 
 @media (max-width: 639px) {
-  .agentos-chat-header {
-    min-height: 3.6rem;
-    padding: 0.65rem 0.75rem;
-  }
 
-  .agentos-thread-heading {
-    min-width: 0;
-    flex: 1;
-  }
 
   .agentos-thread-title-row .agentos-chat-heading {
     display: -webkit-box;
@@ -4502,10 +3565,6 @@ body {
     padding-left: 0.5rem;
   }
 
-  .agentos-composer {
-    width: calc(100% - 1rem);
-    margin-bottom: 0.45rem;
-  }
 
   .agentos-composer-toolbar {
     gap: 0.35rem;
@@ -4515,44 +3574,12 @@ body {
 
 /* Reasoning shares the tool-row interaction: live detail is visible while
  * streaming, then a finished turn remains scannable until inspected. */
-.agentos-reasoning-head {
-  display: flex;
-  width: 100%;
-  min-height: 2.15rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.45rem;
-  padding: 0.38rem 0.45rem;
-  border-radius: 0.45rem;
-  color: var(--codex-muted);
-  text-align: left;
-}
 
 .agentos-reasoning-head:hover,
-.agentos-reasoning-head:focus-visible {
-  background: var(--codex-control-hover);
-  outline: none;
-}
 
-.agentos-reasoning-title {
-  min-width: 0;
-  color: inherit;
-  font-size: 0.76rem;
-  font-weight: 500;
-}
 
 .agentos-reasoning-duration,
-.agentos-reasoning-state {
-  color: var(--codex-faint);
-}
 
-.agentos-reasoning-state {
-  display: grid;
-  width: 1rem;
-  height: 1rem;
-  flex: none;
-  place-items: center;
-}
 
 .agentos-reasoning-content {
   max-height: min(20rem, 42vh);
