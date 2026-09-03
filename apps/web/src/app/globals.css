@@ -2670,7 +2670,6 @@ body {
   height: 1.55rem;
 }
 
-.agentos-main-column,
 .agentos-codex-empty-state ~ * {
   display: none;
 }
