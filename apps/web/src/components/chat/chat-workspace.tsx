@@ -12,7 +12,7 @@ import {
 
 import { InvitationManager } from "@/components/auth/invitation-manager";
 import { AgentOsLogo } from "@/components/brand/agentos-logo";
-import { ChatPanel } from "@/components/chat/chat-panel";
+import { AssistantThread } from "@/components/chat/assistant-thread";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PendingCaseFactsBanner } from "@/components/chat/pending-case-facts-banner";
 import { ScheduledTasksPanel } from "@/components/chat/scheduled-tasks-panel";
@@ -588,22 +588,13 @@ export function ChatWorkspace({
                         className={isActive ? "h-full min-h-0" : "hidden"}
                         aria-hidden={!isActive}
                       >
-                        <ChatPanel
+                        <AssistantThread
                           selectedThreadId={slot.threadId}
                           agentId={selectedAgentId}
-                          agents={agents}
-                          agentLoadError={agentLoadError}
-                          supportsVision={
-                            agents.find((agent) => agent.id === selectedAgentId)?.supports_vision ??
-                            true
-                          }
                           isScheduledTaskThread={
                             slot.threadId !== null && scheduledThreadIds.has(slot.threadId)
                           }
                           isActive={isActive}
-                          onRetryAgentLoad={retryAgentLoad}
-                          onSelectAgent={handleSelectAgent}
-                          onNewConversation={handleNewConversation}
                           onRunStarted={ignoreRunStarted}
                           onStreamingChanged={(isStreaming) =>
                             handleSlotStreamingChanged(slot.key, isStreaming)
