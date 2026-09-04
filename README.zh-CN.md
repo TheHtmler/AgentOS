@@ -56,7 +56,7 @@ flowchart LR
 
 ### 环境要求
 
-- Node.js `>=22.16.0 <23`
+- Node.js `>=22.16.0`（推荐 22 LTS，24 可用）
 - pnpm `11.2.2`
 - Python `3.13` 和 [uv](https://docs.astral.sh/uv/)
 - Docker 和 Docker Compose

@@ -56,7 +56,7 @@ git init -b main
   "private": true,
   "packageManager": "pnpm@11.2.2",
   "engines": {
-    "node": ">=22.16.0 <23"
+    "node": ">=22.16.0"
   },
   "scripts": {
     "dev:web": "pnpm --filter web dev",

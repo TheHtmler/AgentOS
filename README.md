@@ -61,7 +61,7 @@ Browser traffic stays on the Next.js origin. Route Handlers proxy health, chat s
 
 ### Prerequisites
 
-- Node.js `>=22.16.0 <23`
+- Node.js `>=22.16.0` (22 LTS recommended; 24 is supported)
 - pnpm `11.2.2`
 - Python `3.13` and [uv](https://docs.astral.sh/uv/)
 - Docker with Docker Compose
