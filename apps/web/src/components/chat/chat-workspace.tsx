@@ -12,6 +12,7 @@ import {
 
 import { InvitationManager } from "@/components/auth/invitation-manager";
 import { AgentOsLogo } from "@/components/brand/agentos-logo";
+import { AgentSelector } from "@/components/chat/agent-selector";
 import { AssistantThread } from "@/components/chat/assistant-thread";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PendingCaseFactsBanner } from "@/components/chat/pending-case-facts-banner";
@@ -571,6 +572,16 @@ export function ChatWorkspace({
           </div>
           <div className={activeView === "chat" ? "h-full min-h-0" : "hidden"}>
             <>
+              <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
+                <AgentSelector
+                  agents={agents}
+                  value={selectedAgentId}
+                  onChange={handleSelectAgent}
+                />
+                <span className="truncate text-xs text-muted-foreground">
+                  {agents.find((agent) => agent.id === selectedAgentId)?.description ?? ""}
+                </span>
+              </div>
               <PendingCaseFactsBanner
                 agentId={selectedAgentId}
                 caseEnabled={
