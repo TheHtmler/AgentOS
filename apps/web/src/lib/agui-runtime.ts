@@ -1,50 +1,23 @@
 /**
  * AG-UI → assistant-ui ExternalStoreRuntime adapter.
  *
- * Owns chat state (messages + isRunning) in a React state, translates AG-UI wire events
+ * Owns chat state (messages + isRunning) in React state, translates AG-UI wire events
  * (via `@ag-ui/client`'s `HttpAgent` subscriber callbacks, plus the HITL resume `/stream`
  * SSE consumed through `readAguiEventStream`) into assistant-ui `ThreadMessageLike`
- * messages, and exposes a `useExternalStoreRuntime`-compatible adapter object.
- *
- * The assistant-ui types (`ThreadMessageLike`, `AppendMessage`, `MessagePart`) are imported
- * `import type` so this module type-checks standalone; the concrete runtime wiring happens
- * in `AssistantThread` (which mounts `AssistantRuntimeProvider`).
+ * messages, and exposes the adapter object consumed by `useExternalStoreRuntime`.
  */
 
 import { HttpAgent, type Message } from "@ag-ui/client";
+import type {
+  AppendMessage,
+  ReasoningMessagePart,
+  TextMessagePart,
+  ThreadMessageLike,
+  ToolCallMessagePart,
+} from "@assistant-ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { readAguiEventStream, type AguiStreamEvent } from "@/lib/agui-events";
-
-// ---------------------------------------------------------------------------
-// assistant-ui type shims (concrete types come from @assistant-ui/react once installed)
-// ---------------------------------------------------------------------------
-
-type AssistantTextPart = { type: "text"; text: string };
-type AssistantReasoningPart = { type: "reasoning"; text: string };
-type AssistantToolCallPart = {
-  type: "tool-call";
-  toolCallId: string;
-  toolName: string;
-  args: unknown;
-};
-type AssistantToolResultPart = { type: "tool-result"; toolCallId: string; result: unknown };
-type AssistantMessagePart =
-  AssistantTextPart | AssistantReasoningPart | AssistantToolCallPart | AssistantToolResultPart;
-
-type AssistantMessageLike = {
-  id: string;
-  role: "user" | "assistant";
-  content: readonly AssistantMessagePart[];
-  createdAt?: Date;
-  status?: { type: "running" } | { type: "complete" } | { type: "incomplete" };
-};
-
-type AppendMessage = {
-  content: readonly { type: "text"; text: string }[];
-  parentId?: string;
-  id?: string;
-};
 
 // ---------------------------------------------------------------------------
 // AG-UI → assistant-ui message conversion
@@ -52,31 +25,34 @@ type AppendMessage = {
 
 /**
  * Convert one AG-UI `Message` into an assistant-ui `ThreadMessageLike`.
- * AG-UI `role: "tool"` messages (tool results) are merged into the preceding
- * assistant message as `tool-result` parts; they are not standalone UI messages.
+ * AG-UI `role: "tool"` messages (tool results) are skipped; tool results are
+ * surfaced via `ToolCallMessagePart.result` on the preceding assistant message.
  */
-export function convertAguiMessage(message: Message): AssistantMessageLike | null {
+export function convertAguiMessage(message: Message): ThreadMessageLike | null {
   const { id, role } = message;
 
   if (role === "tool") {
     return null;
   }
 
-  const content: AssistantMessagePart[] = [];
+  const content: ThreadMessageLike["content"][number][] = [];
 
   if (typeof message.content === "string") {
-    content.push({ type: "text", text: message.content });
+    content.push({ type: "text", text: message.content } satisfies TextMessagePart);
   } else if (Array.isArray(message.content)) {
     for (const part of message.content) {
       if (typeof part === "string") {
-        content.push({ type: "text", text: part });
-      } else if (part !== null && typeof part === "object" && "text" in part) {
-        content.push({ type: "text", text: String((part as { text: unknown }).text ?? "") });
-      } else if (part !== null && typeof part === "object" && "type" in part) {
-        const typed = part as { type?: string };
-        if (typed.type === "text" && "text" in (part as { text?: unknown })) {
-          content.push({ type: "text", text: String((part as { text: unknown }).text ?? "") });
-        }
+        content.push({ type: "text", text: part } satisfies TextMessagePart);
+      } else if (
+        part !== null &&
+        typeof part === "object" &&
+        "text" in part &&
+        typeof (part as { text: unknown }).text === "string"
+      ) {
+        content.push({
+          type: "text",
+          text: (part as { text: string }).text,
+        } satisfies TextMessagePart);
       }
     }
   }
@@ -97,8 +73,9 @@ export function convertAguiMessage(message: Message): AssistantMessageLike | nul
           type: "tool-call",
           toolCallId: String(record.id ?? record.toolName ?? ""),
           toolName: String(record.name ?? record.toolName ?? "tool"),
-          args: record.args ?? record.input ?? {},
-        });
+          args: (record.args ?? record.input ?? {}) as ToolCallMessagePart["args"],
+          argsText: JSON.stringify(record.args ?? record.input ?? {}),
+        } as ThreadMessageLike["content"][number]);
       }
     }
   }
@@ -106,7 +83,7 @@ export function convertAguiMessage(message: Message): AssistantMessageLike | nul
   return {
     id: String(id),
     role: role === "user" ? "user" : "assistant",
-    content,
+    content: content as ThreadMessageLike["content"],
   };
 }
 
@@ -134,7 +111,7 @@ export function useAguiRuntime({
   onRunFinalized,
   onRunStarted,
 }: AguiRuntimeOptions) {
-  const [messages, setMessages] = useState<AssistantMessageLike[]>([]);
+  const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const agentRef = useRef<HttpAgent | null>(null);
 
@@ -160,10 +137,10 @@ export function useAguiRuntime({
       }
 
       // Optimistic user message.
-      const userMessage: AssistantMessageLike = {
+      const userMessage: ThreadMessageLike = {
         id: crypto.randomUUID(),
         role: "user",
-        content: [{ type: "text", text }],
+        content: [{ type: "text", text } satisfies TextMessagePart],
         createdAt: new Date(),
       };
 
@@ -183,18 +160,11 @@ export function useAguiRuntime({
             setMessages(
               nextMessages
                 .map(convertAguiMessage)
-                .filter((item): item is AssistantMessageLike => item !== null),
+                .filter((item): item is ThreadMessageLike => item !== null),
             );
           },
-          onToolCallStartEvent: ({ event }) => {
-            // Converted into a tool-call part on the next messages snapshot.
-            void event;
-          },
-          onReasoningStartEvent: ({ event }) => {
-            void event;
-          },
-          onRunErrorEvent: ({ event }) => {
-            void event;
+          onRunErrorEvent: () => {
+            // Errors surface through the message snapshot; no extra handling needed.
           },
           onRunFinishedEvent: () => {
             setIsRunning(false);
@@ -244,10 +214,21 @@ export function useAguiRuntime({
                   }
                   const next = [...current];
                   const existing = next[index];
-                  const content = existing.content.filter(
-                    (p): p is AssistantMessagePart => p.type !== "reasoning",
+                  if (existing === undefined) {
+                    return current;
+                  }
+                  const rawContent = existing.content;
+                  const existingContent = Array.isArray(rawContent)
+                    ? rawContent
+                    : [{ type: "text", text: rawContent as string } satisfies TextMessagePart];
+                  const content = existingContent.filter(
+                    (part): part is Exclude<ThreadMessageLike["content"][number], string> =>
+                      typeof part !== "string" && (part as { type?: string }).type !== "reasoning",
                   );
-                  content.push({ type: "reasoning", text: buffer } as AssistantMessagePart);
+                  content.push({
+                    type: "reasoning",
+                    text: buffer,
+                  } satisfies ReasoningMessagePart);
                   next[index] = { ...existing, content };
                   return next;
                 });
@@ -298,6 +279,3 @@ export function useAguiRuntime({
     resumeRun,
   };
 }
-
-// Re-export for the AssistantThread component.
-export type { AssistantMessageLike, AssistantMessagePart };

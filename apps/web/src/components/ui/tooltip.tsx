@@ -1,35 +1,55 @@
+"use client";
+
 import * as React from "react";
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 import { cn } from "@/lib/utils";
 
 function TooltipProvider({
-  delayDuration = 300,
+  delayDuration = 0,
   ...props
-}: React.ComponentProps<"div"> & { delayDuration?: number }) {
-  return <div data-slot="tooltip-provider" data-delay={delayDuration} {...props} />;
-}
-
-function Tooltip({ className, ...props }: React.ComponentProps<"span">) {
+}: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
   return (
-    <span data-slot="tooltip" className={cn("group relative inline-flex", className)} {...props} />
+    <TooltipPrimitive.Provider
+      data-slot="tooltip-provider"
+      delayDuration={delayDuration}
+      {...props}
+    />
   );
 }
 
-function TooltipTrigger({ className, ...props }: React.ComponentProps<"span">) {
-  return <span data-slot="tooltip-trigger" className={cn("inline-flex", className)} {...props} />;
+function Tooltip({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
+  return (
+    <TooltipProvider>
+      <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+    </TooltipProvider>
+  );
 }
 
-function TooltipContent({ className, ...props }: React.ComponentProps<"div">) {
+function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
+}
+
+function TooltipContent({
+  className,
+  sideOffset = 0,
+  children,
+  ...props
+}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
   return (
-    <span
-      role="tooltip"
-      data-slot="tooltip-content"
-      className={cn(
-        "invisible absolute bottom-full left-1/2 z-50 mb-2 max-w-xs -translate-x-1/2 rounded-md bg-primary px-3 py-1.5 text-xs whitespace-nowrap text-primary-foreground opacity-0 shadow-md transition-opacity group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100",
-        className,
-      )}
-      {...props}
-    />
+    <TooltipPrimitive.Portal>
+      <TooltipPrimitive.Content
+        data-slot="tooltip-content"
+        sideOffset={sideOffset}
+        className={cn(
+          "z-50 w-fit origin-(--radix-tooltip-content-transform-origin) animate-in rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </TooltipPrimitive.Content>
+    </TooltipPrimitive.Portal>
   );
 }
 

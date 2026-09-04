@@ -10,41 +10,14 @@
  *
  * Exports a props signature compatible with the legacy `ChatPanel` so
  * `ChatWorkspace` can switch mount points with a one-line change.
- *
- * NOTE: `@assistant-ui/react` is not yet installed in this sandbox (no network).
- * The assistant-ui module is loaded lazily via `import()`, so this file
- * type-checks standalone; once the dependency is installed, replace the lazy
- * load with direct imports and drop the `aui` indirection.
  */
 
+import { AssistantRuntimeProvider, useExternalStoreRuntime } from "@assistant-ui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval-panel";
 import { useAguiRuntime } from "@/lib/agui-runtime";
-
-// ---------------------------------------------------------------------------
-// assistant-ui type shims (real types arrive with @assistant-ui/react)
-// ---------------------------------------------------------------------------
-
-type AssistantMessageLike = {
-  id: string;
-  role: "user" | "assistant";
-  content: readonly {
-    type: string;
-    text?: string;
-    toolCallId?: string;
-    toolName?: string;
-    args?: unknown;
-  }[];
-  createdAt?: Date;
-  status?: { type: "running" } | { type: "complete" } | { type: "incomplete" };
-};
-
-type AppendMessageLike = {
-  content: readonly { type: string; text?: string }[];
-  parentId?: string;
-  id?: string;
-};
 
 // ---------------------------------------------------------------------------
 // Approval state (ported from ChatPanel: load / clear / resume)
@@ -193,74 +166,12 @@ function AssistantSurface({
     [agui, approval.runId],
   );
 
-  // Lazy-load the assistant-ui dependency once; render a fallback until then.
-  const [aui, setAui] = useState<Record<string, unknown> | null>(null);
-  const [auiError, setAuiError] = useState(false);
-
-  useEffect(() => {
-    let disposed = false;
-
-    void (async () => {
-      try {
-        const mod = await import("@assistant-ui/react");
-        if (!disposed) {
-          setAui(mod);
-        }
-      } catch {
-        if (!disposed) {
-          setAuiError(true);
-        }
-      }
-    })();
-
-    return () => {
-      disposed = true;
-    };
-  }, []);
-
-  // Defer the surface render until assistant-ui resolves.
-  if (aui === null) {
-    return auiError ? (
-      <p className="p-4 text-sm text-muted-foreground">
-        聊天组件未就绪：请先安装 @assistant-ui/react。
-      </p>
-    ) : (
-      <p className="p-4 text-sm text-muted-foreground">加载聊天组件…</p>
-    );
-  }
-
-  return (
-    <RenderedThread
-      aui={aui}
-      approval={approval}
-      handleApprovalResolved={handleApprovalResolved}
-      agui={agui}
-    />
-  );
-}
-
-type RenderedThreadProps = {
-  aui: Record<string, unknown>;
-  approval: ApprovalState;
-  handleApprovalResolved: () => Promise<void>;
-  agui: ReturnType<typeof useAguiRuntime>;
-};
-
-function RenderedThread({ aui, approval, handleApprovalResolved, agui }: RenderedThreadProps) {
-  const { AssistantRuntimeProvider, Thread, useExternalStoreRuntime } = aui as {
-    AssistantRuntimeProvider: (props: {
-      runtime: unknown;
-      children: React.ReactNode;
-    }) => React.ReactNode;
-    Thread: (props: Record<string, unknown>) => React.ReactNode;
-    useExternalStoreRuntime: (options: Record<string, unknown>) => unknown;
-  };
-
-  // ExternalStoreRuntime: bridge the AG-UI store into assistant-ui.
   const runtime = useExternalStoreRuntime({
-    messages: agui.messages as AssistantMessageLike[],
+    messages: agui.messages,
     isRunning: agui.isRunning,
-    onNew: agui.onNew as (message: AppendMessageLike) => Promise<void>,
+    onNew: agui.onNew,
+    // Messages are already in ThreadMessageLike shape; no conversion needed.
+    convertMessage: (message) => message,
   });
 
   return (
