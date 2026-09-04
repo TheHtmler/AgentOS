@@ -18,6 +18,13 @@ import { PendingCaseFactsBanner } from "@/components/chat/pending-case-facts-ban
 import { ScheduledTasksPanel } from "@/components/chat/scheduled-tasks-panel";
 import { WeChatBindingPanel } from "@/components/channel/wechat-binding-panel";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { parseAgentSummaries, resolveSelectedAgentId, type AgentSummary } from "@/lib/agents";
 import type { Conversation } from "@/components/chat/conversation-list";
 
@@ -208,32 +215,6 @@ export function ChatWorkspace({
     setHasHydratedFromUrl(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [hasHydratedFromUrl]);
-
-  useEffect(() => {
-    if (!isMobileMenuOpen) {
-      return;
-    }
-
-    const previousBodyOverflow = document.body.style.overflow;
-    const previousHtmlOverflow = document.documentElement.style.overflow;
-
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsMobileMenuOpen(false);
-      }
-    };
-
-    window.addEventListener("keydown", closeOnEscape);
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow;
-      document.documentElement.style.overflow = previousHtmlOverflow;
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [isMobileMenuOpen]);
 
   const focusSlot = useCallback((slotKey: string, threadId: string | null) => {
     setActiveView("chat");
@@ -644,113 +625,93 @@ export function ChatWorkspace({
         </section>
       </div>
 
-      {isMobileMenuOpen ? (
-        <div className="agentos-mobile-menu lg:hidden">
-          <button
-            type="button"
-            className="agentos-mobile-menu-backdrop"
-            onClick={() => setIsMobileMenuOpen(false)}
-            aria-label="关闭主菜单"
-          />
+      <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+        <SheetContent className="lg:hidden" showCloseButton={false}>
+          <SheetHeader className="flex min-h-14 flex-row items-center justify-between gap-3">
+            <div>
+              <SheetTitle>会话与工作区</SheetTitle>
+              <SheetDescription className="sr-only">切换会话、定时任务和通知设置</SheetDescription>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="inline-flex min-h-11 items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              关闭
+            </button>
+          </SheetHeader>
 
-          <aside
-            className="agentos-mobile-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="mobile-menu-title"
-          >
-            <header className="agentos-mobile-drawer-header">
-              <p id="mobile-menu-title" className="text-sm font-semibold text-zinc-950">
-                会话与工作区
-              </p>
+          <div className="min-h-0 flex-1 overflow-hidden p-3">
+            <nav className="mb-3 grid gap-1" aria-label="主导航">
               <button
                 type="button"
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="agentos-mobile-close"
-                aria-label="关闭主菜单"
+                onClick={handleNewConversation}
+                className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-sm text-foreground hover:bg-muted"
               >
-                关闭
+                <SquarePen aria-hidden="true" className="size-4" />
+                新建任务
               </button>
-            </header>
+              <button
+                type="button"
+                aria-current={activeView === "scheduled" ? "page" : undefined}
+                className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-sm text-foreground hover:bg-muted aria-[current=page]:bg-muted"
+                onClick={() => {
+                  setActiveView("scheduled");
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <CalendarClock aria-hidden="true" className="size-4" />
+                定时任务
+                {scheduledUnreadCount > 0 ? (
+                  <span className="ml-auto grid min-w-5 place-items-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-semibold text-primary-foreground">
+                    {scheduledUnreadCount}
+                  </span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                aria-current={activeView === "wechat" ? "page" : undefined}
+                className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-sm text-foreground hover:bg-muted aria-[current=page]:bg-muted"
+                onClick={() => {
+                  setActiveView("wechat");
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <Link2 aria-hidden="true" className="size-4" />
+                微信通知
+              </button>
+            </nav>
+            <ConversationList
+              activeThreadId={activeThreadId}
+              refreshKey={threadListVersion}
+              streamingThreadIds={streamingThreadIds}
+              awaitingApprovalThreadIds={awaitingApprovalThreadIds}
+              onNewConversation={handleNewConversation}
+              onSelectThread={handleSelectThread}
+              onThreadDeleted={handleThreadDeleted}
+              onThreadListChanged={handleThreadListChanged}
+            />
+          </div>
 
-            <div className="agentos-mobile-conversation-host min-h-0 flex-1 overflow-hidden">
-              <nav className="mb-3 space-y-1" aria-label="主导航">
-                <button
-                  type="button"
-                  onClick={handleNewConversation}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
-                >
-                  <SquarePen aria-hidden="true" className="size-4" />
-                  新建任务
-                </button>
-                <button
-                  type="button"
-                  className={
-                    activeView === "scheduled"
-                      ? "flex w-full items-center gap-2 bg-zinc-100 px-3 py-2 text-sm text-zinc-950"
-                      : "flex w-full items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
-                  }
-                  onClick={() => {
-                    setActiveView("scheduled");
-                    setIsMobileMenuOpen(false);
-                  }}
-                >
-                  <CalendarClock aria-hidden="true" className="size-4" />
-                  定时任务
-                  {scheduledUnreadCount > 0 ? (
-                    <span className="ml-auto grid min-w-5 place-items-center rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--send-fg)]">
-                      {scheduledUnreadCount}
-                    </span>
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  className={
-                    activeView === "wechat"
-                      ? "flex w-full items-center gap-2 bg-zinc-100 px-3 py-2 text-sm text-zinc-950"
-                      : "flex w-full items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
-                  }
-                  onClick={() => {
-                    setActiveView("wechat");
-                    setIsMobileMenuOpen(false);
-                  }}
-                >
-                  <Link2 aria-hidden="true" className="size-4" />
-                  微信通知
-                </button>
-              </nav>
-              <ConversationList
-                activeThreadId={activeThreadId}
-                refreshKey={threadListVersion}
-                streamingThreadIds={streamingThreadIds}
-                awaitingApprovalThreadIds={awaitingApprovalThreadIds}
-                onNewConversation={handleNewConversation}
-                onSelectThread={handleSelectThread}
-                onThreadDeleted={handleThreadDeleted}
-                onThreadListChanged={handleThreadListChanged}
-              />
+          <footer className="border-t border-border p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <p className="truncate text-sm font-medium text-foreground" title={userEmail}>
+              {userEmail}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">当前已登录</p>
+            <div className="mt-4 grid gap-2">
+              {canManageInvitations ? <InvitationManager /> : null}
+              <button
+                type="button"
+                onClick={onLogout}
+                disabled={isLoggingOut}
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                退出登录
+              </button>
             </div>
-
-            <footer className="agentos-mobile-account">
-              <p className="truncate text-sm font-medium text-zinc-950" title={userEmail}>
-                {userEmail}
-              </p>
-              <p className="mt-1 text-xs text-zinc-500">当前已登录</p>
-              <div className="mt-4 space-y-2">
-                {canManageInvitations ? <InvitationManager /> : null}
-                <button
-                  type="button"
-                  onClick={onLogout}
-                  disabled={isLoggingOut}
-                  className="agentos-mobile-logout disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  退出登录
-                </button>
-              </div>
-            </footer>
-          </aside>
-        </div>
-      ) : null}
+          </footer>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

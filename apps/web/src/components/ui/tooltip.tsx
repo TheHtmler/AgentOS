@@ -9,20 +9,23 @@ function TooltipProvider({
   return <div data-slot="tooltip-provider" data-delay={delayDuration} {...props} />;
 }
 
-function Tooltip({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="tooltip" className={cn("relative", className)} {...props} />;
+function Tooltip({ className, ...props }: React.ComponentProps<"span">) {
+  return (
+    <span data-slot="tooltip" className={cn("group relative inline-flex", className)} {...props} />
+  );
 }
 
-function TooltipTrigger({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="tooltip-trigger" className={cn("inline-flex", className)} {...props} />;
+function TooltipTrigger({ className, ...props }: React.ComponentProps<"span">) {
+  return <span data-slot="tooltip-trigger" className={cn("inline-flex", className)} {...props} />;
 }
 
 function TooltipContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div
+    <span
+      role="tooltip"
       data-slot="tooltip-content"
       className={cn(
-        "bg-primary text-primary-foreground animate-in fade-in-0 zoom-in-95 z-50 max-w-xs rounded-md px-3 py-1.5 text-xs",
+        "invisible absolute bottom-full left-1/2 z-50 mb-2 max-w-xs -translate-x-1/2 rounded-md bg-primary px-3 py-1.5 text-xs whitespace-nowrap text-primary-foreground opacity-0 shadow-md transition-opacity group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100",
         className,
       )}
       {...props}

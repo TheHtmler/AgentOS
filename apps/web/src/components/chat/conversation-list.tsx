@@ -13,6 +13,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export type Conversation = {
   id: string;
@@ -202,39 +208,6 @@ export function ConversationList({
       controller.abort();
     };
   }, [refreshKey]);
-
-  useEffect(() => {
-    if (menuThreadId === null) {
-      return;
-    }
-
-    function closeMenu(event: PointerEvent) {
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        return;
-      }
-
-      if (
-        target.closest(".agentos-conversation-menu") === null &&
-        target.closest(".agentos-conversation-menu-button") === null
-      ) {
-        setMenuThreadId(null);
-      }
-    }
-
-    function closeMenuOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setMenuThreadId(null);
-      }
-    }
-
-    document.addEventListener("pointerdown", closeMenu);
-    document.addEventListener("keydown", closeMenuOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeMenu);
-      document.removeEventListener("keydown", closeMenuOnEscape);
-    };
-  }, [menuThreadId]);
 
   const isLoadingCurrentAgent = isLoading;
   const currentError = error;
@@ -534,47 +507,39 @@ export function ConversationList({
                           <p className="agentos-conversation-preview">{preview}</p>
                         </button>
 
-                        <button
-                          type="button"
-                          aria-label="会话操作"
-                          disabled={isStreaming || isBusy}
-                          onClick={() =>
-                            setMenuThreadId((current) =>
-                              current === conversation.id ? null : conversation.id,
-                            )
+                        <DropdownMenu
+                          open={menuThreadId === conversation.id}
+                          onToggle={(event) =>
+                            setMenuThreadId(event.currentTarget.open ? conversation.id : null)
                           }
-                          className="agentos-conversation-menu-button disabled:opacity-40"
                         >
-                          <MoreHorizontal aria-hidden="true" className="size-4" />
-                        </button>
+                          <DropdownMenuTrigger
+                            aria-label="会话操作"
+                            aria-disabled={isStreaming || isBusy}
+                            onClick={(event) => {
+                              if (isStreaming || isBusy) event.preventDefault();
+                            }}
+                            className="flex size-9 cursor-pointer items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground aria-disabled:pointer-events-none aria-disabled:opacity-40"
+                          >
+                            <MoreHorizontal aria-hidden="true" className="size-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem onClick={() => beginRename(conversation)}>
+                              重命名
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => void togglePinned(conversation)}>
+                              {conversation.is_pinned ? "取消固定" : "固定会话"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive hover:bg-destructive/10"
+                              onClick={() => requestDeleteThread(conversation)}
+                            >
+                              删除
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     )}
-
-                    {menuThreadId === conversation.id ? (
-                      <div className="agentos-conversation-menu">
-                        <button
-                          type="button"
-                          className="agentos-conversation-menu-action"
-                          onClick={() => beginRename(conversation)}
-                        >
-                          重命名
-                        </button>
-                        <button
-                          type="button"
-                          className="agentos-conversation-menu-action"
-                          onClick={() => void togglePinned(conversation)}
-                        >
-                          {conversation.is_pinned ? "取消固定" : "固定会话"}
-                        </button>
-                        <button
-                          type="button"
-                          className="agentos-conversation-menu-action is-danger"
-                          onClick={() => requestDeleteThread(conversation)}
-                        >
-                          删除
-                        </button>
-                      </div>
-                    ) : null}
                   </div>
                 );
               })}
