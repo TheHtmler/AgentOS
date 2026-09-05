@@ -18,6 +18,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { readAguiEventStream, type AguiStreamEvent } from "@/lib/agui-events";
+import { isActiveRunStatus } from "@/lib/run-recovery";
 
 // ---------------------------------------------------------------------------
 // AG-UI → assistant-ui message conversion
@@ -68,6 +69,8 @@ export function convertAguiMessage(message: Message): ThreadMessageLike | null {
           toolName?: unknown;
           args?: unknown;
           input?: unknown;
+          result?: unknown;
+          status?: unknown;
         };
         content.push({
           type: "tool-call",
@@ -75,6 +78,8 @@ export function convertAguiMessage(message: Message): ThreadMessageLike | null {
           toolName: String(record.name ?? record.toolName ?? "tool"),
           args: (record.args ?? record.input ?? {}) as ToolCallMessagePart["args"],
           argsText: JSON.stringify(record.args ?? record.input ?? {}),
+          ...(record.result !== undefined ? { result: record.result } : {}),
+          ...(record.status === "error" ? { isError: true } : {}),
         } as ThreadMessageLike["content"][number]);
       }
     }
@@ -91,10 +96,154 @@ export function convertAguiMessage(message: Message): ThreadMessageLike | null {
 // Runtime state hook
 // ---------------------------------------------------------------------------
 
+type HistoryMessage = {
+  id: string;
+  role: string;
+  content: string;
+  created_at: string;
+};
+
+type HistoryToolCall = {
+  id: string;
+  tool_name: string;
+  args: Record<string, unknown>;
+  status: string;
+  after_message_id: string;
+  result?: string | null;
+};
+
+type ThreadHistory = {
+  thread_id: string;
+  agent_id: string;
+  messages: HistoryMessage[];
+  tool_calls: HistoryToolCall[];
+  latest_run: { id: string; status: string } | null;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseThreadHistory(value: unknown): ThreadHistory | null {
+  if (
+    !isRecord(value) ||
+    typeof value.thread_id !== "string" ||
+    typeof value.agent_id !== "string" ||
+    !Array.isArray(value.messages) ||
+    !Array.isArray(value.tool_calls)
+  ) {
+    return null;
+  }
+
+  const messages: HistoryMessage[] = [];
+  for (const item of value.messages) {
+    if (
+      !isRecord(item) ||
+      typeof item.id !== "string" ||
+      typeof item.role !== "string" ||
+      typeof item.content !== "string" ||
+      typeof item.created_at !== "string"
+    ) {
+      return null;
+    }
+    messages.push({
+      id: item.id,
+      role: item.role,
+      content: item.content,
+      created_at: item.created_at,
+    });
+  }
+
+  const tool_calls: HistoryToolCall[] = [];
+  for (const item of value.tool_calls) {
+    if (
+      !isRecord(item) ||
+      typeof item.id !== "string" ||
+      typeof item.tool_name !== "string" ||
+      !isRecord(item.args) ||
+      typeof item.status !== "string" ||
+      typeof item.after_message_id !== "string"
+    ) {
+      return null;
+    }
+    tool_calls.push({
+      id: item.id,
+      tool_name: item.tool_name,
+      args: item.args,
+      status: item.status,
+      after_message_id: item.after_message_id,
+      result: typeof item.result === "string" ? item.result : null,
+    });
+  }
+
+  let latest_run: ThreadHistory["latest_run"] = null;
+  if (value.latest_run !== null && value.latest_run !== undefined) {
+    if (
+      !isRecord(value.latest_run) ||
+      typeof value.latest_run.id !== "string" ||
+      typeof value.latest_run.status !== "string"
+    ) {
+      return null;
+    }
+    latest_run = { id: value.latest_run.id, status: value.latest_run.status };
+  }
+
+  return {
+    thread_id: value.thread_id,
+    agent_id: value.agent_id,
+    messages,
+    tool_calls,
+    latest_run,
+  };
+}
+
+function historyToAguiMessages(history: ThreadHistory): Message[] {
+  const callsByMessageId = new Map<string, HistoryToolCall[]>();
+  for (const toolCall of history.tool_calls) {
+    const calls = callsByMessageId.get(toolCall.after_message_id) ?? [];
+    calls.push(toolCall);
+    callsByMessageId.set(toolCall.after_message_id, calls);
+  }
+
+  return history.messages.map((message) => {
+    const toolCalls = callsByMessageId.get(message.id);
+    return {
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      ...(toolCalls === undefined
+        ? {}
+        : {
+            toolCalls: toolCalls.map((toolCall) => ({
+              id: toolCall.id,
+              name: toolCall.tool_name,
+              args: toolCall.args,
+              result: toolCall.result,
+              status: toolCall.status,
+            })),
+          }),
+    } as Message;
+  });
+}
+
+function createAgent(
+  threadId: string,
+  initialMessages: Message[],
+  agentId: string | null,
+): HttpAgent {
+  return new HttpAgent({
+    url: "/api/ag-ui/runs",
+    threadId,
+    initialMessages,
+    headers: agentId === null ? {} : { "X-AgentOS-Agent-Id": agentId },
+  });
+}
+
 export type AguiRuntimeOptions = {
+  selectedThreadId: string | null | undefined;
   agentId: string | null;
   onStreamingChanged?: (isStreaming: boolean) => void;
-  onThreadChanged?: (threadId: string | null) => void;
+  onThreadChanged?: (threadId: string | null, agentId?: string) => void;
   onRunFinalized?: () => void;
   onRunStarted?: (runId: string) => void;
 };
@@ -105,6 +254,7 @@ export type AguiRuntimeOptions = {
  * `HttpAgent.runAgent(undefined, subscriber)` and streams events back.
  */
 export function useAguiRuntime({
+  selectedThreadId,
   agentId,
   onStreamingChanged,
   onThreadChanged,
@@ -113,6 +263,7 @@ export function useAguiRuntime({
 }: AguiRuntimeOptions) {
   const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const agentRef = useRef<HttpAgent | null>(null);
 
   // Notify listeners when streaming state flips.
@@ -120,14 +271,68 @@ export function useAguiRuntime({
     onStreamingChanged?.(isRunning);
   }, [isRunning, onStreamingChanged]);
 
-  // The HttpAgent instance is created once; thread changes re-create it lazily.
-  if (agentRef.current === null) {
-    agentRef.current = new HttpAgent({
-      url: "/api/ag-ui/runs",
-      threadId: "new",
-      headers: agentId === null ? {} : { "X-AgentOS-Agent-Id": agentId },
-    });
-  }
+  // The selected thread is the runtime's source of truth. Load durable history
+  // before allowing the composer to send, and replace the agent so its internal
+  // messages match the visible assistant-ui messages.
+  useEffect(() => {
+    const controller = new AbortController();
+    let current = true;
+
+    setIsLoading(selectedThreadId !== null && selectedThreadId !== undefined);
+    setIsRunning(false);
+    setMessages([]);
+
+    if (selectedThreadId === null || selectedThreadId === undefined) {
+      agentRef.current = createAgent("new", [], agentId);
+      setIsLoading(false);
+      return () => controller.abort();
+    }
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/threads/${selectedThreadId}/messages`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`无法读取会话历史（${response.status}）`);
+        }
+        const history = parseThreadHistory((await response.json()) as unknown);
+        if (history === null || history.thread_id !== selectedThreadId) {
+          throw new Error("会话历史格式无效");
+        }
+
+        const aguiMessages = historyToAguiMessages(history);
+        if (!current) {
+          return;
+        }
+        agentRef.current = createAgent(history.thread_id, aguiMessages, agentId);
+        setMessages(
+          aguiMessages
+            .map(convertAguiMessage)
+            .filter((item): item is ThreadMessageLike => item !== null),
+        );
+        onThreadChanged?.(history.thread_id, history.agent_id);
+        if (history.latest_run !== null) {
+          onRunStarted?.(history.latest_run.id);
+          setIsRunning(isActiveRunStatus(history.latest_run.status));
+        }
+      } catch {
+        if (current && !controller.signal.aborted) {
+          agentRef.current = createAgent(selectedThreadId, [], agentId);
+        }
+      } finally {
+        if (current) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      current = false;
+      controller.abort();
+    };
+  }, [agentId, onRunStarted, onThreadChanged, selectedThreadId]);
 
   const send = useCallback(
     async (text: string) => {
@@ -284,6 +489,7 @@ export function useAguiRuntime({
   return {
     messages,
     isRunning,
+    isLoading,
     onNew,
     resumeRun,
   };
