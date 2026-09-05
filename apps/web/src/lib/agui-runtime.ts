@@ -215,7 +215,15 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
   };
 }
 
-function historyToAguiMessages(history: ThreadHistory): Message[] {
+function historyToAgentMessages(history: ThreadHistory): Message[] {
+  // The AG-UI request contract accepts only its own message schema. Historical
+  // tool cards are a display projection and must never be echoed to the API.
+  return history.messages.map(
+    (message) => ({ id: message.id, role: message.role, content: message.content }) as Message,
+  );
+}
+
+function historyToDisplayMessages(history: ThreadHistory): Message[] {
   const callsByAssistantMessageId = new Map<string, HistoryToolCall[]>();
   const unpairedCallsByUserMessageId = new Map<string, HistoryToolCall[]>();
 
@@ -462,14 +470,15 @@ export function useAguiRuntime({
           throw new Error("会话历史格式无效");
         }
 
-        const aguiMessages = historyToAguiMessages(history);
+        const agentMessages = historyToAgentMessages(history);
+        const displayMessages = historyToDisplayMessages(history);
         if (!current) {
           return;
         }
-        agentRef.current = createAgent(history.thread_id, aguiMessages, agentId);
+        agentRef.current = createAgent(history.thread_id, agentMessages, agentId);
         latestThreadIdRef.current = history.thread_id;
         setMessages(
-          aguiMessages
+          displayMessages
             .map(convertAguiMessage)
             .filter((item): item is ThreadMessageLike => item !== null),
         );
