@@ -66,6 +66,6 @@ adapter 在 `apps/web/src/lib/agui-runtime.ts`，事件解析在 `apps/web/src/l
 - 浏览器录音继续调用 `/api/audio/transcriptions`，并作为 assistant-ui 的 `DictationAdapter` 回填 Composer 草稿；用户确认后才由 Composer 发起同一个 AG-UI run。
 - 初始 SSE 意外断开时，adapter 查询 Run 状态并在后台轮询；HITL resume 优先消费 per-run stream，无法订阅或结束后都刷新持久化 Thread 历史。定时任务 Thread 没有浏览器 SSE，保持可见时每 5 秒刷新历史。
 - `AgentOsToolFallback` 是 assistant-ui ToolFallback 插槽。通用的工具状态、耗时、折叠和参数/结果由 `ToolFallback` primitives 渲染；sandbox 文件和上传 artifact 预览作为领域扩展挂在展开区，不重建消息列表或工具分组。
-- Context rail 从 `/v1/threads/{id}/stats` 的最近一轮真实 `input_tokens/context_window` 渲染；信息面板经 shadcn Popover portal 挂到 Composer 外，避免被 Thread viewport 裁剪。后端目前没有可靠的 system/tool/history 分项，故只展示精确总输入与上下文窗口，不伪造分项占用。
+- `ComposerContext` 继续作为 Context rail：最近一轮真实 `input_tokens/context_window` 驱动其 token ring 和标准分段；其面板内部用 Radix portal 挂到 Composer 外，避免被 Thread viewport 裁剪。AgentOS 的完整会话观测（轮数、步骤、LLM/工具耗时、首 token、累计输入/输出、缓存命中）作为该元素的领域详情插入面板，后端没有可靠的 system/tool/history 分项时不伪造分项占用。
 
 `ChatPanel` 已在迁移中删除；它不再是回滚目标。以后调整生成的 `components/assistant-ui/*` 文件必须通过 assistant-ui registry 重新生成，领域协议继续放在 `components/chat/*` 与 `lib/agui-runtime.ts`。

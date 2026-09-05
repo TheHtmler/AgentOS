@@ -1,6 +1,7 @@
 "use client";
 
-import { type ComponentProps, useMemo } from "react";
+import { type ComponentProps, type ReactNode, useMemo, useState } from "react";
+import { Popover as PopoverPrimitive } from "radix-ui";
 import {
   ArrowUpIcon,
   CheckIcon,
@@ -450,12 +451,18 @@ export function ComposerModelItem({
 
 export function ComposerContext({
   usage,
+  details,
   className,
   ...props
-}: Omit<ComponentProps<"div">, "children"> & { usage: ComposerUsage }) {
+}: Omit<ComponentProps<"div">, "children"> & {
+  usage: ComposerUsage;
+  /** Domain-specific observability rendered below the standard context breakdown. */
+  details?: ReactNode;
+}) {
   const used = usage.system + usage.tools + usage.messages;
   const fraction = usage.total === 0 ? 0 : used / usage.total;
   const warn = fraction > 0.85;
+  const [open, setOpen] = useState(false);
   const circumference = 2 * Math.PI * 6;
   const segments = [
     { label: "System", value: usage.system, className: "bg-foreground/25" },
@@ -464,89 +471,110 @@ export function ComposerContext({
   ];
 
   return (
-    <div data-slot="composer-context" className={cn("group/ctx relative", className)} {...props}>
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <div
-        className={cn(
-          floating,
-          "absolute end-0 bottom-full z-10 mb-2 flex w-60 origin-bottom-right flex-col gap-3.5 rounded-2xl p-4",
-          "transition-[opacity,scale] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none",
-          "pointer-events-none scale-[0.97] opacity-0",
-          "group-hover/ctx:pointer-events-auto group-hover/ctx:scale-100 group-hover/ctx:opacity-100",
-          "group-focus-within/ctx:pointer-events-auto group-focus-within/ctx:scale-100 group-focus-within/ctx:opacity-100",
-        )}
+        data-slot="composer-context"
+        className={cn("group/ctx relative", className)}
+        onPointerEnter={() => setOpen(true)}
+        onPointerLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        {...props}
       >
-        <div className="flex items-baseline justify-between">
-          <p className="text-[13.5px] font-medium">Context</p>
-          <p
+        <PopoverPrimitive.Portal>
+          <PopoverPrimitive.Content
+            side="top"
+            align="end"
+            sideOffset={8}
+            onOpenAutoFocus={(event) => event.preventDefault()}
+            onPointerEnter={() => setOpen(true)}
+            onPointerLeave={() => setOpen(false)}
             className={cn(
-              mono,
-              "tabular-nums",
-              warn ? "text-red-500 dark:text-red-400" : "text-foreground/35",
+              floating,
+              "z-50 flex w-60 origin-bottom-right flex-col gap-3.5 rounded-2xl p-4",
+              "animate-in duration-200 fade-in-0 zoom-in-95 data-[side=top]:slide-in-from-bottom-1",
+              "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
             )}
           >
-            {Math.round(fraction * 100)}%
-          </p>
-        </div>
-        <div className="flex h-[5px] w-full gap-px overflow-hidden rounded-full bg-foreground/[0.06]">
-          {segments.map((segment) => (
-            <span
-              key={segment.label}
-              className={cn(
-                "h-full transition-[width] duration-700 motion-reduce:transition-none",
-                segment.className,
-              )}
-              style={{ width: `${pct(segment.value, usage.total)}%` }}
-            />
-          ))}
-        </div>
-        <div className="flex flex-col gap-2">
-          {segments.map((segment) => (
-            <div
-              key={segment.label}
-              className="flex items-center gap-2.5 text-[13px] text-foreground/55"
-            >
-              <span aria-hidden className={cn("size-1.5 rounded-full", segment.className)} />
-              <span className="flex-1">{segment.label}</span>
-              <span className={cn(mono, "text-foreground/40 tabular-nums")}>{segment.value}k</span>
+            <div className="flex items-baseline justify-between">
+              <p className="text-[13.5px] font-medium">Context</p>
+              <p
+                className={cn(
+                  mono,
+                  "tabular-nums",
+                  warn ? "text-red-500 dark:text-red-400" : "text-foreground/35",
+                )}
+              >
+                {Math.round(fraction * 100)}%
+              </p>
             </div>
-          ))}
-        </div>
-        <div className="h-px bg-foreground/[0.06]" />
-        <div className="flex items-center justify-between text-[13px] text-foreground/55">
-          <span>Total</span>
-          <span className={cn(mono, "text-foreground/40 tabular-nums")}>
-            {used}k / {usage.total}k
-          </span>
-        </div>
+            <div className="flex h-[5px] w-full gap-px overflow-hidden rounded-full bg-foreground/[0.06]">
+              {segments.map((segment) => (
+                <span
+                  key={segment.label}
+                  className={cn(
+                    "h-full transition-[width] duration-700 motion-reduce:transition-none",
+                    segment.className,
+                  )}
+                  style={{ width: `${pct(segment.value, usage.total)}%` }}
+                />
+              ))}
+            </div>
+            <div className="flex flex-col gap-2">
+              {segments.map((segment) => (
+                <div
+                  key={segment.label}
+                  className="flex items-center gap-2.5 text-[13px] text-foreground/55"
+                >
+                  <span aria-hidden className={cn("size-1.5 rounded-full", segment.className)} />
+                  <span className="flex-1">{segment.label}</span>
+                  <span className={cn(mono, "text-foreground/40 tabular-nums")}>
+                    {segment.value}k
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="h-px bg-foreground/[0.06]" />
+            <div className="flex items-center justify-between text-[13px] text-foreground/55">
+              <span>Total</span>
+              <span className={cn(mono, "text-foreground/40 tabular-nums")}>
+                {used}k / {usage.total}k
+              </span>
+            </div>
+            {details ? <div className="border-t border-border/60 pt-3">{details}</div> : null}
+          </PopoverPrimitive.Content>
+        </PopoverPrimitive.Portal>
+        <PopoverPrimitive.Trigger asChild>
+          <button
+            type="button"
+            aria-label="Context usage"
+            className={cn(ghostButton, "size-8", warn && "text-red-500 dark:text-red-400")}
+          >
+            <svg viewBox="0 0 16 16" className="size-4 -rotate-90" aria-hidden>
+              <circle
+                cx="8"
+                cy="8"
+                r="6"
+                fill="none"
+                strokeWidth="2.5"
+                className="stroke-foreground/10"
+              />
+              <circle
+                cx="8"
+                cy="8"
+                r="6"
+                fill="none"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                className="stroke-current transition-[stroke-dashoffset] duration-700 motion-reduce:transition-none"
+                strokeDasharray={circumference}
+                strokeDashoffset={circumference * (1 - clamp(fraction, 0, 1))}
+              />
+            </svg>
+          </button>
+        </PopoverPrimitive.Trigger>
       </div>
-      <button
-        type="button"
-        aria-label="Context usage"
-        className={cn(ghostButton, "size-8", warn && "text-red-500 dark:text-red-400")}
-      >
-        <svg viewBox="0 0 16 16" className="size-4 -rotate-90" aria-hidden>
-          <circle
-            cx="8"
-            cy="8"
-            r="6"
-            fill="none"
-            strokeWidth="2.5"
-            className="stroke-foreground/10"
-          />
-          <circle
-            cx="8"
-            cy="8"
-            r="6"
-            fill="none"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            className="stroke-current transition-[stroke-dashoffset] duration-700 motion-reduce:transition-none"
-            strokeDasharray={circumference}
-            strokeDashoffset={circumference * (1 - clamp(fraction, 0, 1))}
-          />
-        </svg>
-      </button>
-    </div>
+    </PopoverPrimitive.Root>
   );
 }
 
