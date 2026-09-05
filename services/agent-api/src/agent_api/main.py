@@ -24,6 +24,7 @@ from agent_api.api.sandboxes import router as sandboxes_router
 from agent_api.api.scheduled_tasks import router as scheduled_tasks_router
 from agent_api.api.threads import router as threads_router
 from agent_api.api.uploads import router as uploads_router
+from agent_api.api.user_data import router as user_data_router
 from agent_api.runtime import lifespan
 
 # Uvicorn's own format has no timestamp; without one, errors in the launchd log
@@ -52,6 +53,7 @@ app.include_router(runs_router)
 app.include_router(sandboxes_router)
 app.include_router(scheduled_tasks_router)
 app.include_router(auth_router)
+app.include_router(user_data_router)
 app.include_router(internal_openclaw_router)
 app.include_router(ops_auth_router)
 app.include_router(ops_channel_bindings_router)
