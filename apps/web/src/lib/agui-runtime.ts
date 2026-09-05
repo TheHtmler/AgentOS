@@ -289,7 +289,22 @@ export function useAguiRuntime({
   const artifactIdsRef = useRef(new Map<string, string>());
   const recoveryInFlightRef = useRef(false);
   const recoverRunRef = useRef<((runId: string) => Promise<void>) | null>(null);
+  const callbacksRef = useRef({
+    onStreamingChanged,
+    onThreadChanged,
+    onRunFinalized,
+    onRunStarted,
+  });
   const [historyVersion, setHistoryVersion] = useState(0);
+
+  useEffect(() => {
+    callbacksRef.current = {
+      onStreamingChanged,
+      onThreadChanged,
+      onRunFinalized,
+      onRunStarted,
+    };
+  }, [onRunFinalized, onRunStarted, onStreamingChanged, onThreadChanged]);
 
   const refreshHistory = useCallback(() => {
     setHistoryVersion((current) => current + 1);
@@ -321,9 +336,9 @@ export function useAguiRuntime({
       typeof payload.agent_id === "string" && isUuid(payload.agent_id) ? payload.agent_id : agentId;
     latestThreadIdRef.current = threadId;
     agentRef.current = createAgent(threadId, [], threadAgentId);
-    onThreadChanged?.(threadId, threadAgentId ?? undefined);
+    callbacksRef.current.onThreadChanged?.(threadId, threadAgentId ?? undefined);
     return threadId;
-  }, [agentId, onThreadChanged]);
+  }, [agentId]);
 
   const attachmentAdapter = useMemo<AttachmentAdapter>(
     () => ({
@@ -369,8 +384,8 @@ export function useAguiRuntime({
 
   // Notify listeners when streaming state flips.
   useEffect(() => {
-    onStreamingChanged?.(isRunning);
-  }, [isRunning, onStreamingChanged]);
+    callbacksRef.current.onStreamingChanged?.(isRunning);
+  }, [isRunning]);
 
   // The selected thread is the runtime's source of truth. Load durable history
   // before allowing the composer to send, and replace the agent so its internal
@@ -426,10 +441,10 @@ export function useAguiRuntime({
             .map(convertAguiMessage)
             .filter((item): item is ThreadMessageLike => item !== null),
         );
-        onThreadChanged?.(history.thread_id, history.agent_id);
+        callbacksRef.current.onThreadChanged?.(history.thread_id, history.agent_id);
         if (history.latest_run !== null) {
           lastRunIdRef.current = history.latest_run.id;
-          onRunStarted?.(history.latest_run.id);
+          callbacksRef.current.onRunStarted?.(history.latest_run.id);
           setIsRunning(isActiveRunStatus(history.latest_run.status));
         }
       } catch {
@@ -447,7 +462,7 @@ export function useAguiRuntime({
       current = false;
       controller.abort();
     };
-  }, [agentId, historyVersion, onRunStarted, onThreadChanged, selectedThreadId]);
+  }, [agentId, historyVersion, selectedThreadId]);
 
   const send = useCallback(
     async (text: string, artifactIds: readonly string[] = []) => {
@@ -486,11 +501,11 @@ export function useAguiRuntime({
           onRunStartedEvent: ({ event }) => {
             activeRunIdRef.current = event.runId;
             lastRunIdRef.current = event.runId;
-            onRunStarted?.(event.runId);
+            callbacksRef.current.onRunStarted?.(event.runId);
             if (event.threadId !== undefined) {
               agent.threadId = event.threadId;
               latestThreadIdRef.current = event.threadId;
-              onThreadChanged?.(event.threadId);
+              callbacksRef.current.onThreadChanged?.(event.threadId);
             }
           },
           onMessagesChanged: ({ messages: nextMessages }) => {
@@ -507,14 +522,14 @@ export function useAguiRuntime({
             activeRunIdRef.current = null;
             setIsRunning(false);
             refreshHistory();
-            onRunFinalized?.();
+            callbacksRef.current.onRunFinalized?.();
           },
         });
       } catch {
         const runId = activeRunIdRef.current;
         if (runId === null) {
           setIsRunning(false);
-          onRunFinalized?.();
+          callbacksRef.current.onRunFinalized?.();
           return;
         }
         // The server run outlives the SSE response. Preserve that contract on
@@ -522,7 +537,7 @@ export function useAguiRuntime({
         void recoverRunRef.current?.(runId);
       }
     },
-    [onRunFinalized, onRunStarted, onThreadChanged, refreshHistory],
+    [refreshHistory],
   );
 
   // HITL resume: consume `/api/runs/{runId}/stream` and merge into the same store.
@@ -679,15 +694,15 @@ export function useAguiRuntime({
         setIsRunning(false);
         activeRunIdRef.current = null;
         refreshHistory();
-        onRunFinalized?.();
+        callbacksRef.current.onRunFinalized?.();
         return sawTerminal;
       } catch {
         setIsRunning(false);
-        onRunFinalized?.();
+        callbacksRef.current.onRunFinalized?.();
         return false;
       }
     },
-    [onRunFinalized, refreshHistory],
+    [refreshHistory],
   );
 
   const recoverRun = useCallback(
@@ -711,11 +726,11 @@ export function useAguiRuntime({
         activeRunIdRef.current = null;
         setIsRunning(false);
         refreshHistory();
-        onRunFinalized?.();
+        callbacksRef.current.onRunFinalized?.();
         recoveryInFlightRef.current = false;
       }
     },
-    [onRunFinalized, refreshHistory],
+    [refreshHistory],
   );
 
   useEffect(() => {
