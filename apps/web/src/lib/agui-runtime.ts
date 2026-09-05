@@ -137,13 +137,22 @@ export function useAguiRuntime({
       }
 
       // Optimistic user message.
+      const userMessageId = crypto.randomUUID();
       const userMessage: ThreadMessageLike = {
-        id: crypto.randomUUID(),
+        id: userMessageId,
         role: "user",
         content: [{ type: "text", text } satisfies TextMessagePart],
         createdAt: new Date(),
       };
 
+      // HttpAgent builds the request from its own `messages` array. Keep it in
+      // sync with the optimistic assistant-ui message before starting the run;
+      // otherwise the API receives an empty/non-user final message (HTTP 422).
+      agent.addMessage({
+        id: userMessageId,
+        role: "user",
+        content: text,
+      });
       setMessages((current) => [...current, userMessage]);
       setIsRunning(true);
 
