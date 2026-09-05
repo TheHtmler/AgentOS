@@ -437,16 +437,16 @@ export function useAguiRuntime({
         if (
           !response.ok ||
           !isRecord(payload) ||
-          typeof payload.id !== "string" ||
-          !isUuid(payload.id)
+          typeof payload.artifact_id !== "string" ||
+          !isUuid(payload.artifact_id)
         ) {
           throw new Error("附件上传失败，请检查格式或文件大小后重试。");
         }
-        artifactIdsRef.current.set(attachment.id, payload.id);
+        artifactIdsRef.current.set(attachment.id, payload.artifact_id);
         return {
           ...attachment,
           status: { type: "complete" },
-          content: [{ type: "text", text: `artifact_id=${payload.id}` }],
+          content: [{ type: "text", text: `artifact_id=${payload.artifact_id}` }],
         };
       },
       async remove(attachment) {
