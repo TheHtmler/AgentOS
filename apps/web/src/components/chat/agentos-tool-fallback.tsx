@@ -4,13 +4,19 @@ import { useMemo, useState } from "react";
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 
 import {
+  ToolFallbackArgs,
+  ToolFallbackContent,
+  ToolFallbackError,
+  ToolFallbackResult,
+  ToolFallbackRoot,
+  ToolFallbackTrigger,
+} from "@/components/assistant-ui/elements/tool-fallback.aui";
+import {
   SandboxFilePreviewPane,
   sandboxFilesFromValue,
   summarizeToolResultContent,
-  ToolCallCard,
   UploadPreviewPane,
   type SandboxFile,
-  type ToolCallStatus,
 } from "@/components/chat/tool-call-card";
 
 function resultText(value: unknown): string {
@@ -18,8 +24,8 @@ function resultText(value: unknown): string {
 }
 
 /**
- * AgentOS owns artifact and sandbox protocols. This remains a narrow slot in
- * assistant-ui's message renderer rather than duplicating its message list.
+ * AgentOS owns artifact and sandbox protocols. The generic tool lifecycle is
+ * still rendered by assistant-ui; only those domain-specific previews extend it.
  */
 export const AgentOsToolFallback: ToolCallMessagePartComponent = ({
   toolCallId,
@@ -32,56 +38,52 @@ export const AgentOsToolFallback: ToolCallMessagePartComponent = ({
   const [sandboxFile, setSandboxFile] = useState<SandboxFile | null>(null);
   const [uploadArtifactId, setUploadArtifactId] = useState<string | null>(null);
   const resultSummary = useMemo(() => summarizeToolResultContent(resultText(result)), [result]);
-  const running = status?.type === "running";
-  const toolStatus: ToolCallStatus = running
-    ? "running"
-    : resultSummary.status === "error"
-      ? "error"
-      : "done";
   const resultData = resultSummary.resultData;
 
   return (
-    <div className="grid gap-2 py-1">
-      <ToolCallCard
-        toolCall={{
-          id: toolCallId,
-          toolName,
-          argsText,
-          status: toolStatus,
-          resultSummary: resultSummary.summary,
-          resultData,
-          files: sandboxFilesFromValue(resultData?.files),
-          expanded,
-          afterMessageId: "",
-        }}
-        onToggle={() => setExpanded((current) => !current)}
-        selectedFilePath={sandboxFile?.path}
-        onFileSelect={(file) => {
-          setUploadArtifactId(null);
-          setSandboxFile(file);
-        }}
-      />
-      {toolName === "read_artifact" && typeof resultData?.artifact_id === "string" ? (
-        <button
-          type="button"
-          className="text-left text-xs text-primary hover:underline"
-          onClick={() => {
-            setSandboxFile(null);
-            setUploadArtifactId(resultData.artifact_id as string);
-          }}
-        >
-          预览附件
-        </button>
-      ) : null}
-      {sandboxFile !== null ? (
-        <SandboxFilePreviewPane file={sandboxFile} onClose={() => setSandboxFile(null)} />
-      ) : null}
-      {uploadArtifactId !== null ? (
-        <UploadPreviewPane
-          artifactId={uploadArtifactId}
-          onClose={() => setUploadArtifactId(null)}
-        />
-      ) : null}
-    </div>
+    <ToolFallbackRoot data-tool-call-id={toolCallId} open={expanded} onOpenChange={setExpanded}>
+      <ToolFallbackTrigger toolName={toolName} status={status} />
+      <ToolFallbackContent>
+        <ToolFallbackError status={status} />
+        <ToolFallbackArgs argsText={argsText} />
+        <ToolFallbackResult result={result} />
+        {toolName === "read_artifact" && typeof resultData?.artifact_id === "string" ? (
+          <button
+            type="button"
+            className="w-fit text-xs text-primary hover:underline"
+            onClick={() => {
+              setSandboxFile(null);
+              setUploadArtifactId(resultData.artifact_id as string);
+            }}
+          >
+            预览附件
+          </button>
+        ) : null}
+        {toolName === "sandbox_exec"
+          ? sandboxFilesFromValue(resultData?.files).map((file) => (
+              <button
+                key={file.path}
+                type="button"
+                className="w-fit text-left text-xs text-primary hover:underline"
+                onClick={() => {
+                  setUploadArtifactId(null);
+                  setSandboxFile(file);
+                }}
+              >
+                预览 {file.path}
+              </button>
+            ))
+          : null}
+        {sandboxFile !== null ? (
+          <SandboxFilePreviewPane file={sandboxFile} onClose={() => setSandboxFile(null)} />
+        ) : null}
+        {uploadArtifactId !== null ? (
+          <UploadPreviewPane
+            artifactId={uploadArtifactId}
+            onClose={() => setUploadArtifactId(null)}
+          />
+        ) : null}
+      </ToolFallbackContent>
+    </ToolFallbackRoot>
   );
 };

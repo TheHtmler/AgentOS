@@ -63,8 +63,9 @@ adapter 在 `apps/web/src/lib/agui-runtime.ts`，事件解析在 `apps/web/src/l
 ## 领域桥接
 
 - `useAguiRuntime` 的 Attachment Adapter 限制输入为 PDF/PNG/JPEG/WebP，发送时先为新会话创建 Thread，再上传到 `/api/uploads`，最终仍把 `artifact_id=<uuid>` 注入 AG-UI 用户消息。组件库只保存附件的交互状态，不替换 AgentOS 的 owner-scoped Artifact 协议。
-- 原有的浏览器录音继续调用 `/api/audio/transcriptions`，转写成功后以普通用户消息送入同一个 AG-UI run；Web Speech Dictation 仅作为 composer 的辅助输入能力。
+- 浏览器录音继续调用 `/api/audio/transcriptions`，并作为 assistant-ui 的 `DictationAdapter` 回填 Composer 草稿；用户确认后才由 Composer 发起同一个 AG-UI run。
 - 初始 SSE 意外断开时，adapter 查询 Run 状态并在后台轮询；HITL resume 优先消费 per-run stream，无法订阅或结束后都刷新持久化 Thread 历史。定时任务 Thread 没有浏览器 SSE，保持可见时每 5 秒刷新历史。
-- `AgentOsToolFallback` 是 assistant-ui ToolFallback 插槽。它复用既有 ToolCallCard、sandbox 文件和上传 artifact 预览，不重建消息列表或工具分组。
+- `AgentOsToolFallback` 是 assistant-ui ToolFallback 插槽。通用的工具状态、耗时、折叠和参数/结果由 `ToolFallback` primitives 渲染；sandbox 文件和上传 artifact 预览作为领域扩展挂在展开区，不重建消息列表或工具分组。
+- `ComposerContext` 从 `/v1/threads/{id}/stats` 的最近一轮真实 `input_tokens/context_window` 渲染输入框 rail；后端目前没有可靠的 system/tool/history 分项，故将精确总输入放在单一消息段，不伪造分项占用。
 
 `ChatPanel` 已在迁移中删除；它不再是回滚目标。以后调整生成的 `components/assistant-ui/*` 文件必须通过 assistant-ui registry 重新生成，领域协议继续放在 `components/chat/*` 与 `lib/agui-runtime.ts`。
