@@ -14,6 +14,7 @@ import { InvitationManager } from "@/components/auth/invitation-manager";
 import { AgentOsLogo } from "@/components/brand/agentos-logo";
 import { AgentSelector } from "@/components/chat/agent-selector";
 import { AssistantThread } from "@/components/chat/assistant-thread";
+import { DataManagementDialog } from "@/components/account/data-management-dialog";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PendingCaseFactsBanner } from "@/components/chat/pending-case-facts-banner";
 import { ScheduledTasksPanel } from "@/components/chat/scheduled-tasks-panel";
@@ -545,6 +546,7 @@ export function ChatWorkspace({
                 {userEmail}
               </span>
               {canManageInvitations ? <InvitationManager /> : null}
+              <DataManagementDialog />
               <ThemeToggle compact />
               <button
                 type="button"
