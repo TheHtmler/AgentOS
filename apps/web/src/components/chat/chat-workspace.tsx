@@ -579,6 +579,17 @@ export function ChatWorkspace({
                 }
                 refreshKey={threadListVersion}
               />
+              {agentLoadError !== null ? (
+                <div
+                  role="alert"
+                  className="mx-auto flex w-full max-w-3xl items-center gap-3 border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-sm text-destructive"
+                >
+                  <span>{agentLoadError}，将使用默认助手继续对话。</span>
+                  <button type="button" onClick={retryAgentLoad} className="font-medium underline">
+                    重试
+                  </button>
+                </div>
+              ) : null}
               {hasHydratedFromUrl
                 ? slots.map((slot) => {
                     const isActive = slot.key === visibleSlotKey;

@@ -9,16 +9,34 @@
 
 import { HttpAgent, type Message } from "@ag-ui/client";
 import type {
+  AttachmentAdapter,
   AppendMessage,
+  CompleteAttachment,
+  PendingAttachment,
   ReasoningMessagePart,
   TextMessagePart,
   ThreadMessageLike,
   ToolCallMessagePart,
 } from "@assistant-ui/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { readAguiEventStream, type AguiStreamEvent } from "@/lib/agui-events";
 import { isActiveRunStatus } from "@/lib/run-recovery";
+
+const UPLOAD_ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp";
+const RECOVERY_DELAYS_MS = [1_000, 2_000, 5_000] as const;
+const RECOVERY_MAX_ATTEMPTS = 60;
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function buildMessageWithArtifacts(text: string, artifactIds: readonly string[]): string {
+  const lines = artifactIds.map((artifactId) => `artifact_id=${artifactId}`);
+  const trimmed = text.trim();
+  if (lines.length === 0) return trimmed;
+  return trimmed ? `${trimmed}\n\n${lines.join("\n")}` : lines.join("\n");
+}
 
 // ---------------------------------------------------------------------------
 // AG-UI → assistant-ui message conversion
@@ -265,6 +283,89 @@ export function useAguiRuntime({
   const [isRunning, setIsRunning] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const agentRef = useRef<HttpAgent | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
+  const lastRunIdRef = useRef<string | null>(null);
+  const latestThreadIdRef = useRef<string | null>(selectedThreadId ?? null);
+  const artifactIdsRef = useRef(new Map<string, string>());
+  const recoveryInFlightRef = useRef(false);
+  const recoverRunRef = useRef<((runId: string) => Promise<void>) | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
+
+  const refreshHistory = useCallback(() => {
+    setHistoryVersion((current) => current + 1);
+  }, []);
+
+  const ensureThreadForUpload = useCallback(async (): Promise<string> => {
+    const currentThreadId = latestThreadIdRef.current;
+    if (currentThreadId !== null) {
+      return currentThreadId;
+    }
+
+    const response = await fetch("/api/threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(agentId === null ? {} : { agent_id: agentId }),
+    });
+    const payload: unknown = await response.json().catch(() => null);
+    if (
+      !response.ok ||
+      !isRecord(payload) ||
+      typeof payload.id !== "string" ||
+      !isUuid(payload.id)
+    ) {
+      throw new Error("无法创建会话，请稍后重试后再上传文件。");
+    }
+
+    const threadId = payload.id;
+    const threadAgentId =
+      typeof payload.agent_id === "string" && isUuid(payload.agent_id) ? payload.agent_id : agentId;
+    latestThreadIdRef.current = threadId;
+    agentRef.current = createAgent(threadId, [], threadAgentId);
+    onThreadChanged?.(threadId, threadAgentId ?? undefined);
+    return threadId;
+  }, [agentId, onThreadChanged]);
+
+  const attachmentAdapter = useMemo<AttachmentAdapter>(
+    () => ({
+      accept: UPLOAD_ACCEPT,
+      async add({ file }): Promise<PendingAttachment> {
+        return {
+          id: crypto.randomUUID(),
+          type: file.type.startsWith("image/") ? "image" : "document",
+          name: file.name,
+          contentType: file.type,
+          file,
+          status: { type: "requires-action", reason: "composer-send" },
+        };
+      },
+      async send(attachment): Promise<CompleteAttachment> {
+        const threadId = await ensureThreadForUpload();
+        const formData = new FormData();
+        formData.append("file", attachment.file);
+        formData.append("thread_id", threadId);
+        const response = await fetch("/api/uploads", { method: "POST", body: formData });
+        const payload: unknown = await response.json().catch(() => null);
+        if (
+          !response.ok ||
+          !isRecord(payload) ||
+          typeof payload.id !== "string" ||
+          !isUuid(payload.id)
+        ) {
+          throw new Error("附件上传失败，请检查格式或文件大小后重试。");
+        }
+        artifactIdsRef.current.set(attachment.id, payload.id);
+        return {
+          ...attachment,
+          status: { type: "complete" },
+          content: [{ type: "text", text: `artifact_id=${payload.id}` }],
+        };
+      },
+      async remove(attachment) {
+        artifactIdsRef.current.delete(attachment.id);
+      },
+    }),
+    [ensureThreadForUpload],
+  );
 
   // Notify listeners when streaming state flips.
   useEffect(() => {
@@ -278,15 +379,27 @@ export function useAguiRuntime({
     const controller = new AbortController();
     let current = true;
 
-    setIsLoading(selectedThreadId !== null && selectedThreadId !== undefined);
-    setIsRunning(false);
-    setMessages([]);
-
     if (selectedThreadId === null || selectedThreadId === undefined) {
+      latestThreadIdRef.current = null;
       agentRef.current = createAgent("new", [], agentId);
-      setIsLoading(false);
+      queueMicrotask(() => {
+        if (current) {
+          setMessages([]);
+          setIsRunning(false);
+          setIsLoading(false);
+        }
+      });
       return () => controller.abort();
     }
+
+    latestThreadIdRef.current = selectedThreadId;
+    queueMicrotask(() => {
+      if (current) {
+        setIsLoading(true);
+        setIsRunning(false);
+        setMessages([]);
+      }
+    });
 
     void (async () => {
       try {
@@ -307,6 +420,7 @@ export function useAguiRuntime({
           return;
         }
         agentRef.current = createAgent(history.thread_id, aguiMessages, agentId);
+        latestThreadIdRef.current = history.thread_id;
         setMessages(
           aguiMessages
             .map(convertAguiMessage)
@@ -314,6 +428,7 @@ export function useAguiRuntime({
         );
         onThreadChanged?.(history.thread_id, history.agent_id);
         if (history.latest_run !== null) {
+          lastRunIdRef.current = history.latest_run.id;
           onRunStarted?.(history.latest_run.id);
           setIsRunning(isActiveRunStatus(history.latest_run.status));
         }
@@ -332,12 +447,17 @@ export function useAguiRuntime({
       current = false;
       controller.abort();
     };
-  }, [agentId, onRunStarted, onThreadChanged, selectedThreadId]);
+  }, [agentId, historyVersion, onRunStarted, onThreadChanged, selectedThreadId]);
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, artifactIds: readonly string[] = []) => {
       const agent = agentRef.current;
       if (agent === null) {
+        return;
+      }
+
+      const content = buildMessageWithArtifacts(text, artifactIds);
+      if (!content) {
         return;
       }
 
@@ -346,7 +466,7 @@ export function useAguiRuntime({
       const userMessage: ThreadMessageLike = {
         id: userMessageId,
         role: "user",
-        content: [{ type: "text", text } satisfies TextMessagePart],
+        content: [{ type: "text", text: content } satisfies TextMessagePart],
         createdAt: new Date(),
       };
 
@@ -356,7 +476,7 @@ export function useAguiRuntime({
       agent.addMessage({
         id: userMessageId,
         role: "user",
-        content: text,
+        content,
       });
       setMessages((current) => [...current, userMessage]);
       setIsRunning(true);
@@ -364,9 +484,12 @@ export function useAguiRuntime({
       try {
         await agent.runAgent(undefined, {
           onRunStartedEvent: ({ event }) => {
+            activeRunIdRef.current = event.runId;
+            lastRunIdRef.current = event.runId;
             onRunStarted?.(event.runId);
             if (event.threadId !== undefined) {
               agent.threadId = event.threadId;
+              latestThreadIdRef.current = event.threadId;
               onThreadChanged?.(event.threadId);
             }
           },
@@ -381,21 +504,32 @@ export function useAguiRuntime({
             // Errors surface through the message snapshot; no extra handling needed.
           },
           onRunFinishedEvent: () => {
+            activeRunIdRef.current = null;
             setIsRunning(false);
+            refreshHistory();
             onRunFinalized?.();
           },
         });
       } catch {
-        setIsRunning(false);
-        onRunFinalized?.();
+        const runId = activeRunIdRef.current;
+        if (runId === null) {
+          setIsRunning(false);
+          onRunFinalized?.();
+          return;
+        }
+        // The server run outlives the SSE response. Preserve that contract on
+        // mobile/background disconnects by recovering from durable Run state.
+        void recoverRunRef.current?.(runId);
       }
     },
-    [onRunFinalized, onRunStarted, onThreadChanged],
+    [onRunFinalized, onRunStarted, onThreadChanged, refreshHistory],
   );
 
   // HITL resume: consume `/api/runs/{runId}/stream` and merge into the same store.
   const resumeRun = useCallback(
     async (runId: string, anchorMessageId: string): Promise<boolean> => {
+      activeRunIdRef.current = runId;
+      setIsRunning(true);
       try {
         const response = await fetch(`/api/runs/${runId}/stream`, { cache: "no-store" });
         if (response.status !== 200 || response.body === null) {
@@ -403,6 +537,7 @@ export function useAguiRuntime({
         }
 
         const reasoningBuffers = new Map<string, string>();
+        const textBuffers = new Map<string, string>();
         let sawTerminal = false;
 
         await readAguiEventStream(response.body, (event: AguiStreamEvent) => {
@@ -422,9 +557,21 @@ export function useAguiRuntime({
                 );
                 const buffer = reasoningBuffers.get(messageId) ?? "";
                 setMessages((current) => {
-                  const index = current.findIndex((m) => m.id === anchorMessageId);
+                  const index =
+                    anchorMessageId === ""
+                      ? current.length - 1
+                      : current.findIndex((m) => m.id === anchorMessageId);
                   if (index === -1) {
-                    return current;
+                    return [
+                      ...current,
+                      {
+                        id: messageId,
+                        role: "assistant",
+                        content: [
+                          { type: "reasoning", text: buffer } satisfies ReasoningMessagePart,
+                        ],
+                      },
+                    ];
                   }
                   const next = [...current];
                   const existing = next[index];
@@ -449,6 +596,73 @@ export function useAguiRuntime({
               }
               break;
             }
+            case "TOOL_CALL_ARGS": {
+              const toolCallId = event.toolCallId;
+              if (toolCallId !== undefined) {
+                setMessages((current) => {
+                  const index = current.length - 1;
+                  const existing = index < 0 ? undefined : current[index];
+                  const part: ToolCallMessagePart = {
+                    type: "tool-call",
+                    toolCallId,
+                    toolName: event.toolCallName ?? "tool",
+                    args: {},
+                    argsText: event.delta ?? "",
+                  };
+                  if (existing?.role !== "assistant") {
+                    return [
+                      ...current,
+                      { id: `resume-${toolCallId}`, role: "assistant", content: [part] },
+                    ];
+                  }
+                  const content = Array.isArray(existing.content) ? [...existing.content] : [];
+                  const partIndex = content.findIndex(
+                    (item) =>
+                      typeof item !== "string" &&
+                      item.type === "tool-call" &&
+                      item.toolCallId === toolCallId,
+                  );
+                  if (partIndex === -1) content.push(part);
+                  else {
+                    const previous = content[partIndex] as ToolCallMessagePart;
+                    content[partIndex] = {
+                      ...previous,
+                      argsText: `${previous.argsText ?? ""}${event.delta ?? ""}`,
+                    };
+                  }
+                  const next = [...current];
+                  next[index] = { ...existing, content };
+                  return next;
+                });
+              }
+              break;
+            }
+            case "TEXT_MESSAGE_START": {
+              const messageId = event.messageId;
+              if (messageId !== undefined) {
+                textBuffers.set(messageId, "");
+                setMessages((current) => [
+                  ...current,
+                  { id: messageId, role: "assistant", content: [{ type: "text", text: "" }] },
+                ]);
+              }
+              break;
+            }
+            case "TEXT_MESSAGE_CONTENT": {
+              const messageId = event.messageId;
+              if (messageId !== undefined) {
+                const text = (textBuffers.get(messageId) ?? "") + (event.delta ?? "");
+                textBuffers.set(messageId, text);
+                setMessages((current) =>
+                  current.map((message) =>
+                    message.id === messageId
+                      ? { ...message, content: [{ type: "text", text } satisfies TextMessagePart] }
+                      : message,
+                  ),
+                );
+              }
+              break;
+            }
             case "RUN_ERROR": {
               sawTerminal = true;
               break;
@@ -463,6 +677,8 @@ export function useAguiRuntime({
         });
 
         setIsRunning(false);
+        activeRunIdRef.current = null;
+        refreshHistory();
         onRunFinalized?.();
         return sawTerminal;
       } catch {
@@ -471,17 +687,52 @@ export function useAguiRuntime({
         return false;
       }
     },
-    [onRunFinalized],
+    [onRunFinalized, refreshHistory],
   );
+
+  const recoverRun = useCallback(
+    async (runId: string) => {
+      if (recoveryInFlightRef.current) return;
+      recoveryInFlightRef.current = true;
+      setIsRunning(true);
+      try {
+        for (let attempt = 0; attempt < RECOVERY_MAX_ATTEMPTS; attempt += 1) {
+          const response = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
+          const state: unknown = response.ok ? await response.json().catch(() => null) : null;
+          const status = isRecord(state) && typeof state.status === "string" ? state.status : null;
+          if (status === "waiting_approval" || (status !== null && !isActiveRunStatus(status))) {
+            refreshHistory();
+            return;
+          }
+          const delay = RECOVERY_DELAYS_MS[attempt] ?? RECOVERY_DELAYS_MS.at(-1)!;
+          await new Promise<void>((resolve) => window.setTimeout(resolve, delay));
+        }
+      } finally {
+        activeRunIdRef.current = null;
+        setIsRunning(false);
+        refreshHistory();
+        onRunFinalized?.();
+        recoveryInFlightRef.current = false;
+      }
+    },
+    [onRunFinalized, refreshHistory],
+  );
+
+  useEffect(() => {
+    recoverRunRef.current = recoverRun;
+  }, [recoverRun]);
 
   // The `onNew` handler assistant-ui calls when the user submits the composer.
   const onNew = useCallback(
     async (message: AppendMessage) => {
       const text = message.content.find((part) => part.type === "text")?.text ?? "";
-      if (text.trim() === "") {
+      const artifactIds = (message.attachments ?? [])
+        .map((attachment) => artifactIdsRef.current.get(attachment.id))
+        .filter((artifactId): artifactId is string => artifactId !== undefined);
+      if (text.trim() === "" && artifactIds.length === 0) {
         return;
       }
-      await send(text);
+      await send(text, artifactIds);
     },
     [send],
   );
@@ -490,7 +741,18 @@ export function useAguiRuntime({
     messages,
     isRunning,
     isLoading,
+    historyVersion,
     onNew,
     resumeRun,
+    refreshHistory,
+    attachmentAdapter,
+    sendText: async (text: string) => send(text),
+    cancelRun: async () => {
+      const runId = activeRunIdRef.current;
+      if (runId !== null) {
+        await fetch(`/api/runs/${runId}/cancel`, { method: "POST", keepalive: true });
+      }
+      agentRef.current?.abortRun();
+    },
   };
 }

@@ -8,35 +8,35 @@
 
 ## 组件对照表
 
-| 自研组件（已替换） | assistant-ui 组件 | 说明 |
-|---|---|---|
-| `ThinkingStepCard` | `Reasoning`（`elements/reasoning.aui.tsx`） | 思考折叠，门槛低于自研 |
-| `ToolCallCard` | `ToolGroup` / `ToolFallback`（`elements/tool-group.aui.tsx`） | 工具调用卡片 |
-| `AssistantMarkdown` | `MarkdownText`（`elements/markdown-text.aui.tsx`） | Markdown 渲染 |
-| 自研 composer（textarea + 发送） | `Thread` 内置 `ComposerPrimitive` | 流式输入 / 附件 / 发送 |
-| 自研消息列表（滚动 + 气泡） | `Thread` 内置 `MessagePrimitive` | 自动滚动、分组 |
+| 自研组件（已替换）               | assistant-ui 组件                                             | 说明                   |
+| -------------------------------- | ------------------------------------------------------------- | ---------------------- |
+| `ThinkingStepCard`               | `Reasoning`（`elements/reasoning.aui.tsx`）                   | 思考折叠，门槛低于自研 |
+| `ToolCallCard`                   | `ToolGroup` / `ToolFallback`（`elements/tool-group.aui.tsx`） | 工具调用卡片           |
+| `AssistantMarkdown`              | `MarkdownText`（`elements/markdown-text.aui.tsx`）            | Markdown 渲染          |
+| 自研 composer（textarea + 发送） | `Thread` 内置 `ComposerPrimitive`                             | 流式输入 / 附件 / 发送 |
+| 自研消息列表（滚动 + 气泡）      | `Thread` 内置 `MessagePrimitive`                              | 自动滚动、分组         |
 
-| 领域组件（保留自研） | 原因 |
-|---|---|
-| `ApprovalPanel` | HITL 审批（`case_slot_collect` 资料补充、approve/deny）assistant-ui 无对应 |
-| `ConversationList` | 后端 `/api/threads` 领域元数据（pinned / 定时任务 / 处理中 / 等待确认角标）无法被 `ThreadList` 对等表达 |
-| `SandboxFilePreviewPane` / `UploadPreviewPane` | sandbox 文件预览、附件 artifact 协议，assistant-ui 无对应 |
-| `PendingCaseFactsBanner` / `SessionStatsBar` | case 事实横幅、运行统计，assistant-ui 无对应 |
-| 语音输入 / 附件上传逻辑 | 领域能力（`/api/audio`、`artifact_id` 协议） |
+| 领域组件（保留自研）                           | 原因                                                                                                    |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `ApprovalPanel`                                | HITL 审批（`case_slot_collect` 资料补充、approve/deny）assistant-ui 无对应                              |
+| `ConversationList`                             | 后端 `/api/threads` 领域元数据（pinned / 定时任务 / 处理中 / 等待确认角标）无法被 `ThreadList` 对等表达 |
+| `SandboxFilePreviewPane` / `UploadPreviewPane` | sandbox 文件预览、附件 artifact 协议，作为 ToolFallback 插槽使用                                        |
+| `PendingCaseFactsBanner` / `SessionStatsBar`   | case 事实横幅、运行统计，保留在 workspace/thread 外壳                                                   |
+| 语音输入 / 附件上传逻辑                        | 领域能力（`/api/audio`、`artifact_id` 协议），由 runtime adapter 承接                                   |
 
 ## AG-UI 事件 → assistant-ui MessagePart 映射
 
 adapter 在 `apps/web/src/lib/agui-runtime.ts`，事件解析在 `apps/web/src/lib/agui-events.ts`。
 
-| AG-UI 事件 | assistant-ui part | 说明 |
-|---|---|---|
-| `TEXT_MESSAGE_START` / `TEXT_MESSAGE_CONTENT` | `TextMessagePart` | 流式文本，`onMessagesChanged` 快照整体写入 |
-| `REASONING_START` | `ReasoningMessagePart`（空文本起步） | 思考 step 折叠 |
-| `REASONING_MESSAGE_CONTENT` | `ReasoningMessagePart.text` | 增量追加 |
-| `TOOL_CALL_START` / `TOOL_CALL_ARGS` | `ToolCallMessagePart`（`args` streaming） | 工具调用 |
-| `TOOL_CALL_RESULT` | `ToolCallMessagePart.result` / `isError` | 工具结果 |
-| `RUN_ERROR` / `RUN_FINISHED` | `isRunning=false` + `onRunFinalized` | 终态 |
-| HITL resume `/api/runs/{id}/stream` | 同上，`resumeRun(runId, anchorId)` 合并进同一 store | 续跑流 |
+| AG-UI 事件                                    | assistant-ui part                                   | 说明                                       |
+| --------------------------------------------- | --------------------------------------------------- | ------------------------------------------ |
+| `TEXT_MESSAGE_START` / `TEXT_MESSAGE_CONTENT` | `TextMessagePart`                                   | 流式文本，`onMessagesChanged` 快照整体写入 |
+| `REASONING_START`                             | `ReasoningMessagePart`（空文本起步）                | 思考 step 折叠                             |
+| `REASONING_MESSAGE_CONTENT`                   | `ReasoningMessagePart.text`                         | 增量追加                                   |
+| `TOOL_CALL_START` / `TOOL_CALL_ARGS`          | `ToolCallMessagePart`（`args` streaming）           | 工具调用                                   |
+| `TOOL_CALL_RESULT`                            | `ToolCallMessagePart.result` / `isError`            | 工具结果                                   |
+| `RUN_ERROR` / `RUN_FINISHED`                  | `isRunning=false` + `onRunFinalized`                | 终态                                       |
+| HITL resume `/api/runs/{id}/stream`           | 同上，`resumeRun(runId, anchorId)` 合并进同一 store | 续跑流；终态后重读持久化历史               |
 
 ## 关键决策
 
@@ -60,15 +60,11 @@ adapter 在 `apps/web/src/lib/agui-runtime.ts`，事件解析在 `apps/web/src/l
 
 `components/assistant-ui/*` 与 `hooks/use-attachment-src.ts` 是 shadcn registry 生成的第三方代码，与仓库严格 eslint 规则（`react-hooks/set-state-in-effect` 等）冲突，已加文件级 `/* eslint-disable */`。
 
-## 回滚点
+## 领域桥接
 
-| Commit | 内容 | 回滚方式 |
-|---|---|---|
-| `e750860` | adapter 初版（agui-events / agui-runtime / assistant-thread 引入） | 基线 |
-| `2b1229e` + `874459c` | 真实类型化 + assistant-ui 组件 + tooltip 替换 + 依赖 | 回退到 e750860 前的挂载形态 |
-| `c99ab7f` | `ChatWorkspace` 挂载点切到 `AssistantThread` | `git revert c99ab7f` 一行切回 `ChatPanel` |
+- `useAguiRuntime` 的 Attachment Adapter 限制输入为 PDF/PNG/JPEG/WebP，发送时先为新会话创建 Thread，再上传到 `/api/uploads`，最终仍把 `artifact_id=<uuid>` 注入 AG-UI 用户消息。组件库只保存附件的交互状态，不替换 AgentOS 的 owner-scoped Artifact 协议。
+- 原有的浏览器录音继续调用 `/api/audio/transcriptions`，转写成功后以普通用户消息送入同一个 AG-UI run；Web Speech Dictation 仅作为 composer 的辅助输入能力。
+- 初始 SSE 意外断开时，adapter 查询 Run 状态并在后台轮询；HITL resume 优先消费 per-run stream，无法订阅或结束后都刷新持久化 Thread 历史。定时任务 Thread 没有浏览器 SSE，保持可见时每 5 秒刷新历史。
+- `AgentOsToolFallback` 是 assistant-ui ToolFallback 插槽。它复用既有 ToolCallCard、sandbox 文件和上传 artifact 预览，不重建消息列表或工具分组。
 
-## 后续
-
-- `ChatPanel` 仍保留在代码树（未删除），待 composer 定制（附件/语音/agent 选择）确认后决定去留
-- `docs/18` 自建组件集中仍被引用的部分（`approval-panel` / `conversation-list` / 语音 hook）继续维护
+`ChatPanel` 已在迁移中删除；它不再是回滚目标。以后调整生成的 `components/assistant-ui/*` 文件必须通过 assistant-ui registry 重新生成，领域协议继续放在 `components/chat/*` 与 `lib/agui-runtime.ts`。
