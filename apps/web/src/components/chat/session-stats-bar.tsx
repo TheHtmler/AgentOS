@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CircleGauge } from "lucide-react";
 
-import { ComposerContext } from "@/components/assistant-ui/elements/composer";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type ThreadStats = {
   last_run: {
@@ -50,17 +51,52 @@ export function ComposerContextUsage({
   const inputTokens = stats?.last_run?.input_tokens;
   const contextWindow = stats?.last_run?.context_window;
   if (inputTokens === null || inputTokens === undefined || !contextWindow) return null;
+  const usagePct = Math.min(100, Math.round((inputTokens / contextWindow) * 100));
 
   return (
-    <ComposerContext
-      usage={{
-        system: 0,
-        tools: 0,
-        messages: inputTokens / 1_000,
-        total: contextWindow / 1_000,
-      }}
-      className="z-30 shrink-0"
-      aria-label={`最近一轮输入 ${inputTokens} / ${contextWindow} tokens`}
-    />
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`最近一轮输入 ${inputTokens} / ${contextWindow} tokens`}
+          className="relative flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          <CircleGauge className={usagePct > 85 ? "size-4 text-destructive" : "size-4"} />
+          <span className="sr-only">上下文占用 {usagePct}%</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" sideOffset={8} className="z-50 w-60 rounded-xl p-4">
+        <div className="flex items-baseline justify-between">
+          <p className="text-sm font-medium">上下文</p>
+          <p
+            className={
+              usagePct > 85
+                ? "text-sm text-destructive tabular-nums"
+                : "text-sm text-muted-foreground tabular-nums"
+            }
+          >
+            {usagePct}%
+          </p>
+        </div>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+          <div
+            className={usagePct > 85 ? "h-full bg-destructive" : "h-full bg-primary"}
+            style={{ width: `${usagePct}%` }}
+          />
+        </div>
+        <dl className="mt-3 grid gap-2 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-muted-foreground">最近一轮输入</dt>
+            <dd className="font-mono text-xs tabular-nums">{(inputTokens / 1_000).toFixed(1)}k</dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-muted-foreground">上下文窗口</dt>
+            <dd className="font-mono text-xs tabular-nums">
+              {(contextWindow / 1_000).toFixed(0)}k
+            </dd>
+          </div>
+        </dl>
+      </PopoverContent>
+    </Popover>
   );
 }
