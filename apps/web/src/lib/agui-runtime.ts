@@ -12,6 +12,8 @@ import type {
   AttachmentAdapter,
   AppendMessage,
   CompleteAttachment,
+  FileMessagePart,
+  ImageMessagePart,
   PendingAttachment,
   ReasoningMessagePart,
   TextMessagePart,
@@ -27,6 +29,8 @@ const UPLOAD_ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,imag
 const RECOVERY_DELAYS_MS = [1_000, 2_000, 5_000] as const;
 const RECOVERY_MAX_ATTEMPTS = 60;
 const ARTIFACT_ID_LINE_RE = /(?:^|\n)\s*artifact_id\s*=\s*[0-9a-f-]{36}\s*(?=\n|$)/gi;
+
+type UploadedArtifact = { id: string; mimeType: string; title: string };
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -374,7 +378,7 @@ export function useAguiRuntime({
   const activeRunIdRef = useRef<string | null>(null);
   const lastRunIdRef = useRef<string | null>(null);
   const latestThreadIdRef = useRef<string | null>(selectedThreadId ?? null);
-  const artifactIdsRef = useRef(new Map<string, string>());
+  const artifactIdsRef = useRef(new Map<string, UploadedArtifact>());
   const recoveryInFlightRef = useRef(false);
   const recoverRunRef = useRef<((runId: string) => Promise<void>) | null>(null);
   const callbacksRef = useRef({
@@ -456,7 +460,12 @@ export function useAguiRuntime({
         ) {
           throw new Error("附件上传失败，请检查格式或文件大小后重试。");
         }
-        artifactIdsRef.current.set(attachment.id, payload.artifact_id);
+        artifactIdsRef.current.set(attachment.id, {
+          id: payload.artifact_id,
+          mimeType:
+            typeof payload.mime_type === "string" ? payload.mime_type : attachment.file.type,
+          title: typeof payload.title === "string" ? payload.title : attachment.file.name,
+        });
         return {
           ...attachment,
           status: { type: "complete" },
@@ -550,13 +559,16 @@ export function useAguiRuntime({
   }, [agentId, historyVersion, selectedThreadId]);
 
   const send = useCallback(
-    async (text: string, artifactIds: readonly string[] = []) => {
+    async (text: string, artifacts: readonly UploadedArtifact[] = []) => {
       const agent = agentRef.current;
       if (agent === null) {
         return;
       }
 
-      const content = buildMessageWithArtifacts(text, artifactIds);
+      const content = buildMessageWithArtifacts(
+        text,
+        artifacts.map((artifact) => artifact.id),
+      );
       if (!content) {
         return;
       }
@@ -566,7 +578,24 @@ export function useAguiRuntime({
       const userMessage: ThreadMessageLike = {
         id: userMessageId,
         role: "user",
-        content: [{ type: "text", text: content } satisfies TextMessagePart],
+        content: [
+          { type: "text", text: userVisibleContent(content) } satisfies TextMessagePart,
+          ...artifacts.map((artifact) =>
+            artifact.mimeType.startsWith("image/")
+              ? ({
+                  type: "image",
+                  image: `/api/uploads/${artifact.id}/content`,
+                  filename: artifact.title,
+                } satisfies ImageMessagePart)
+              : ({
+                  type: "file",
+                  data: `/api/uploads/${artifact.id}/content`,
+                  mimeType: artifact.mimeType || "application/octet-stream",
+                  filename: artifact.title,
+                  sourceType: "url",
+                } satisfies FileMessagePart),
+          ),
+        ],
         createdAt: new Date(),
       };
 
@@ -821,13 +850,13 @@ export function useAguiRuntime({
   const onNew = useCallback(
     async (message: AppendMessage) => {
       const text = message.content.find((part) => part.type === "text")?.text ?? "";
-      const artifactIds = (message.attachments ?? [])
+      const artifacts = (message.attachments ?? [])
         .map((attachment) => artifactIdsRef.current.get(attachment.id))
-        .filter((artifactId): artifactId is string => artifactId !== undefined);
-      if (text.trim() === "" && artifactIds.length === 0) {
+        .filter((artifact): artifact is UploadedArtifact => artifact !== undefined);
+      if (text.trim() === "" && artifacts.length === 0) {
         return;
       }
-      await send(text, artifactIds);
+      await send(text, artifacts);
     },
     [send],
   );
