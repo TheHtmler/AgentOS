@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     history_max_runs: int = 4  # max runs in next context
     auth_session_ttl_days: int = 30
     auth_invite_ttl_minutes: int = 1_440
+    # Operational rows are not medical records. This worker never deletes Threads,
+    # messages, Case data, Artifacts, final Runs, or approval decisions.
+    data_cleanup_enabled: bool = True
+    data_cleanup_interval_seconds: int = 3_600
+    run_event_text_delta_retention_days: int = 7
     auth_admin_emails: str = ""
     # Ops console root (env-seeded; independent from AUTH_ADMIN_EMAILS / invite users).
     ops_root_username: str = "admin"
@@ -225,6 +230,14 @@ class Settings(BaseSettings):
     def auth_invite_ttl_minutes_must_be_positive(cls, value: int) -> int:
         if value < 1:
             raise ValueError("auth_invite_ttl_minutes must be at least 1")
+
+        return value
+
+    @field_validator("data_cleanup_interval_seconds", "run_event_text_delta_retention_days")
+    @classmethod
+    def cleanup_limits_must_be_positive(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("data cleanup intervals must be at least 1")
 
         return value
 

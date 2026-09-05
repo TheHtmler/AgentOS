@@ -237,6 +237,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     app.state.runtime = runtime
 
+    from agent_api.data_cleanup import data_cleanup_loop
     from agent_api.db.chat_store import fail_orphaned_in_process_runs
     from agent_api.db.session import session_factory
     from agent_api.hitl_timeout import hitl_timeout_loop
@@ -285,6 +286,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         name="scheduled-task-dispatcher",
     )
     app.state.scheduled_task_scheduler = scheduled_task_scheduler
+    stop_data_cleanup = asyncio.Event()
+    data_cleanup_task = (
+        asyncio.create_task(
+            data_cleanup_loop(settings=settings, stop_event=stop_data_cleanup),
+            name="operational-data-cleanup",
+        )
+        if settings.data_cleanup_enabled
+        else None
+    )
     notification_worker = ScheduledNotificationWorker()
     notification_worker.start()
 
@@ -319,16 +329,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 yield
             finally:
                 stop_hitl_timeout.set()
+                stop_data_cleanup.set()
                 hitl_timeout_task.cancel()
                 await scheduled_task_scheduler.stop()
                 await notification_worker.stop()
                 scheduled_task_task.cancel()
                 if not warmup_task.done():
                     warmup_task.cancel()
+                if data_cleanup_task is not None:
+                    data_cleanup_task.cancel()
                 await asyncio.gather(
                     hitl_timeout_task,
                     scheduled_task_task,
                     warmup_task,
+                    *(() if data_cleanup_task is None else (data_cleanup_task,)),
                     return_exceptions=True,
                 )
                 await runtime.stop_background_runs()
