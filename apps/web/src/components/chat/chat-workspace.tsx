@@ -218,6 +218,10 @@ export function ChatWorkspace({
   }, [hasHydratedFromUrl]);
 
   const focusSlot = useCallback((slotKey: string, threadId: string | null) => {
+    // History loads complete asynchronously in mounted background slots. Update
+    // this ref before scheduling React state so their callbacks cannot reclaim
+    // the active Agent during a conversation/Agent switch.
+    visibleSlotKeyRef.current = slotKey;
     setActiveView("chat");
     setVisibleSlotKey(slotKey);
     setActiveThreadId(threadId);
@@ -314,11 +318,10 @@ export function ChatWorkspace({
         current.map((slot) => (slot.key === slotKey ? { ...slot, threadId } : slot)),
       );
 
-      if (agentId !== undefined) {
-        setSelectedAgentId(agentId);
-      }
-
       if (slotKey === visibleSlotKeyRef.current) {
+        if (agentId !== undefined) {
+          setSelectedAgentId(agentId);
+        }
         setActiveThreadId(threadId);
 
         if (threadId === null) {
