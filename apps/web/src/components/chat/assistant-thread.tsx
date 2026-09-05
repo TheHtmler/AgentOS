@@ -112,6 +112,7 @@ export function AssistantThread(props: AssistantThreadProps) {
 }
 
 function AssistantSurface({
+  selectedThreadId,
   isActive = true,
   onStreamingChanged,
   onAwaitingApprovalChanged,
@@ -126,6 +127,7 @@ function AssistantSurface({
 
   // AG-UI bridge: owns messages + isRunning, drives HttpAgent sends.
   const agui = useAguiRuntime({
+    selectedThreadId,
     agentId,
     onStreamingChanged,
     onThreadChanged,
@@ -177,6 +179,7 @@ function AssistantSurface({
   const runtime = useExternalStoreRuntime({
     messages: agui.messages,
     isRunning: agui.isRunning,
+    isLoading: agui.isLoading,
     onNew: agui.onNew,
     // Messages are already in ThreadMessageLike shape; no conversion needed.
     convertMessage: (message) => message,
