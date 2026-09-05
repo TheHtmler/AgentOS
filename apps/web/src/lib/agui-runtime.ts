@@ -47,7 +47,10 @@ function buildMessageWithArtifacts(text: string, artifactIds: readonly string[])
  * AG-UI `role: "tool"` messages (tool results) are skipped; tool results are
  * surfaced via `ToolCallMessagePart.result` on the preceding assistant message.
  */
-export function convertAguiMessage(message: Message): ThreadMessageLike | null {
+export function convertAguiMessage(
+  message: Message,
+  toolResults: ReadonlyMap<string, unknown> = new Map(),
+): ThreadMessageLike | null {
   const { id, role } = message;
 
   if (role === "tool") {
@@ -87,16 +90,34 @@ export function convertAguiMessage(message: Message): ThreadMessageLike | null {
           toolName?: unknown;
           args?: unknown;
           input?: unknown;
+          function?: { name?: unknown; arguments?: unknown };
           result?: unknown;
           status?: unknown;
         };
+        const argsText =
+          typeof record.function?.arguments === "string"
+            ? record.function.arguments
+            : JSON.stringify(record.args ?? record.input ?? {});
+        let args: ToolCallMessagePart["args"] = (record.args ??
+          record.input ??
+          {}) as ToolCallMessagePart["args"];
+        try {
+          args = JSON.parse(argsText) as ToolCallMessagePart["args"];
+        } catch {
+          // Partial streaming arguments are still useful as raw text.
+        }
+        const toolCallId = String(record.id ?? record.toolName ?? "");
         content.push({
           type: "tool-call",
-          toolCallId: String(record.id ?? record.toolName ?? ""),
-          toolName: String(record.name ?? record.toolName ?? "tool"),
-          args: (record.args ?? record.input ?? {}) as ToolCallMessagePart["args"],
-          argsText: JSON.stringify(record.args ?? record.input ?? {}),
-          ...(record.result !== undefined ? { result: record.result } : {}),
+          toolCallId,
+          toolName: String(record.name ?? record.toolName ?? record.function?.name ?? "tool"),
+          args,
+          argsText,
+          ...(record.result !== undefined
+            ? { result: record.result }
+            : toolResults.has(toolCallId)
+              ? { result: toolResults.get(toolCallId) }
+              : {}),
           ...(record.status === "error" ? { isError: true } : {}),
         } as ThreadMessageLike["content"][number]);
       }
@@ -108,6 +129,19 @@ export function convertAguiMessage(message: Message): ThreadMessageLike | null {
     role: role === "user" ? "user" : "assistant",
     content: content as ThreadMessageLike["content"],
   };
+}
+
+function convertAguiMessages(messages: readonly Message[]): ThreadMessageLike[] {
+  const results = new Map<string, unknown>();
+  for (const message of messages) {
+    if (message.role === "tool") {
+      const record = message as Message & { toolCallId?: unknown };
+      if (typeof record.toolCallId === "string") results.set(record.toolCallId, message.content);
+    }
+  }
+  return messages
+    .map((message) => convertAguiMessage(message, results))
+    .filter((item): item is ThreadMessageLike => item !== null);
 }
 
 // ---------------------------------------------------------------------------
@@ -477,11 +511,7 @@ export function useAguiRuntime({
         }
         agentRef.current = createAgent(history.thread_id, agentMessages, agentId);
         latestThreadIdRef.current = history.thread_id;
-        setMessages(
-          displayMessages
-            .map(convertAguiMessage)
-            .filter((item): item is ThreadMessageLike => item !== null),
-        );
+        setMessages(convertAguiMessages(displayMessages));
         callbacksRef.current.onThreadChanged?.(history.thread_id, history.agent_id);
         if (history.latest_run !== null) {
           lastRunIdRef.current = history.latest_run.id;
@@ -550,11 +580,7 @@ export function useAguiRuntime({
             }
           },
           onMessagesChanged: ({ messages: nextMessages }) => {
-            setMessages(
-              nextMessages
-                .map(convertAguiMessage)
-                .filter((item): item is ThreadMessageLike => item !== null),
-            );
+            setMessages(convertAguiMessages(nextMessages));
           },
           onRunErrorEvent: () => {
             // Errors surface through the message snapshot; no extra handling needed.
@@ -562,7 +588,6 @@ export function useAguiRuntime({
           onRunFinishedEvent: () => {
             activeRunIdRef.current = null;
             setIsRunning(false);
-            refreshHistory();
             callbacksRef.current.onRunFinalized?.();
           },
         });
