@@ -26,6 +26,7 @@ import { isActiveRunStatus } from "@/lib/run-recovery";
 const UPLOAD_ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp";
 const RECOVERY_DELAYS_MS = [1_000, 2_000, 5_000] as const;
 const RECOVERY_MAX_ATTEMPTS = 60;
+const ARTIFACT_ID_LINE_RE = /(?:^|\n)\s*artifact_id\s*=\s*[0-9a-f-]{36}\s*(?=\n|$)/gi;
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -36,6 +37,16 @@ function buildMessageWithArtifacts(text: string, artifactIds: readonly string[])
   const trimmed = text.trim();
   if (lines.length === 0) return trimmed;
   return trimmed ? `${trimmed}\n\n${lines.join("\n")}` : lines.join("\n");
+}
+
+function userVisibleContent(content: string): string {
+  const artifactCount = [...content.matchAll(ARTIFACT_ID_LINE_RE)].length;
+  if (artifactCount === 0) return content;
+  const text = content
+    .replace(ARTIFACT_ID_LINE_RE, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return text || `已上传 ${artifactCount} 个附件`;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,7 +71,10 @@ export function convertAguiMessage(
   const content: ThreadMessageLike["content"][number][] = [];
 
   if (typeof message.content === "string") {
-    content.push({ type: "text", text: message.content } satisfies TextMessagePart);
+    content.push({
+      type: "text",
+      text: role === "user" ? userVisibleContent(message.content) : message.content,
+    } satisfies TextMessagePart);
   } else if (Array.isArray(message.content)) {
     for (const part of message.content) {
       if (typeof part === "string") {
