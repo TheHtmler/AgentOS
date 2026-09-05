@@ -284,9 +284,9 @@ const APPROVED_RESULT = "Approved by user";
 const DENIED_RESULT = "User denied tool execution";
 
 const APPROVAL_OPTION_DEFAULT_LABELS: Record<string, string> = {
-  "allow-once": "Allow",
+  "allow-once": "允许",
   "allow-always": "Always allow",
-  "reject-once": "Deny",
+  "reject-once": "拒绝",
   "reject-always": "Always deny",
 };
 
@@ -529,7 +529,7 @@ function ToolFallbackApproval({
               onClick={() => respond(false)}
               disabled={submitted}
             >
-              Deny
+              拒绝
             </Button>
           )}
         </div>
@@ -564,7 +564,7 @@ function ToolFallbackApproval({
       {promptText}
       <div className="flex items-center gap-2">
         <Button size="sm" className={pressable} onClick={() => respond(true)} disabled={submitted}>
-          Allow
+          允许
         </Button>
         <Button
           size="sm"
@@ -573,7 +573,7 @@ function ToolFallbackApproval({
           onClick={() => respond(false)}
           disabled={submitted}
         >
-          Deny
+          拒绝
         </Button>
       </div>
       {answerField}

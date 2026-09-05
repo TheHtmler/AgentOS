@@ -229,7 +229,9 @@ export function ConversationList({
       : conversations;
 
     return groupConversations(
-      pinnedOnly ? filtered.filter((conversation) => conversation.is_pinned) : filtered,
+      pinnedOnly
+        ? filtered.filter((conversation) => conversation.is_pinned)
+        : filtered.filter((conversation) => !conversation.is_pinned),
     );
   }, [conversations, pinnedOnly, query]);
 
@@ -407,13 +409,10 @@ export function ConversationList({
       ) : (
         <nav
           aria-label="最近会话"
-          className="agentos-conversation-list-scroll min-h-0 max-w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
+          className="agentos-conversation-list-scroll min-h-0 max-w-full min-w-0 flex-1 overflow-y-auto"
         >
           {groups.map((group) => (
-            <section
-              key={group.label}
-              className="agentos-conversation-group max-w-full min-w-0 overflow-x-hidden"
-            >
+            <section key={group.label} className="agentos-conversation-group max-w-full min-w-0">
               <p className="agentos-conversation-group-label">{group.label}</p>
               {group.conversations.map((conversation) => {
                 const active = conversation.id === activeThreadId;
@@ -426,7 +425,7 @@ export function ConversationList({
                 return (
                   <div
                     key={conversation.id}
-                    className={`agentos-conversation-item max-w-full min-w-0 overflow-x-hidden ${active ? "is-active" : ""}`}
+                    className={`agentos-conversation-item max-w-full min-w-0 ${active ? "is-active" : ""}`}
                   >
                     {isRenaming ? (
                       <form
@@ -459,16 +458,16 @@ export function ConversationList({
                         </button>
                       </form>
                     ) : (
-                      <div className="agentos-conversation-row max-w-full min-w-0 overflow-x-hidden">
+                      <div className="agentos-conversation-row max-w-full min-w-0">
                         <button
                           type="button"
                           onClick={() => onSelectThread(conversation)}
                           disabled={isBusy}
                           aria-current={active ? "page" : undefined}
-                          className="agentos-conversation-button max-w-full min-w-0 overflow-x-hidden disabled:cursor-not-allowed"
+                          className="agentos-conversation-button max-w-full min-w-0 disabled:cursor-not-allowed"
                         >
-                          <div className="agentos-conversation-title-row max-w-full min-w-0 overflow-x-hidden">
-                            <p className="agentos-conversation-title max-w-full min-w-0 overflow-x-hidden">
+                          <div className="agentos-conversation-title-row max-w-full min-w-0">
+                            <p className="agentos-conversation-title max-w-full min-w-0">
                               {conversation.scheduled_task_id ? (
                                 <span
                                   title={

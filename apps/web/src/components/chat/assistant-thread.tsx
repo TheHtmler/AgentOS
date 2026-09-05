@@ -12,12 +12,7 @@
  * `ChatWorkspace` can switch mount points with a one-line change.
  */
 
-import {
-  AssistantRuntimeProvider,
-  type DictationAdapter,
-  useExternalStoreRuntime,
-  WebSpeechDictationAdapter,
-} from "@assistant-ui/react";
+import { AssistantRuntimeProvider, useExternalStoreRuntime } from "@assistant-ui/react";
 import { Mic, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
@@ -98,7 +93,6 @@ type AssistantThreadProps = {
   selectedThreadId: string | null | undefined;
   agentId: string | null;
   isActive?: boolean;
-  isScheduledTaskThread?: boolean;
   onStreamingChanged: (isStreaming: boolean) => void;
   onAwaitingApprovalChanged?: (isAwaiting: boolean) => void;
   onThreadChanged: (threadId: string | null, agentId?: string) => void;
@@ -208,7 +202,6 @@ function VoiceTranscriptionButton({
 function AssistantSurface({
   selectedThreadId,
   isActive = true,
-  isScheduledTaskThread = false,
   onStreamingChanged,
   onAwaitingApprovalChanged,
   onThreadChanged,
@@ -232,17 +225,6 @@ function AssistantSurface({
       onRunStarted?.(runId);
     },
   });
-
-  useEffect(() => {
-    if (!isActive || !isScheduledTaskThread || selectedThreadId === null || agui.isRunning) {
-      return;
-    }
-
-    // Scheduled runs are initiated server-side, so this mounted thread has no
-    // browser SSE to update it. Poll durable history while it is visible.
-    const timer = window.setInterval(agui.refreshHistory, 5_000);
-    return () => window.clearInterval(timer);
-  }, [agui.isRunning, agui.refreshHistory, isActive, isScheduledTaskThread, selectedThreadId]);
 
   // Load approval state when a run goes waiting_approval.
   useEffect(() => {
@@ -281,7 +263,6 @@ function AssistantSurface({
     [agui, approval.runId],
   );
 
-  const dictationAdapter = useMemo<DictationAdapter>(() => new WebSpeechDictationAdapter(), []);
   const runtime = useExternalStoreRuntime({
     messages: agui.messages,
     isRunning: agui.isRunning,
@@ -291,7 +272,7 @@ function AssistantSurface({
     convertMessage: (message) => message,
     onCancel: agui.cancelRun,
     onRefetchThread: async () => agui.refreshHistory(),
-    adapters: { attachments: agui.attachmentAdapter, dictation: dictationAdapter },
+    adapters: { attachments: agui.attachmentAdapter },
   });
 
   return (

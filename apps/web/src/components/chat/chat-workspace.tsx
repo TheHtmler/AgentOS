@@ -104,7 +104,6 @@ export function ChatWorkspace({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeView, setActiveView] = useState<"chat" | "scheduled" | "wechat">("chat");
   const [scheduledUnreadCount, setScheduledUnreadCount] = useState(0);
-  const [scheduledThreadIds, setScheduledThreadIds] = useState<Set<string>>(() => new Set());
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState(() => resolveSelectedAgentId(null, []));
   const [agentLoadError, setAgentLoadError] = useState<string | null>(null);
@@ -254,10 +253,6 @@ export function ChatWorkspace({
 
   const handleScheduledUnreadCountChange = useCallback((count: number) => {
     setScheduledUnreadCount(count);
-  }, []);
-
-  const handleScheduledThreadsChange = useCallback((threadIds: string[]) => {
-    setScheduledThreadIds(new Set(threadIds));
   }, []);
 
   const handleSelectThread = useCallback(
@@ -566,7 +561,6 @@ export function ChatWorkspace({
               agents={agents}
               onOpenThread={handleOpenTaskThread}
               onUnreadCountChange={handleScheduledUnreadCountChange}
-              onScheduledThreadsChange={handleScheduledThreadsChange}
             />
           </div>
           <div className={activeView === "wechat" ? "h-full min-h-0" : "hidden"}>
@@ -611,9 +605,6 @@ export function ChatWorkspace({
                               value={selectedAgentId}
                               onChange={handleSelectAgent}
                             />
-                          }
-                          isScheduledTaskThread={
-                            slot.threadId !== null && scheduledThreadIds.has(slot.threadId)
                           }
                           isActive={isActive}
                           onRunStarted={ignoreRunStarted}
