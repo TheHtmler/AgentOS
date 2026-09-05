@@ -216,31 +216,63 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
 }
 
 function historyToAguiMessages(history: ThreadHistory): Message[] {
-  const callsByMessageId = new Map<string, HistoryToolCall[]>();
+  const callsByAssistantMessageId = new Map<string, HistoryToolCall[]>();
+  const unpairedCallsByUserMessageId = new Map<string, HistoryToolCall[]>();
+
   for (const toolCall of history.tool_calls) {
-    const calls = callsByMessageId.get(toolCall.after_message_id) ?? [];
+    const userIndex = history.messages.findIndex(
+      (message) => message.id === toolCall.after_message_id,
+    );
+    const followingAssistant = history.messages
+      .slice(userIndex + 1)
+      .find((message) => message.role === "assistant" || message.role === "user");
+
+    if (followingAssistant?.role === "assistant") {
+      const calls = callsByAssistantMessageId.get(followingAssistant.id) ?? [];
+      calls.push(toolCall);
+      callsByAssistantMessageId.set(followingAssistant.id, calls);
+      continue;
+    }
+
+    const calls = unpairedCallsByUserMessageId.get(toolCall.after_message_id) ?? [];
     calls.push(toolCall);
-    callsByMessageId.set(toolCall.after_message_id, calls);
+    unpairedCallsByUserMessageId.set(toolCall.after_message_id, calls);
   }
 
-  return history.messages.map((message) => {
-    const toolCalls = callsByMessageId.get(message.id);
-    return {
+  const toToolCalls = (toolCalls: readonly HistoryToolCall[]) =>
+    toolCalls.map((toolCall) => ({
+      id: toolCall.id,
+      name: toolCall.tool_name,
+      args: toolCall.args,
+      result: toolCall.result,
+      status: toolCall.status,
+    }));
+
+  return history.messages.flatMap((message) => {
+    const toolCalls = callsByAssistantMessageId.get(message.id);
+    const converted: Message = {
       id: message.id,
       role: message.role,
       content: message.content,
-      ...(toolCalls === undefined
-        ? {}
-        : {
-            toolCalls: toolCalls.map((toolCall) => ({
-              id: toolCall.id,
-              name: toolCall.tool_name,
-              args: toolCall.args,
-              result: toolCall.result,
-              status: toolCall.status,
-            })),
-          }),
+      ...(toolCalls === undefined ? {} : { toolCalls: toToolCalls(toolCalls) }),
     } as Message;
+
+    const unpairedCalls = unpairedCallsByUserMessageId.get(message.id);
+    if (message.role !== "user" || unpairedCalls === undefined) {
+      return [converted];
+    }
+
+    // `after_message_id` deliberately anchors to the user turn in storage.
+    // assistant-ui accepts tool-call parts only on assistant messages.
+    return [
+      converted,
+      {
+        id: `history-tools-${message.id}`,
+        role: "assistant",
+        content: "",
+        toolCalls: toToolCalls(unpairedCalls),
+      } as unknown as Message,
+    ];
   });
 }
 
