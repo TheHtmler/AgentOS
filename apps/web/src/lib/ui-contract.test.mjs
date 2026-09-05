@@ -23,3 +23,9 @@ test("conversation actions use the shared DropdownMenu primitive", () => {
   assert.match(conversations, /@\/components\/ui\/dropdown-menu/);
   assert.doesNotMatch(conversations, /agentos-conversation-menu-button/);
 });
+
+test("assistant-ui message editing submits the revised query through AG-UI", () => {
+  const thread = source("components/chat/assistant-thread.tsx");
+  assert.match(thread, /onNew:\s*agui\.onNew/);
+  assert.match(thread, /onEdit:\s*agui\.onNew/);
+});

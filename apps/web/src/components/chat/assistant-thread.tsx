@@ -179,6 +179,9 @@ function AssistantSurface({
     isRunning: agui.isRunning,
     isLoading: agui.isLoading,
     onNew: agui.onNew,
+    // AgentOS persists messages as an append-only audit trail. An edited query
+    // is therefore submitted as the next user turn rather than mutating history.
+    onEdit: agui.onNew,
     // Messages are already in ThreadMessageLike shape; no conversion needed.
     convertMessage: (message) => message,
     onCancel: agui.cancelRun,
