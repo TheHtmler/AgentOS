@@ -117,7 +117,7 @@ async def continue_run_after_approval(
         profile = None
         if version is not None:
             try:
-                profile = await resolve_model_profile(session, version, settings)
+                profile = await resolve_model_profile(session, version)
             except ModelProviderUnavailableError:
                 logger.exception("model provider unavailable for resume run_id=%s", run_id)
         if thread is not None and version is not None:

@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from agent_api.agent import create_agent, create_ollama_http_client
+from agent_api.agent import create_model_http_client
+from model_profile import create_test_agent
 from agent_api.tools.search.router import SearchRouter
 from agent_api.tools.search.tool import AgentDeps, run_web_search
 from agent_api.tools.search.types import SearchProviderError, SearchResponse, SearchResult
@@ -121,13 +122,13 @@ async def test_run_web_search_rejects_non_host_domain() -> None:
 @pytest.mark.anyio
 async def test_create_agent_registers_web_search_when_enabled() -> None:
     router = SearchRouter([FakeProvider()])
-    async with create_ollama_http_client() as http_client:
-        enabled = create_agent(
+    async with create_model_http_client() as http_client:
+        enabled = create_test_agent(
             http_client,
             search_router=router,
             search_enabled=True,
         )
-        disabled = create_agent(
+        disabled = create_test_agent(
             http_client,
             search_router=router,
             search_enabled=False,
@@ -139,8 +140,8 @@ async def test_create_agent_registers_web_search_when_enabled() -> None:
 
 @pytest.mark.anyio
 async def test_create_agent_without_router_skips_tool() -> None:
-    async with create_ollama_http_client() as http_client:
-        agent = create_agent(http_client, search_router=None, search_enabled=True)
+    async with create_model_http_client() as http_client:
+        agent = create_test_agent(http_client, search_router=None, search_enabled=True)
 
     assert "web_search" not in _tool_names(agent)
 

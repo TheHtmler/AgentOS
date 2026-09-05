@@ -8,21 +8,16 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from pydantic_ai import Agent
-from pydantic_ai.models.ollama import OllamaModel
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
 from pydantic_ai.models.test import TestModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.agent import create_agent
-from agent_api.config import get_settings
 from agent_api.db.models import AgentVersion, ModelProvider
 from agent_api.db.provider_store import (
-    BUILTIN_LOCAL_PROVIDER_ID,
     ModelProviderUnavailableError,
     ResolvedModelProfile,
-    local_profile_from_settings,
     resolve_model_profile,
-    sync_builtin_local_provider,
 )
 from agent_api.runtime import AgentRuntime
 
@@ -40,11 +35,10 @@ _REMOTE_PROFILE = ResolvedModelProfile(
     max_concurrent_runs=4,
     supports_vision=False,
     supports_tools=True,
-    is_local=False,
 )
 
 
-def _version(provider_id: UUID | None = None) -> AgentVersion:
+def _version(provider_id: UUID) -> AgentVersion:
     """An unflushed version row; resolution only reads model_provider_id."""
 
     return AgentVersion(
@@ -67,7 +61,6 @@ def _remote_row(
     return ModelProvider(
         slug=f"remote-{uuid4().hex[:8]}",
         name="Remote fixture",
-        kind="remote",
         base_url="https://api.example.com/v1",
         api_key="sk-fixture-key",
         default_model="fixture-chat",
@@ -80,31 +73,7 @@ def _remote_row(
         supports_vision=False,
         supports_tools=supports_tools,
         enabled=enabled,
-        is_builtin=False,
     )
-
-
-def test_local_profile_mirrors_env_settings() -> None:
-    settings = get_settings()
-    profile = local_profile_from_settings(settings)
-
-    assert profile.is_local is True
-    assert profile.provider_id == BUILTIN_LOCAL_PROVIDER_ID
-    assert profile.model_name == settings.ollama_model
-    assert profile.base_url == settings.ollama_base_url
-    assert profile.context_window == settings.model_context_window
-    assert profile.max_output_tokens == settings.model_max_output_tokens
-    assert profile.max_concurrent_runs == settings.model_max_concurrent_runs
-    assert profile.supports_vision is True
-    assert profile.supports_tools is True
-
-
-@pytest.mark.anyio
-async def test_resolve_without_provider_uses_local(database_session: AsyncSession) -> None:
-    profile = await resolve_model_profile(database_session, _version(None), get_settings())
-
-    assert profile.is_local is True
-    assert profile.model_name == get_settings().ollama_model
 
 
 @pytest.mark.anyio
@@ -113,9 +82,8 @@ async def test_resolve_remote_provider(database_session: AsyncSession) -> None:
     database_session.add(row)
     await database_session.flush()
 
-    profile = await resolve_model_profile(database_session, _version(row.id), get_settings())
+    profile = await resolve_model_profile(database_session, _version(row.id))
 
-    assert profile.is_local is False
     assert profile.provider_id == row.id
     assert profile.model_name == "fixture-chat"
     assert profile.api_mode == "chat_completions"
@@ -127,7 +95,6 @@ async def test_resolve_remote_provider(database_session: AsyncSession) -> None:
     responses_profile = await resolve_model_profile(
         database_session,
         _version(responses_row.id),
-        get_settings(),
     )
     assert responses_profile.api_mode == "responses"
     assert profile.base_url == "https://api.example.com/v1"
@@ -145,7 +112,6 @@ async def test_resolve_remote_provider(database_session: AsyncSession) -> None:
     tools_disabled_profile = await resolve_model_profile(
         database_session,
         _version(tools_disabled_row.id),
-        get_settings(),
     )
     assert tools_disabled_profile.supports_tools is False
 
@@ -159,36 +125,15 @@ async def test_resolve_disabled_or_missing_provider_raises(
     await database_session.flush()
 
     with pytest.raises(ModelProviderUnavailableError):
-        await resolve_model_profile(database_session, _version(disabled.id), get_settings())
+        await resolve_model_profile(database_session, _version(disabled.id))
     with pytest.raises(ModelProviderUnavailableError):
-        await resolve_model_profile(database_session, _version(uuid4()), get_settings())
-
-
-@pytest.mark.anyio
-async def test_sync_builtin_local_provider_is_idempotent(database_session: AsyncSession) -> None:
-    settings = get_settings()
-    await sync_builtin_local_provider(database_session, settings)
-    await database_session.flush()
-    await sync_builtin_local_provider(database_session, settings)
-    await database_session.flush()
-
-    row = await database_session.get(ModelProvider, BUILTIN_LOCAL_PROVIDER_ID)
-    assert row is not None
-    assert row.slug == "local"
-    assert row.is_builtin is True
-    assert row.enabled is True
-    assert row.base_url == settings.ollama_base_url
-    assert row.default_model == settings.ollama_model
-    assert row.context_window == settings.model_context_window
+        await resolve_model_profile(database_session, _version(uuid4()))
 
 
 @pytest.mark.anyio
 async def test_create_agent_dispatches_on_api_mode() -> None:
     http_client = httpx.AsyncClient()
     try:
-        local_agent = create_agent(http_client)
-        assert isinstance(local_agent.model, OllamaModel)
-
         chat_agent = create_agent(http_client, model_profile=_REMOTE_PROFILE)
         assert isinstance(chat_agent.model, OpenAIChatModel)
 
@@ -213,9 +158,6 @@ async def test_semaphore_for_profile_split_by_provider() -> None:
         agent=Agent(TestModel(), deps_type=object, output_type=[str]),
         model_semaphore=asyncio.Semaphore(1),
     )
-
-    local = runtime.semaphore_for_profile(local_profile_from_settings(get_settings()))
-    assert local is runtime.model_semaphore
 
     remote_a = runtime.semaphore_for_profile(_REMOTE_PROFILE)
     assert remote_a is not runtime.model_semaphore

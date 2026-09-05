@@ -427,11 +427,11 @@ class AgentVersion(Base):
     # NULL = unrestricted (search every active KnowledgeBase, e.g. General);
     # a non-empty list scopes knowledge_search to just those slugs (verticals).
     knowledge_base_slugs: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
-    # NULL = built-in local provider (env-managed Ollama); a value pins this
-    # revision to one ops-managed ModelProvider row.
-    model_provider_id: Mapped[UUID | None] = mapped_column(
+    # Every Agent revision pins one externally hosted Provider.
+    model_provider_id: Mapped[UUID] = mapped_column(
         ForeignKey("model_providers.id", ondelete="RESTRICT"),
         index=True,
+        nullable=False,
     )
     # Runtime tuning knobs; NULL = inherit the env default of the same name.
     memory_recall_top_k: Mapped[int | None] = mapped_column(Integer)
@@ -450,16 +450,14 @@ class AgentVersion(Base):
 
 
 class ModelProvider(Base):
-    """One OpenAI-compatible chat endpoint (local Ollama or a remote API).
+    """One externally hosted OpenAI-compatible chat endpoint.
 
     ``api_key`` is write-only through the API: responses only expose a masked
-    preview. The built-in ``local`` row is synced from env settings on startup
-    and cannot be edited or deleted via Ops.
+    preview.
     """
 
     __tablename__ = "model_providers"
     __table_args__ = (
-        CheckConstraint("kind IN ('local', 'remote')", name="ck_model_providers_kind"),
         CheckConstraint(
             "api_mode IN ('chat_completions', 'responses')",
             name="ck_model_providers_api_mode",
@@ -473,7 +471,6 @@ class ModelProvider(Base):
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
-    kind: Mapped[str] = mapped_column(String(16), nullable=False)
     # OpenAI-compatible base URL ending in /v1.
     base_url: Mapped[str] = mapped_column(String(512), nullable=False)
     api_key: Mapped[str | None] = mapped_column(Text)
@@ -505,10 +502,6 @@ class ModelProvider(Base):
     )
     enabled: Mapped[bool] = mapped_column(
         server_default=text("true"),
-        nullable=False,
-    )
-    is_builtin: Mapped[bool] = mapped_column(
-        server_default=text("false"),
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -809,7 +802,7 @@ class KnowledgeChunk(Base):
         server_default=text("'{}'"),
         nullable=False,
     )
-    # Dense vector as JSON array (Ollama embeddings); null when embedding is off/failed.
+    # Dense vector as JSON array; null when embedding is off or failed.
     embedding: Mapped[list[float] | None] = mapped_column(JSONB)
     # Model that produced `embedding`; null for rows written before this column
     # existed. Compared against the configured model before use — cosine
@@ -940,7 +933,7 @@ class UserMemory(Base):
         server_default=text("'{}'"),
         nullable=False,
     )
-    # Dense vector as JSON array (Ollama embeddings); null when embedding is off/failed.
+    # Dense vector as JSON array; null when embedding is off or failed.
     embedding: Mapped[list[float] | None] = mapped_column(JSONB)
     # Model that produced `embedding`; null for rows written before this column
     # existed. Compared against the configured model before use — cosine

@@ -3,7 +3,8 @@ from typing import cast
 
 import pytest
 
-from agent_api.agent import create_agent, create_ollama_http_client
+from agent_api.agent import create_model_http_client
+from model_profile import create_test_agent
 from agent_api.tools.growth.sd_table import SdRow, SdValues, value_to_z_sd_table
 from agent_api.tools.growth.tool import run_growth_assess, z_to_percentile
 from agent_api.tools.search.tool import AgentDeps
@@ -126,8 +127,8 @@ async def test_run_growth_assess_rejects_unknown_standard() -> None:
 
 @pytest.mark.anyio
 async def test_create_agent_registers_growth_assess_without_routers() -> None:
-    async with create_ollama_http_client() as http_client:
-        enabled = create_agent(
+    async with create_model_http_client() as http_client:
+        enabled = create_test_agent(
             http_client,
             search_router=None,
             fetch_router=None,
@@ -136,7 +137,7 @@ async def test_create_agent_registers_growth_assess_without_routers() -> None:
             search_enabled=False,
             fetch_enabled=False,
         )
-        disabled = create_agent(
+        disabled = create_test_agent(
             http_client,
             growth_enabled=False,
             knowledge_enabled=False,

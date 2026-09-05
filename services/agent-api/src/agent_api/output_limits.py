@@ -8,8 +8,8 @@ from pydantic_ai.messages import ModelMessage, ModelResponse
 
 TRUNCATION_NOTICE = (
     "\n\n---\n"
-    "⚠️ 回复可能因长度限制被截断（`MODEL_MAX_OUTPUT_TOKENS`）。"
-    "可直接回复「继续」让我接着写完，或在服务端调高该上限后重试。"
+    "⚠️ 回复可能因 Provider 的输出长度限制被截断。"
+    "可直接回复「继续」让我接着写完，或在 Ops 调高该 Provider 的上限后重试。"
 )
 
 

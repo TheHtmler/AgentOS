@@ -4,9 +4,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 
 from agent_api.api.auth import get_current_user
-from agent_api.config import get_settings
 from agent_api.db.agent_store import (
     AgentNotFoundError,
     PublishedAgentVersionNotFoundError,
@@ -25,9 +25,10 @@ from agent_api.db.chat_store import (
     set_thread_pinned,
     soft_delete_thread,
 )
-from agent_api.db.models import Thread, User
+from agent_api.db.models import Artifact, Thread, User
 from agent_api.db.provider_store import ModelProviderUnavailableError, resolve_model_profile
 from agent_api.db.session import session_factory
+from agent_api.uploads.context import parse_artifact_ids
 
 router = APIRouter(prefix="/v1/threads", tags=["threads"])
 
@@ -76,6 +77,15 @@ class ThreadMessageResponse(BaseModel):
     role: str
     content: str
     created_at: datetime
+    attachments: list["ThreadAttachmentResponse"] = []
+
+
+class ThreadAttachmentResponse(BaseModel):
+    """One owner-scoped upload referenced by a durable user message."""
+
+    id: UUID
+    title: str
+    mime_type: str
 
 
 class ThreadToolCallResponse(BaseModel):
@@ -303,6 +313,24 @@ async def get_thread_messages(
     try:
         async with session_factory() as session:
             messages = await list_thread_messages(session, thread_id=thread_id, user_id=user.id)
+            attachment_ids = list(
+                dict.fromkeys(
+                    artifact_id
+                    for message in messages
+                    for artifact_id in parse_artifact_ids(message.content)
+                )
+            )
+            attachments_by_id: dict[UUID, Artifact] = {}
+            if attachment_ids:
+                attachments = await session.scalars(
+                    select(Artifact).where(
+                        Artifact.id.in_(attachment_ids),
+                        Artifact.owner_user_id == user.id,
+                        Artifact.thread_id == thread_id,
+                        Artifact.kind == "upload",
+                    )
+                )
+                attachments_by_id = {attachment.id: attachment for attachment in attachments}
             tool_calls = await list_thread_tool_calls(
                 session,
                 thread_id=thread_id,
@@ -330,6 +358,15 @@ async def get_thread_messages(
                 role=message.role,
                 content=message.content,
                 created_at=message.created_at,
+                attachments=[
+                    ThreadAttachmentResponse(
+                        id=attachment.id,
+                        title=attachment.title,
+                        mime_type=attachment.mime_type,
+                    )
+                    for artifact_id in dict.fromkeys(parse_artifact_ids(message.content))
+                    if (attachment := attachments_by_id.get(artifact_id)) is not None
+                ],
             )
             for message in messages
         ],
@@ -372,7 +409,7 @@ async def get_thread_run_stats(
             context_window: int | None = None
             try:
                 version = await get_published_version(session, thread.agent_id)
-                profile = await resolve_model_profile(session, version, get_settings())
+                profile = await resolve_model_profile(session, version)
                 context_window = profile.context_window
             except (PublishedAgentVersionNotFoundError, ModelProviderUnavailableError):
                 # Stats stay readable when the provider binding is broken.

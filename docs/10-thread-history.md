@@ -26,7 +26,8 @@ GET /v1/threads/{thread_id}/messages
       "id": "UUID",
       "role": "user",
       "content": "你好",
-      "created_at": "2026-08-02T00:00:00+00:00"
+      "created_at": "2026-08-02T00:00:00+00:00",
+      "attachments": []
     }
   ],
   "tool_calls": [
@@ -44,6 +45,7 @@ GET /v1/threads/{thread_id}/messages
 ```
 
 - `messages` 按 `seq` 升序返回，不能以时间戳排序替代该约束。
+- 用户消息中的 `artifact_id=<UUID>` 若对应当前 owner、当前 Thread 的 `kind=upload` Artifact，附带最小 `attachments` 投影（`id`、`title`、`mime_type`）供页面恢复图片/PDF；消息正文仍是唯一模型历史，跨 owner、跨 Thread 或非上传 Artifact 不会进入投影。
 - `tool_calls` 来自该 Thread 下各 Run 的 `run_events`（`tool_call` + `tool_result` 配对）；不含密钥。除摘要字段外，`knowledge_search` / `web_search` / `fetch_url` / `read_artifact` 成功时会额外持久化有界原始结果（`result`，上限 8000 字符，`chat_store.RESULT_HISTORY_MAX_CHARS`），历史回放据此重渲染命中片段、链接和附件正文，与 live 卡片一致；其余工具仍只有摘要。
 - 锚定规则：每次 `start_run` 创建一条 user message 与一个 Run；按 runs 创建顺序与 user messages 的 `seq` 顺序一一对齐，将工具摘要挂到对应 `after_message_id`。
 - 仅回放已有终态 `tool_result` 的工具卡；未完成 Run 的半截工具状态不拼进历史。

@@ -19,20 +19,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    ollama_base_url: str = "http://127.0.0.1:11434/v1"
-    ollama_model: str = "agentos-qwen3vl:16k"
-    # Model context window (num_ctx in the Ollama Modelfile); drives input budgeting.
-    model_context_window: int = 16_384
-    # Keep enough room for code and tool-grounded answers; prompt controls concision.
-    model_max_output_tokens: int = 4_096
     model_temperature: float = 0.3
-    # How many model streams may execute at once across threads in one API process.
-    # Keep the 16 GB Mac mini within the Qwen3-VL model and KV-cache budget.
-    model_max_concurrent_runs: int = 1
-    # Hard stop on model requests within a single run's tool loop. A small local model
-    # is more prone to non-convergent "call tool, dislike result, call again" loops than
-    # a frontier model; the 180s per-request httpx timeout bounds a single call but not
-    # the loop itself. Current tool set needs 2-4 calls for a normal turn.
+    # Hard stop on model requests within a single run's tool loop.
     agent_max_requests_per_run: int = 15
     history_max_runs: int = 4  # max runs in next context
     auth_session_ttl_days: int = 30
@@ -69,7 +57,7 @@ class Settings(BaseSettings):
     fetch_provider_order: str = "firecrawl,local"
     firecrawl_api_key: str = ""
     fetch_url_timeout_seconds: float = 20.0
-    # Keep previews bounded for local models; full text lives in Artifacts.
+    # Keep previews bounded; full text lives in Artifacts.
     fetch_url_max_chars: int = 2_500
     # Persist fetch bodies + expose read_artifact (Postgres text; no object store yet).
     artifact_enabled: bool = True
@@ -135,17 +123,16 @@ class Settings(BaseSettings):
     case_extract_timeout_seconds: float = 30.0
     memory_recall_top_k: int = 8
     memory_recall_max_chars: int = 2_000
-    # Note-memory hybrid recall via OpenAI-compatible /embeddings (Ollama).
+    # Note-memory hybrid recall via an OpenAI-compatible /embeddings endpoint.
     memory_embedding_enabled: bool = True
     memory_embedding_model: str = "nomic-embed-text"
-    # Knowledge chunk hybrid search (reuses memory_embedding_model + ollama_base_url).
+    # Knowledge chunk hybrid search reuses the background embedding endpoint.
     knowledge_embedding_enabled: bool = True
     # Fixed endpoint for background jobs (auto thread titles, memory/case
     # extraction) and embedding calls. Deliberately decoupled from any Agent's
     # chat provider: republishing an Agent must never silently reroute where
-    # patient data is sent. Empty values fall back to the local Ollama settings,
-    # so existing deployments keep working unchanged. The api_key lives only in
-    # env — never in the DB or any API response.
+    # patient data is sent. These values must point to a remote endpoint. The
+    # api_key lives only in env — never in the DB or any API response.
     background_base_url: str = ""
     background_api_key: str = ""
     background_chat_model: str = ""
@@ -193,27 +180,11 @@ class Settings(BaseSettings):
 
         return value
 
-    @field_validator("model_context_window", "model_max_output_tokens")
-    @classmethod
-    def model_token_limits_must_be_positive(cls, value: int) -> int:
-        if value < 1:
-            raise ValueError("model token limits must be at least 1")
-
-        return value
-
     @field_validator("model_temperature")
     @classmethod
     def model_temperature_must_be_valid(cls, value: float) -> float:
         if not 0 <= value <= 2:
             raise ValueError("model_temperature must be between 0 and 2")
-
-        return value
-
-    @field_validator("model_max_concurrent_runs")
-    @classmethod
-    def model_max_concurrent_runs_must_be_positive(cls, value: int) -> int:
-        if value < 1:
-            raise ValueError("model_max_concurrent_runs must be at least 1")
 
         return value
 
@@ -360,15 +331,21 @@ class Settings(BaseSettings):
 
     @property
     def resolved_background_base_url(self) -> str:
-        """Background endpoint URL; falls back to the local Ollama URL."""
+        """Background endpoint URL; empty configuration is an actionable error."""
 
-        return (self.background_base_url.strip() or self.ollama_base_url).rstrip("/")
+        value = self.background_base_url.strip().rstrip("/")
+        if not value:
+            raise RuntimeError("BACKGROUND_BASE_URL must be configured")
+        return value
 
     @property
     def resolved_background_chat_model(self) -> str:
-        """Chat model for background extraction/title jobs; falls back to ollama_model."""
+        """Chat model for background extraction/title jobs."""
 
-        return self.background_chat_model.strip() or self.ollama_model
+        value = self.background_chat_model.strip()
+        if not value:
+            raise RuntimeError("BACKGROUND_CHAT_MODEL must be configured")
+        return value
 
     @property
     def resolved_background_embedding_model(self) -> str:

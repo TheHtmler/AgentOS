@@ -1,8 +1,7 @@
 """Ops model-provider admin: manage OpenAI-compatible chat endpoints.
 
 API keys are write-only: create/patch accept them, but responses only expose
-a masked preview (``api_key_preview``) plus ``has_api_key``. The built-in
-``local`` row is synced from env settings at startup and is read-only here.
+a masked preview (``api_key_preview``) plus ``has_api_key``.
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ from sqlalchemy import func, select
 
 from agent_api.api.ops_auth import get_ops_subject
 from agent_api.db.models import AgentVersion, ModelProvider
-from agent_api.db.provider_store import BUILTIN_LOCAL_PROVIDER_SLUG, ReasoningSummary
+from agent_api.db.provider_store import ReasoningSummary
 from agent_api.db.session import session_factory
 
 router = APIRouter(prefix="/v1/ops/model-providers", tags=["ops-model-providers"])
@@ -31,7 +30,6 @@ class OpsModelProviderOut(BaseModel):
     id: UUID
     slug: str
     name: str
-    kind: str
     base_url: str
     default_model: str
     api_mode: str
@@ -43,7 +41,6 @@ class OpsModelProviderOut(BaseModel):
     supports_vision: bool
     supports_tools: bool
     enabled: bool
-    is_builtin: bool
     has_api_key: bool
     api_key_preview: str | None
     created_at: datetime
@@ -135,7 +132,6 @@ def _to_out(provider: ModelProvider) -> OpsModelProviderOut:
         id=provider.id,
         slug=provider.slug,
         name=provider.name,
-        kind=provider.kind,
         base_url=provider.base_url,
         default_model=provider.default_model,
         api_mode=provider.api_mode,
@@ -147,7 +143,6 @@ def _to_out(provider: ModelProvider) -> OpsModelProviderOut:
         supports_vision=provider.supports_vision,
         supports_tools=provider.supports_tools,
         enabled=provider.enabled,
-        is_builtin=provider.is_builtin,
         has_api_key=bool(provider.api_key),
         api_key_preview=_mask_api_key(provider.api_key),
         created_at=provider.created_at,
@@ -161,12 +156,7 @@ async def list_ops_model_providers(
 ) -> OpsModelProviderListResponse:
     async with session_factory() as session:
         providers = list(
-            await session.scalars(
-                select(ModelProvider).order_by(
-                    ModelProvider.is_builtin.desc(),
-                    ModelProvider.slug,
-                ),
-            ),
+            await session.scalars(select(ModelProvider).order_by(ModelProvider.slug)),
         )
     return OpsModelProviderListResponse(providers=[_to_out(row) for row in providers])
 
@@ -180,12 +170,6 @@ async def create_ops_model_provider(
     payload: CreateOpsModelProviderRequest,
     _subject: Annotated[str, Depends(get_ops_subject)],
 ) -> OpsModelProviderOut:
-    if payload.slug == BUILTIN_LOCAL_PROVIDER_SLUG:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"'{BUILTIN_LOCAL_PROVIDER_SLUG}' 是内置 Provider 的保留标识",
-        )
-
     async with session_factory() as session, session.begin():
         clash = await session.scalar(
             select(ModelProvider.id).where(ModelProvider.slug == payload.slug),
@@ -198,7 +182,6 @@ async def create_ops_model_provider(
         provider = ModelProvider(
             slug=payload.slug,
             name=payload.name.strip(),
-            kind="remote",
             base_url=payload.base_url,
             api_key=payload.api_key or None,
             default_model=payload.default_model,
@@ -211,7 +194,6 @@ async def create_ops_model_provider(
             supports_vision=payload.supports_vision,
             supports_tools=payload.supports_tools,
             enabled=payload.enabled,
-            is_builtin=False,
         )
         session.add(provider)
         await session.flush()
@@ -236,12 +218,6 @@ async def patch_ops_model_provider(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Provider 不存在",
             )
-        if provider.is_builtin:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="内置本地 Provider 由环境变量管理，不可在此修改",
-            )
-
         if payload.clear_api_key:
             provider.api_key = None
         elif payload.api_key:
@@ -280,11 +256,6 @@ async def delete_ops_model_provider(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Provider 不存在",
-            )
-        if provider.is_builtin:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="内置本地 Provider 不可删除",
             )
         in_use = await session.scalar(
             select(func.count(AgentVersion.id)).where(

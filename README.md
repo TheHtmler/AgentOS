@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-AgentOS is a work-in-progress runtime platform for building controllable, durable AI agents. It combines a Next.js interface, a FastAPI and Pydantic AI runtime, local Ollama models, and PostgreSQL-backed conversation state.
+AgentOS is a work-in-progress runtime platform for building controllable, durable AI agents. It combines a Next.js interface, a FastAPI and Pydantic AI runtime, third-party model Providers, and PostgreSQL-backed conversation state.
 
 The project is being built in public from a small, verifiable core toward tool execution, human approval, isolated sandboxes, and multi-tenant operation.
 
@@ -12,7 +12,7 @@ The project is being built in public from a small, verifiable core toward tool e
 ## Available Today
 
 - A custom Next.js chat interface with streaming output, cancellation, and runtime health status.
-- A FastAPI Agent API powered by Pydantic AI and an Ollama model.
+- A FastAPI Agent API powered by Pydantic AI and third-party model Providers.
 - Server-Sent Events (SSE) for incremental text, completion, and safe error events.
 - Durable PostgreSQL storage for threads, messages, runs, model histories, and append-only run events.
 - Conversation recovery from a URL-backed thread ID after a page refresh.
@@ -39,7 +39,7 @@ The project is being built in public from a small, verifiable core toward tool e
 flowchart LR
     Browser["Browser"] -->|"HTTP / SSE"| Web["Next.js Web"]
     Web -->|"Same-origin proxy"| API["FastAPI Agent API"]
-    API -->|"Pydantic AI"| Ollama["Ollama"]
+    API -->|"Pydantic AI"| Provider["Third-party Provider"]
     API -->|"Threads, runs, events, Artifacts"| PostgreSQL["PostgreSQL"]
     API -->|"Private token HTTP"| Sandbox["Sandbox Manager"]
     Sandbox -->|"Bounded containers"| Docker["Docker"]
@@ -53,7 +53,7 @@ Browser traffic stays on the Next.js origin. Route Handlers proxy health, chat s
 | ----------- | ------------------------------------------------- |
 | Web         | Next.js 16, React 19, TypeScript, Tailwind CSS 4  |
 | Agent API   | Python 3.13, FastAPI, Pydantic AI                 |
-| Model       | Ollama (default: `gemma4:e4b`)                    |
+| Model       | Third-party OpenAI-compatible Providers            |
 | Persistence | PostgreSQL 17, SQLAlchemy async, asyncpg, Alembic |
 | Tooling     | pnpm, uv, pytest, Ruff, Pyright, ESLint, Prettier |
 
@@ -65,7 +65,7 @@ Browser traffic stays on the Next.js origin. Route Handlers proxy health, chat s
 - pnpm `11.2.2`
 - Python `3.13` and [uv](https://docs.astral.sh/uv/)
 - Docker with Docker Compose
-- [Ollama](https://ollama.com/) and a locally available chat model
+- A third-party OpenAI-compatible model endpoint
 
 All commands below run from the repository root.
 
@@ -85,13 +85,7 @@ cp services/agent-api/.env.example services/agent-api/.env
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-Set the same local database password in `infra/postgres/.env` and `services/agent-api/.env`. You can also change `OLLAMA_MODEL` and `OLLAMA_BASE_URL` in the Agent API environment file.
-
-The default model can be installed with:
-
-```bash
-ollama pull gemma4:e4b
-```
+Set the same local database password in `infra/postgres/.env` and `services/agent-api/.env`. Configure `BACKGROUND_*` with the endpoint used for background extraction and embeddings, then create a chat Provider in Ops and publish each Agent with that Provider selected.
 
 ### 3. Start PostgreSQL and migrate the schema
 

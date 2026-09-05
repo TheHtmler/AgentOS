@@ -26,7 +26,7 @@ class AgentResponse(BaseModel):
     memory_enabled: bool
     case_enabled: bool
     # False when the agent's published provider cannot process image input;
-    # the chat UI disables uploads for it. Local-provider agents are vision-capable.
+    # the chat UI disables uploads for it.
     supports_vision: bool
 
 
@@ -55,15 +55,13 @@ async def get_agents(
                     agent.slug,
                 )
                 continue
-            supports_vision = True
-            if version.model_provider_id is not None:
-                if version.model_provider_id not in provider_cache:
-                    provider_cache[version.model_provider_id] = await session.get(
-                        ModelProvider,
-                        version.model_provider_id,
-                    )
-                provider = provider_cache[version.model_provider_id]
-                supports_vision = bool(provider and provider.enabled and provider.supports_vision)
+            if version.model_provider_id not in provider_cache:
+                provider_cache[version.model_provider_id] = await session.get(
+                    ModelProvider,
+                    version.model_provider_id,
+                )
+            provider = provider_cache[version.model_provider_id]
+            supports_vision = bool(provider and provider.enabled and provider.supports_vision)
             responses.append(
                 AgentResponse(
                     id=agent.id,

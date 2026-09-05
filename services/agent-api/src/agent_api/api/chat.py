@@ -45,8 +45,8 @@ def resolve_version_tuning(version_value: int | None, env_default: int) -> int:
 def extract_cached_input_tokens(usage: RunUsage) -> int | None:
     """Cached-prefix tokens: first-class cache_read_tokens, else DeepSeek's details key.
 
-    Local Ollama reports neither; None means "provider did not report", so the
-    UI hides the cache figure instead of showing a misleading 0%.
+    None means the provider did not report the metric, so the UI hides the
+    cache figure instead of showing a misleading 0%.
     """
 
     cached = usage.cache_read_tokens or usage.details.get("prompt_cache_hit_tokens")

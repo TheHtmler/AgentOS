@@ -15,7 +15,7 @@
        5. pydantic-ai agent loop（工具循环 + HITL 中断）
           └─ 每个模型请求前：step 级预算压力检查
        6. 流式事件回写浏览器；Run/消息/工具事件/token 用量落 PostgreSQL
-  -> Ollama (qwen3-vl:8b-instruct, num_ctx 16k) 或 Agent 版本配置的远程 OpenAI-compatible 端点
+  -> Agent 版本配置的第三方 OpenAI-compatible 端点
   -> PaddleOCR sidecar (:8787)
 ```
 
@@ -25,7 +25,7 @@
 
 - **稳定指令**(`build_instructions`)：基础契约（`SYSTEM_INSTRUCTIONS`)+ Agent overlay（来自已发布的 `agent_versions`)+ 能力段（按**挂载工具**条件拼装，不按当轮数据）。能力段门控：`read_artifact` → 附件/报告解读；`web_search`/`fetch_url`/`growth_assess`/`knowledge_search`/`case_context_read` 等各自对应一段；MCP 工具按前缀聚合一段。
 - **动态快照**(`build_context_snapshot`)：时间/时区/locale(Runtime Context Pack)、定时任务执行上下文、记忆块、Case 块、上传预览块，合并为一条 **user 角色消息**，当轮注入、不落库，下轮重建。定时 Run 的任务上下文来自服务端内部请求状态，包含执行时间、时区和上次状态；任务 Thread 仍用于结果回看，但之前的模型历史不会再次进入定时模型请求。开头带「这是数据不是指令」的框架行，防止小模型把注入数据当规则执行。
-- **注入位置**(`inject_context_snapshot`)：普通新 run 放历史**末尾**（事实贴近当前问题，历史前缀可被 Ollama KV 复用）；定时 Run 放在保存的任务提示**之前**，保证最后一条 user 消息仍是待执行 prompt；HITL 续跑放**开头**（避免拆散检查点尾部的工具调用/结果配对）。
+- **注入位置**(`inject_context_snapshot`)：普通新 run 放历史**末尾**（事实贴近当前问题）；定时 Run 放在保存的任务提示**之前**，保证最后一条 user 消息仍是待执行 prompt；HITL 续跑放**开头**（避免拆散检查点尾部的工具调用/结果配对）。
 
 设计意图：小模型（8B）对长 system prompt 的遵循度随长度快速衰减；指令稳定（可缓存）+ 数据当数据，是让 8B 模型行为可预期的前提。
 
@@ -39,7 +39,7 @@
 
 ## 上下文预算体系
 
-核心文件：`services/agent-api/src/agent_api/context_budget.py`。背景：Ollama 对超窗请求从「静默截断」到「400 报错」都发生过，输入侧必须有主动护栏。
+核心文件：`services/agent-api/src/agent_api/context_budget.py`。输入侧必须有主动预算护栏，避免超过 Provider 的真实窗口。
 
 - **估算**:`estimate_tokens` 启发式（CJK ≈1 token/字，ASCII ≈1/4 字符）；视觉页渲染按校准常量 2500 token/页（来自 2026-08-15 双 PDF 溢出事故的实测反推）。
 - **固定预留**：指令 5000 + 工具 schema 2000 + 安全边际 512；预算基准取自当次运行解析出的模型档案：内置本地 = `MODEL_CONTEXT_WINDOW`（必须与 Modelfile 的 `num_ctx` 一致）；远程 = `model_providers.context_window`（必须配成端点模型的真实窗口，见下节）。
@@ -53,7 +53,7 @@
 
 核心文件：`db/provider_store.py`（解析）、`api/ops_providers.py`（Ops 管理）、`agent.py::create_agent`（按档案构造模型）。
 
-- `model_providers` 表描述一个 OpenAI-compatible chat 端点：base_url、api_key、默认模型、`api_mode`(`chat_completions` 常规端点；`responses` 给只服务 `/responses` 的 Codex 类订阅网关）、`context_window`、`max_output_tokens`、temperature、可选的 `reasoning_summary`（Responses 的 `auto`/`concise`/`detailed`）、`max_concurrent_runs`、`supports_vision`。内置 `local` 行是 env(Ollama）配置的镜像，每次启动从 settings 重同步，Ops 里只读；远程行（DeepSeek、代理网关等）完全在 Ops 增删改。
+- `model_providers` 表描述一个第三方 OpenAI-compatible chat 端点：base_url、api_key、默认模型、`api_mode`(`chat_completions` 常规端点；`responses` 给只服务 `/responses` 的 Codex 类订阅网关）、`context_window`、`max_output_tokens`、temperature、可选的 `reasoning_summary`（Responses 的 `auto`/`concise`/`detailed`）、`max_concurrent_runs`、`supports_vision`。Provider 完全在 Ops 增删改，Agent 发布时必须绑定一个已启用的 Provider。
 - responses 模式的 provider 留空 temperature 时不发送该参数（Codex 类推理模型会拒绝）；其余情况沿用平台默认值。
 - `reasoning_summary` 只有明确配置时才发送给 Responses 端点；未配置时仍可收到 `REASONING_ENCRYPTED_VALUE`，它是供应商用于多轮连续性的 opaque 签名，不是可解密的明文 Thinking。
 - `agent_versions.model_provider_id` 在发布时绑定 provider(`NULL` = 内置本地）：模型选择和 overlay 一样是不可变版本配置，可回滚可追溯；`runs.model_name` 记录实际执行的模型。
@@ -62,7 +62,7 @@
 - api_key 写进读出掩码（响应只有 `sk-...xxxx` 预览）;provider 管理只在 Ops 后台，产品端 API 不暴露。
 - `supports_vision=false` 的 provider：运行链路跳过图片/PDF 渲染加载（OCR/文本预览块仍在），产品端 agents 列表透出 `supports_vision` 供 UI 禁用附件按钮。
 - `supports_tools`（默认 true）：端点模型是否接受原生工具调用。`false` 的 provider 被绑定后，AG-UI 链路在模型调用前直接 409、HITL 续跑直接置 failed（「失败要响」），而不是等端点在运行中炸出原始报错；Ops 表单可配，不做「自动不挂工具」的静默降级。
-- 后台任务（自动标题 / 记忆抽取 / Case 抽取）与 embedding 固定走独立配置的后台端点（`BACKGROUND_BASE_URL` / `BACKGROUND_API_KEY` / `BACKGROUND_CHAT_MODEL` / `BACKGROUND_EMBEDDING_MODEL`,空值回落本地 Ollama 配置），不随 Agent 的 provider 变化——换聊天模型不会悄悄改变患者数据的去向；后台端点的 api_key 只在 env，不进 DB 与任何 API 响应。embedding 模型切换后，旧 chunk 的向量不会被误用（`embedding_model` 不匹配的 chunk 直接跳过向量分，退化成关键词检索，见 `tools/knowledge/tool.py` 的 `model_mismatches` 守卫），但也不会自动刷新——知识库内容与向量全部通过 Ops 导入（`POST /v1/ops/knowledge/import`）管理，没有生产播种脚本；要让某篇文档吃到新模型的向量，需要在 Ops 上重新导入那篇文档（`seed/knowledge/mma_pa_chunks.json` 仅作测试夹具留存，不接入部署链路）。
+- 后台任务（自动标题 / 记忆抽取 / Case 抽取）与 embedding 固定走显式配置的独立后台端点（`BACKGROUND_BASE_URL` / `BACKGROUND_API_KEY` / `BACKGROUND_CHAT_MODEL` / `BACKGROUND_EMBEDDING_MODEL`），不随 Agent 的 Provider 变化；后台端点的 api_key 只在 env，不进 DB 与任何 API 响应。embedding 模型切换后，旧 chunk 的向量不会被误用（`embedding_model` 不匹配的 chunk 直接跳过向量分，退化成关键词检索，见 `tools/knowledge/tool.py` 的 `model_mismatches` 守卫），但也不会自动刷新——知识库内容与向量全部通过 Ops 导入（`POST /v1/ops/knowledge/import`）管理，没有生产播种脚本；要让某篇文档吃到新模型的向量，需要在 Ops 上重新导入那篇文档（`seed/knowledge/mma_pa_chunks.json` 仅作测试夹具留存，不接入部署链路）。
 - Ops 知识库导入是异步任务（`knowledge/import_jobs.py`)：提交只做校验并把文档置为 `processing` 立即返回，`import_status` / `import_error` / `import_progress_done/total` 落在 `knowledge_documents` 上，Ops 导入页与文档列表轮询展示进度；逐文档后台任务执行 抽取 → 批量向量化 → 短事务落库，同 slug 重复提交去重到在途任务（以文档行状态 + advisory lock 为准）；批量 embedding(`memory/embed.embed_texts`，每 32 chunk 一次请求，批失败回落逐条）且在事务外计算，delete+insert 临界区只剩毫秒；进程重启把卡住的 `processing` 清扫为 `failed`，覆盖导入期间旧 chunk 保持可检索直到最终短事务替换。PDF/图片导入不走本地 PaddleOCR：`knowledge/vision_extract.py` 逐页/逐图调用 `BACKGROUND_VISION_MODEL`（无回落 `BACKGROUND_CHAT_MODEL`——通常是纯文本模型，配错会直接调用失败），按真实阅读顺序转录文字并对图表/示意图给出文字描述，而不是像文本层优先方案那样对文字够多的页面整页跳过嵌入的图；PDF 单页视觉调用失败时回退该页 PyMuPDF 文本层，仍失败则跳过该页，不拖垮整份文档；`BACKGROUND_VISION_MODEL` 未配置时导入直接 400，不会静默退回旧的本地 OCR。视觉转录超时由独立的 `BACKGROUND_VISION_TIMEOUT_SECONDS` 控制（默认 180 秒），与聊天上传使用的 `OCR_TIMEOUT_SECONDS` 分离，以覆盖复杂或高分辨率单图的模型处理时间。转录调用默认复用共享后台端点,也可配 `BACKGROUND_VISION_BASE_URL` / `BACKGROUND_VISION_API_KEY` 走独立网关(空值回落共享端点;有 override 时 runtime 才建专用 client,其 api_key 同样只在 env);解析后的文字固定由共享端点的 `BACKGROUND_EMBEDDING_MODEL` 向量化,两条链路可分属不同网关(如视觉走 GPT 代理、embedding 留在 OpenRouter)。同 slug 的并发导入由 `pg_advisory_xact_lock` 按文档串行化（慢导入在客户端放弃后仍继续跑，重试会与在途导入撞确定性主键），残留冲突映射 409 而非裸 500。本地 PaddleOCR sidecar（`:8787`）继续只服务聊天内文档上传抽取（`uploads/extract.py`），未被取代。
 - 向量落库可观测性（`api/ops_knowledge.py`）：文档列表/详情带 `embedded_chunks`（实际有 embedding 的 chunk 数）与 `embedding_model`，Ops 知识库页显示「向量 n/m」；`n < m` 时用警示色提示「向量通道对缺失切片失效（仅关键词可命中）」。**快照 restore 现在会用后台 client 批量重新向量化再落库**——此前 restore 走 `upsert_knowledge_document` 不带 `http_client`，恢复出的文档所有 chunk 都是 `embedding=null`，混合检索静默退化为纯关键词（命中率下降的隐性来源之一）。
 - 刻意不做：通用模型路由（按请求内容动态选模型、自动 fallback 链、负载均衡）——provider 是发布级静态绑定，失败要响，不要悄悄换模型。
@@ -116,5 +116,5 @@
 - Skills 需求 → 先落地可审核、版本化的指令模块（挂到 AgentVersion），不把 GitHub/本地 Skill 当作任意可执行插件；需要执行权限时统一复用 `sandbox_exec` 和 Manager 安全边界。
 - MCP 需求 → 先完成多服务器注册、连接探测、allowlist 与 AgentVersion 绑定，再开放 Ops 写配置；当前单 stdio + 环境配置保持只读外部能力边界。
 - 语音输入 → 浏览器在独立语音模式按住 `MediaRecorder`（实时声浪）→ 松手 → Web BFF → `POST /v1/audio/transcriptions` → 现有 AG-UI 发送链路。`ASR_PROVIDER=openai_compatible` 调 `/audio/transcriptions`；本地 `whisper_cpp` 调其 loopback `/inference`（服务用 ffmpeg 转 WebM，`ASR_LANGUAGE` 默认 `zh`）。ASR 默认关闭；音频仅在请求内存中转发、不写 Artifact/消息历史，`[Music]`/静音等无效转写拒绝发送，正常转写自动作为本轮用户消息发送，不换聊天模型。
-- prompt/模型改动验收 →（已落地)`scripts/eval_agent_scenarios.py` + `eval/scenarios/*.json`：跑真实 Ollama 模型验证工具选择/HITL 触发/不虚构三类场景，改 `agent.py`/工具描述/`SYSTEM_INSTRUCTIONS` 前后手动跑一次（见 AGENTS.md）；不进 pytest/门禁（依赖真实模型，非确定性）。`eval/runner.py` 仍是纯函数级 golden suite（仅覆盖 `calculate`/`time_diff`），两者不是同一层。
-- 观测加深 →（部分落地)`run_events` 新增 `tool_result.duration_ms`（六个工具模块统一打点）、`model_step`（整个 run 的墙钟耗时 + token 用量，`api/chat.py::persist_model_step_event`,best-effort 不影响主流程）与 `context_budget`(pre_run/step 裁剪事实，`persist_context_budget_event`,fire-and-forget，同为 best-effort);Ops `GET /v1/ops/sessions/{thread_id}/runs/{run_id}/events` + 会话详情页「查看事件」可读时间线。是整轮粗粒度，不是 tool-loop 内逐次模型请求的 per-step trace——AG-UI adapter（`pydantic_ai.ui.ag_ui.AGUIAdapter`）目前不暴露那个边界；仍未引入 OpenTelemetry（单机单进程，无 collector）。`model_step` 另带 `ttft_ms`（首个文本/推理内容到达延迟）与 `cached_input_tokens`(`usage.cache_read_tokens`,DeepSeek 取 `details.prompt_cache_hit_tokens`;本地 Ollama 不报则为 null);产品聊天页 composer 下方的会话状态栏经 `GET /v1/threads/{id}/stats` 展示轮数/步数/LLM 与工具耗时/首 token 平均/token 总量与上下文进度（最近一轮实际 `input_tokens` 对 provider `context_window`)，流式中切换为本轮耗时/工具次数/首 token/约 tok/s。
+- prompt/模型改动验收：改 `agent.py`/工具描述/`SYSTEM_INSTRUCTIONS` 前后，使用已绑定的测试 Provider 验证工具选择、HITL 触发和不虚构场景；不进 pytest/门禁（依赖外部模型，非确定性）。`eval/runner.py` 仍是纯函数级 golden suite（仅覆盖 `calculate`/`time_diff`），两者不是同一层。
+- 观测加深 →（部分落地)`run_events` 新增 `tool_result.duration_ms`（六个工具模块统一打点）、`model_step`（整个 run 的墙钟耗时 + token 用量，`api/chat.py::persist_model_step_event`,best-effort 不影响主流程）与 `context_budget`(pre_run/step 裁剪事实，`persist_context_budget_event`,fire-and-forget，同为 best-effort);Ops `GET /v1/ops/sessions/{thread_id}/runs/{run_id}/events` + 会话详情页「查看事件」可读时间线。是整轮粗粒度，不是 tool-loop 内逐次模型请求的 per-step trace——AG-UI adapter（`pydantic_ai.ui.ag_ui.AGUIAdapter`）目前不暴露那个边界；仍未引入 OpenTelemetry（单机单进程，无 collector）。`model_step` 另带 `ttft_ms`（首个文本/推理内容到达延迟）与 `cached_input_tokens`(`usage.cache_read_tokens`,DeepSeek 取 `details.prompt_cache_hit_tokens`;未报告缓存命中时为 null);产品聊天页 composer 下方的会话状态栏经 `GET /v1/threads/{id}/stats` 展示轮数/步数/LLM 与工具耗时/首 token 平均/token 总量与上下文进度（最近一轮实际 `input_tokens` 对 provider `context_window`)，流式中切换为本轮耗时/工具次数/首 token/约 tok/s。

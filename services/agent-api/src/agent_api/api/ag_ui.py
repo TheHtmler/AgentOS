@@ -199,7 +199,9 @@ async def stream_ag_ui_run(
                     session,
                     thread_id=thread_id,
                     user_content=prompt,
-                    model_name=get_settings().ollama_model,
+                    # The published Provider is resolved below and replaces this
+                    # audit placeholder before the first model request.
+                    model_name="pending-provider-resolution",
                     user_id=user.id,
                     agent_id=agent_id,
                     case_id=case_id_header,
@@ -236,7 +238,7 @@ async def stream_ag_ui_run(
             case_id = thread.case_id
             runtime = get_runtime(request)
             settings = get_settings()
-            profile = await resolve_model_profile(session, version, settings)
+            profile = await resolve_model_profile(session, version)
             if version.case_enabled and case_id is not None:
                 try:
                     case_block, case_keys = await load_case_injection(

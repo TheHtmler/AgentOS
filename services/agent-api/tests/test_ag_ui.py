@@ -624,7 +624,6 @@ async def test_ag_ui_rejects_provider_without_tool_support(
                 id=provider_id,
                 slug=f"no-tools-{provider_id.hex[:8]}",
                 name="No tools fixture",
-                kind="remote",
                 base_url="https://api.example.com/v1",
                 api_key=None,
                 default_model="fixture-chat",
@@ -637,7 +636,6 @@ async def test_ag_ui_rejects_provider_without_tool_support(
                 supports_vision=False,
                 supports_tools=False,
                 enabled=True,
-                is_builtin=False,
             ),
         )
         version = await session.scalar(

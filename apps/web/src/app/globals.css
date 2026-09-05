@@ -3560,3 +3560,12 @@ body {
 .aui-thread-viewport-footer {
   flex-shrink: 0;
 }
+
+/* Keep uploaded image previews compact inside the user's text bubble. */
+[data-slot="aui_user-message-image"] [data-slot="image-root"] {
+  max-width: 12rem;
+}
+
+[data-slot="aui_user-message-image"] [data-slot="image-filename"] {
+  display: none;
+}

@@ -15,12 +15,11 @@ from agent_api.agent import (
     create_agent,
     create_background_http_client,
     create_background_vision_http_client,
-    create_ollama_http_client,
-    warm_up_ollama_model,
+    create_model_http_client,
 )
 from agent_api.config import get_settings
 from agent_api.context_budget import BudgetReport
-from agent_api.db.provider_store import ResolvedModelProfile, sync_builtin_local_provider
+from agent_api.db.provider_store import ResolvedModelProfile
 from agent_api.db.session import close_database
 from agent_api.run_events_broker import RunEventBroker
 from agent_api.tools.fetch.router import FetchRouter, build_fetch_router
@@ -37,11 +36,11 @@ class AgentRuntime:
     def __init__(
         self,
         # Tests may inject Agent[None, ...] / TestModel agents; production uses AgentDeps.
-        agent: Agent[Any, AgentOutput],
+        agent: Agent[Any, AgentOutput] | None,
         model_semaphore: asyncio.Semaphore,
         search_router: SearchRouter | None = None,
         fetch_router: FetchRouter | None = None,
-        ollama_http_client: httpx.AsyncClient | None = None,
+        model_http_client: httpx.AsyncClient | None = None,
         background_http_client: httpx.AsyncClient | None = None,
         background_vision_http_client: httpx.AsyncClient | None = None,
         sandbox_http_client: httpx.AsyncClient | None = None,
@@ -51,7 +50,7 @@ class AgentRuntime:
         self.model_semaphore = model_semaphore
         self.search_router = search_router
         self.fetch_router = fetch_router
-        self.ollama_http_client = ollama_http_client
+        self.model_http_client = model_http_client
         # Background jobs (auto-title / memory & case extraction) and embeddings
         # use this fixed endpoint, decoupled from any Agent's chat provider.
         self.background_http_client = background_http_client
@@ -63,21 +62,17 @@ class AgentRuntime:
         self._run_tasks: dict[UUID, asyncio.Task[None]] = {}
         # Per-run fan-out for HITL resume event streams (see run_events_broker).
         self.run_event_broker = RunEventBroker()
-        # Remote providers get their own concurrency budget; the local semaphore
-        # stays at 1 to protect the Mac mini's model/KV-cache memory.
+        # Each configured Provider gets an independent Ops-configured concurrency gate.
         self._provider_semaphores: dict[UUID, tuple[int, asyncio.Semaphore]] = {}
 
     def semaphore_for_profile(self, profile: ResolvedModelProfile) -> asyncio.Semaphore:
         """Return the concurrency gate for one run's model provider.
 
-        ``model_semaphore`` remains the single gate for the local model (memory
-        budget) and for background jobs; remote providers each get a lazily
-        created semaphore sized by their ops-configured limit. A limit edit in
-        Ops replaces the semaphore — in-flight runs keep the one they entered.
+        Providers get a lazily created semaphore sized by their Ops-configured
+        limit. A limit edit replaces the gate for subsequent runs; background
+        jobs continue using ``model_semaphore``.
         """
 
-        if profile.is_local:
-            return self.model_semaphore
         cached = self._provider_semaphores.get(profile.provider_id)
         if cached is not None and cached[0] == profile.max_concurrent_runs:
             return cached[1]
@@ -125,9 +120,13 @@ class AgentRuntime:
     ) -> Agent[Any, AgentOutput]:
         """Build a fresh agent with the published configuration for one run."""
 
-        if self.ollama_http_client is None:
-            # Test runtimes provide a deterministic agent without a live Ollama client.
+        if self.model_http_client is None:
+            if self.agent is None:
+                raise RuntimeError("Model HTTP client is not configured")
+            # Test runtimes provide a deterministic model without an HTTP client.
             return self.agent
+        if model_profile is None:
+            raise RuntimeError("Published Agent version is missing a model provider")
 
         overrides = (
             {
@@ -139,7 +138,7 @@ class AgentRuntime:
             else None
         )
         return create_agent(
-            self.ollama_http_client,
+            self.model_http_client,
             model_profile=model_profile,
             search_router=self.search_router,
             fetch_router=self.fetch_router,
@@ -166,18 +165,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Create shared model resources once and release the connection pool on shutdown."""
 
     settings = get_settings()
-    http_client = create_ollama_http_client()
+    http_client = create_model_http_client()
     background_http_client = create_background_http_client(settings)
     background_vision_http_client = create_background_vision_http_client(settings)
-    # Fire-and-forget: starts loading the model into Ollama immediately so it's warm
-    # by the time the first real user request arrives, without delaying app startup.
-    warmup_task = asyncio.create_task(
-        warm_up_ollama_model(http_client, settings),
-        name="ollama-model-warmup",
-    )
     search_http_client = httpx.AsyncClient(
         timeout=httpx.Timeout(timeout=settings.search_timeout_seconds, connect=5.0),
-        # Keep search traffic off inherited shell proxies, same policy as Ollama.
+        # Keep external search traffic off inherited shell proxies.
         trust_env=False,
     )
     fetch_http_client = httpx.AsyncClient(
@@ -215,21 +208,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         logger.exception("failed to build MCP toolsets; continuing without MCP")
         mcp_toolsets = []
 
-    agent = create_agent(
-        http_client,
-        search_router=search_router if settings.search_enabled else None,
-        search_enabled=settings.search_enabled,
-        fetch_router=fetch_router if settings.fetch_url_enabled else None,
-        fetch_enabled=settings.fetch_url_enabled,
-        toolsets=mcp_toolsets,
-    )
     runtime = AgentRuntime(
-        agent=agent,
-        # Allow multiple threads to generate concurrently within the configured budget.
-        model_semaphore=asyncio.Semaphore(settings.model_max_concurrent_runs),
+        agent=None,
+        # Background jobs use a shared small gate independent of chat Providers.
+        model_semaphore=asyncio.Semaphore(1),
         search_router=search_router if settings.search_enabled else None,
         fetch_router=fetch_router if settings.fetch_url_enabled else None,
-        ollama_http_client=http_client,
+        model_http_client=http_client,
         background_http_client=background_http_client,
         background_vision_http_client=background_vision_http_client,
         sandbox_http_client=sandbox_http_client,
@@ -260,12 +245,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     except Exception:
         # Best-effort: stuck 'processing' rows only mislead the Ops UI.
         logger.exception("failed to sweep interrupted knowledge imports on startup")
-
-    try:
-        async with session_factory() as session, session.begin():
-            await sync_builtin_local_provider(session, settings)
-    except Exception:
-        logger.exception("failed to sync the built-in local model provider on startup")
 
     from agent_api.db.policy_store import refresh_platform_policy_cache
 
@@ -312,19 +291,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                     continue
                 entered_toolsets.append(toolset)
             if len(entered_toolsets) != len(mcp_toolsets):
-                # Runs must never see a toolset that failed to start: swap both the
-                # runtime list and the shared startup agent to the entered subset.
+                # Runs must never see a toolset that failed to start.
                 runtime.mcp_toolsets = entered_toolsets
-                agent = create_agent(
-                    http_client,
-                    search_router=search_router if settings.search_enabled else None,
-                    search_enabled=settings.search_enabled,
-                    fetch_router=fetch_router if settings.fetch_url_enabled else None,
-                    fetch_enabled=settings.fetch_url_enabled,
-                    toolsets=entered_toolsets,
-                )
-                runtime.agent = agent
-            await stack.enter_async_context(agent)
             try:
                 yield
             finally:
@@ -334,14 +302,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 await scheduled_task_scheduler.stop()
                 await notification_worker.stop()
                 scheduled_task_task.cancel()
-                if not warmup_task.done():
-                    warmup_task.cancel()
                 if data_cleanup_task is not None:
                     data_cleanup_task.cancel()
                 await asyncio.gather(
                     hitl_timeout_task,
                     scheduled_task_task,
-                    warmup_task,
                     *(() if data_cleanup_task is None else (data_cleanup_task,)),
                     return_exceptions=True,
                 )

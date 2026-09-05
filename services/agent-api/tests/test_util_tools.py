@@ -3,7 +3,8 @@ from typing import cast
 
 import pytest
 
-from agent_api.agent import build_instructions, create_agent, create_ollama_http_client
+from agent_api.agent import build_instructions, create_model_http_client
+from model_profile import create_test_agent
 from agent_api.tools.search.tool import AgentDeps
 from agent_api.tools.util.tool import run_calculate, run_time_diff
 
@@ -34,8 +35,8 @@ async def test_run_time_diff_tool_json() -> None:
 
 @pytest.mark.anyio
 async def test_create_agent_registers_util_tools() -> None:
-    async with create_ollama_http_client() as http_client:
-        enabled = create_agent(
+    async with create_model_http_client() as http_client:
+        enabled = create_test_agent(
             http_client,
             util_enabled=True,
             search_enabled=False,
@@ -43,7 +44,7 @@ async def test_create_agent_registers_util_tools() -> None:
             growth_enabled=False,
             knowledge_enabled=False,
         )
-        disabled = create_agent(
+        disabled = create_test_agent(
             http_client,
             util_enabled=False,
             search_enabled=False,

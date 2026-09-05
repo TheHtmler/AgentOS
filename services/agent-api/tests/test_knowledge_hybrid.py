@@ -1,4 +1,4 @@
-"""Pure-function tests for knowledge hybrid scoring (no Postgres/Ollama)."""
+"""Pure-function tests for knowledge hybrid scoring without service dependencies."""
 
 from agent_api.tools.knowledge.tool import score_knowledge_hit
 

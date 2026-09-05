@@ -13,7 +13,6 @@ from agent_api.api import ops_auth as ops_auth_api
 from agent_api.config import get_settings
 from agent_api.db.models import Agent, AgentVersion, ModelProvider
 from agent_api.db.ops_store import create_ops_session
-from agent_api.db.provider_store import BUILTIN_LOCAL_PROVIDER_ID, sync_builtin_local_provider
 from agent_api.db.session import close_database, session_factory
 from agent_api.main import app
 
@@ -75,10 +74,6 @@ async def test_create_list_and_key_masking(
     database_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The Ops list always shows the env-managed local row next to remotes.
-    await sync_builtin_local_provider(database_session, get_settings())
-    await database_session.commit()
-
     token = await _ops_cookie(monkeypatch)
     transport = ASGITransport(app=app)
     slug = f"deepseek-{uuid4().hex[:8]}"
@@ -105,7 +100,6 @@ async def test_create_list_and_key_masking(
             # Trailing slash is normalized away.
             assert body["base_url"] == "https://api.deepseek.com/v1"
             assert body["kind"] == "remote"
-            assert body["is_builtin"] is False
             # Keys are write-only: masked preview, never the stored value.
             assert body["has_api_key"] is True
             assert body["api_key_preview"] == "sk-...cdef"
@@ -115,8 +109,6 @@ async def test_create_list_and_key_masking(
             listed = await client.get("/v1/ops/model-providers")
             assert listed.status_code == 200
             providers = listed.json()["providers"]
-            assert providers[0]["slug"] == "local"
-            assert providers[0]["is_builtin"] is True
             mine = next(row for row in providers if row["slug"] == slug)
             assert mine["api_key_preview"] == "sk-...cdef"
             assert "sk-1234567890abcdef" not in listed.text
@@ -187,35 +179,6 @@ async def test_patch_key_rotation_and_clear(
 
 
 @pytest.mark.anyio
-async def test_builtin_provider_is_read_only(
-    database_session: AsyncSession,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    await sync_builtin_local_provider(database_session, get_settings())
-    await database_session.commit()
-
-    token = await _ops_cookie(monkeypatch)
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        client.cookies.set("ops_session", token)
-        builtin = str(BUILTIN_LOCAL_PROVIDER_ID)
-
-        patched = await client.patch(
-            f"/v1/ops/model-providers/{builtin}",
-            json={"name": "renamed"},
-        )
-        assert patched.status_code == 400
-
-        deleted = await client.delete(f"/v1/ops/model-providers/{builtin}")
-        assert deleted.status_code == 400
-
-        reserved = await client.post(
-            "/v1/ops/model-providers",
-            json=_create_payload("local"),
-        )
-        assert reserved.status_code == 400
-
-
 @pytest.mark.anyio
 async def test_create_validation_and_conflicts(
     database_session: AsyncSession,

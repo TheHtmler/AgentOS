@@ -42,8 +42,7 @@ class OpsAgentVersionOut(BaseModel):
     memory_enabled: bool
     case_enabled: bool
     knowledge_base_slugs: list[str] | None
-    # NULL = built-in local provider.
-    model_provider_id: UUID | None
+    model_provider_id: UUID
     # Runtime tuning; None = inherit the env default.
     memory_recall_top_k: int | None
     memory_recall_max_chars: int | None
@@ -76,9 +75,8 @@ class PublishOpsAgentVersionRequest(BaseModel):
     tool_policy_overrides: dict[str, PolicyOverride] | None = None
     # None = unrestricted (knowledge_search sees every active KnowledgeBase).
     knowledge_base_slugs: list[str] | None = None
-    # None = built-in local provider; a value pins this revision to one
-    # ops-managed remote provider.
-    model_provider_id: UUID | None = None
+    # Every new version must pin one enabled externally hosted Provider.
+    model_provider_id: UUID
     # Runtime tuning; None = inherit the env default of the same name.
     memory_recall_top_k: int | None = Field(default=None, ge=1, le=50)
     memory_recall_max_chars: int | None = Field(default=None, ge=200, le=20000)
@@ -243,13 +241,12 @@ async def publish_ops_agent_version(
         if agent is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
-        if payload.model_provider_id is not None:
-            provider = await session.get(ModelProvider, payload.model_provider_id)
-            if provider is None or not provider.enabled:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Model provider does not exist or is disabled",
-                )
+        provider = await session.get(ModelProvider, payload.model_provider_id)
+        if provider is None or not provider.enabled:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Model provider does not exist or is disabled",
+            )
 
         current_max = await session.scalar(
             select(func.max(AgentVersion.version)).where(AgentVersion.agent_id == agent.id),

@@ -8,8 +8,9 @@ from httpx import ASGITransport, AsyncClient
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 
+from agent_api.db.artifact_store import create_artifact
 from agent_api.db.chat_store import list_threads, soft_delete_thread, start_run
-from agent_api.db.models import Thread
+from agent_api.db.models import Artifact, Thread
 from agent_api.db.session import close_database, session_factory
 from agent_api.main import app
 from agent_api.runtime import AgentRuntime
@@ -148,6 +149,45 @@ async def test_chat_binds_requested_agent_for_new_thread(
         thread = await session.get(Thread, thread_id)
     assert thread is not None
     assert thread.agent_id == parenting_id
+
+
+@pytest.mark.anyio
+async def test_history_restores_only_its_thread_upload_attachments(
+    authenticated_api_user: UUID,
+) -> None:
+    app.state.runtime = AgentRuntime(
+        agent=Agent(TestModel(custom_output_text="ok")),
+        model_semaphore=asyncio.Semaphore(1),
+    )
+    transport = ASGITransport(app=app)
+
+    async with session_factory() as session, session.begin():
+        artifact = await create_artifact(
+            session,
+            owner_user_id=authenticated_api_user,
+            kind="upload",
+            title="lab-result",
+            content="",
+            mime_type="image/png",
+        )
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await create_run_via_ag_ui(client, f"请解读\nartifact_id={artifact.id}")
+        assert response.status_code == 200
+        thread_id = UUID(response.headers["x-agentos-thread-id"])
+
+        async with session_factory() as session, session.begin():
+            stored = await session.get(Artifact, artifact.id)
+            assert stored is not None
+            stored.thread_id = thread_id
+
+        history_response = await client.get(f"/v1/threads/{thread_id}/messages")
+
+    assert history_response.status_code == 200
+    user_message = history_response.json()["messages"][0]
+    assert user_message["attachments"] == [
+        {"id": str(artifact.id), "title": "lab-result", "mime_type": "image/png"}
+    ]
 
 
 @pytest.mark.anyio

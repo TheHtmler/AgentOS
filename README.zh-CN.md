@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-AgentOS 是一个正在开发中的可控、可持久化 AI Agent Runtime 平台。项目组合了 Next.js 界面、FastAPI 与 Pydantic AI Runtime、本地 Ollama 模型，以及由 PostgreSQL 持久化的会话状态。
+AgentOS 是一个正在开发中的可控、可持久化 AI Agent Runtime 平台。项目组合了 Next.js 界面、FastAPI 与 Pydantic AI Runtime、第三方模型 Provider，以及由 PostgreSQL 持久化的会话状态。
 
 项目从一个小而可验证的核心开始公开构建，逐步扩展到工具执行、人工审批、隔离 Sandbox 和多租户运行。
 
@@ -12,7 +12,7 @@ AgentOS 是一个正在开发中的可控、可持久化 AI Agent Runtime 平台
 ## 当前能力
 
 - 自定义 Next.js 聊天界面，支持流式输出、停止生成和 Runtime 健康状态。
-- 基于 FastAPI、Pydantic AI 和 Ollama 模型的 Agent API。
+- 基于 FastAPI、Pydantic AI 和第三方模型 Provider 的 Agent API。
 - 使用 Server-Sent Events (SSE) 传输文本增量、完成事件和安全错误事件。
 - 使用 PostgreSQL 持久化 Thread、Message、Run、模型历史和只追加的 Run Event。
 - 通过写入 URL 的 Thread ID，在页面刷新后恢复会话。
@@ -34,7 +34,7 @@ AgentOS 是一个正在开发中的可控、可持久化 AI Agent Runtime 平台
 flowchart LR
     Browser["浏览器"] -->|"HTTP / SSE"| Web["Next.js Web"]
     Web -->|"同源代理"| API["FastAPI Agent API"]
-    API -->|"Pydantic AI"| Ollama["Ollama"]
+    API -->|"Pydantic AI"| Provider["第三方 Provider"]
     API -->|"Thread、Run、Event、Artifact"| PostgreSQL["PostgreSQL"]
     API -->|"private token HTTP"| Sandbox["Sandbox Manager"]
     Sandbox -->|"bounded containers"| Docker["Docker"]
@@ -48,7 +48,7 @@ flowchart LR
 | --------- | ------------------------------------------------- |
 | Web       | Next.js 16、React 19、TypeScript、Tailwind CSS 4  |
 | Agent API | Python 3.13、FastAPI、Pydantic AI                 |
-| 模型      | Ollama（默认：`gemma4:e4b`）                      |
+| 模型      | 第三方 OpenAI-compatible Provider                  |
 | 持久化    | PostgreSQL 17、SQLAlchemy async、asyncpg、Alembic |
 | 工具链    | pnpm、uv、pytest、Ruff、Pyright、ESLint、Prettier |
 
@@ -60,7 +60,7 @@ flowchart LR
 - pnpm `11.2.2`
 - Python `3.13` 和 [uv](https://docs.astral.sh/uv/)
 - Docker 和 Docker Compose
-- [Ollama](https://ollama.com/) 以及一个本地可用的对话模型
+- 一个第三方 OpenAI-compatible 模型端点
 
 以下命令均在仓库根目录执行。
 
@@ -80,13 +80,7 @@ cp services/agent-api/.env.example services/agent-api/.env
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-请在 `infra/postgres/.env` 和 `services/agent-api/.env` 中设置相同的本地数据库密码。也可以在 Agent API 环境文件中修改 `OLLAMA_MODEL` 和 `OLLAMA_BASE_URL`。
-
-默认模型可以通过以下命令安装：
-
-```bash
-ollama pull gemma4:e4b
-```
+请在 `infra/postgres/.env` 和 `services/agent-api/.env` 中设置相同的本地数据库密码。为后台抽取和向量化配置 `BACKGROUND_*`，然后在 Ops 创建聊天 Provider，并为每个 Agent 发布绑定该 Provider 的版本。
 
 ### 3. 启动 PostgreSQL 并迁移数据库
 

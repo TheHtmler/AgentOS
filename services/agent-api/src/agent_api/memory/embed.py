@@ -1,7 +1,7 @@
 """Embedding helpers for memory/knowledge vectors via the background endpoint.
 
-The endpoint is fixed by ``background_*`` settings (falling back to local Ollama)
-and never follows an Agent's chat provider — see config.py.
+The endpoint is fixed by explicit ``background_*`` settings and never follows an
+Agent's chat provider — see config.py.
 """
 
 from __future__ import annotations
@@ -69,10 +69,6 @@ async def embed_text(
         payload = cast(dict[str, Any], response.json())
         data = payload.get("data")
         if not isinstance(data, list) or not data:
-            # Native Ollama shape: {"embedding": [...]}
-            raw = payload.get("embedding")
-            if isinstance(raw, list) and raw and isinstance(raw[0], (int, float)):
-                return [float(cast(int | float, value)) for value in cast(list[object], raw)]
             logger.warning("embedding response missing data")
             return None
         first = cast(dict[str, object], data[0])

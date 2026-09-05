@@ -65,6 +65,7 @@ function userVisibleContent(content: string): string {
 export function convertAguiMessage(
   message: Message,
   toolResults: ReadonlyMap<string, unknown> = new Map(),
+  uploadedArtifacts: ReadonlyMap<string, UploadedArtifact> = new Map(),
 ): ThreadMessageLike | null {
   const { id, role } = message;
 
@@ -94,6 +95,44 @@ export function convertAguiMessage(
           text: (part as { text: string }).text,
         } satisfies TextMessagePart);
       }
+    }
+  }
+
+  const uploadAttachments = (
+    message as Message & {
+      uploadAttachments?: HistoryAttachment[];
+    }
+  ).uploadAttachments;
+  const visibleAttachments =
+    uploadAttachments ??
+    (role === "user" && typeof message.content === "string"
+      ? [...message.content.matchAll(ARTIFACT_ID_LINE_RE)]
+          .map((match) => match[0].match(/[0-9a-f-]{36}/i)?.[0])
+          .map((artifactId) =>
+            artifactId === undefined ? undefined : uploadedArtifacts.get(artifactId),
+          )
+          .filter((artifact): artifact is UploadedArtifact => artifact !== undefined)
+          .map((artifact) => ({
+            id: artifact.id,
+            title: artifact.title,
+            mime_type: artifact.mimeType,
+          }))
+      : []);
+  for (const attachment of visibleAttachments) {
+    if (attachment.mime_type.startsWith("image/")) {
+      content.push({
+        type: "image",
+        image: `/api/uploads/${attachment.id}/content`,
+        filename: attachment.title,
+      } satisfies ImageMessagePart);
+    } else {
+      content.push({
+        type: "file",
+        data: `/api/uploads/${attachment.id}/content`,
+        mimeType: attachment.mime_type || "application/octet-stream",
+        filename: attachment.title,
+        sourceType: "url",
+      } satisfies FileMessagePart);
     }
   }
 
@@ -149,7 +188,10 @@ export function convertAguiMessage(
   };
 }
 
-function convertAguiMessages(messages: readonly Message[]): ThreadMessageLike[] {
+function convertAguiMessages(
+  messages: readonly Message[],
+  uploadedArtifacts: ReadonlyMap<string, UploadedArtifact> = new Map(),
+): ThreadMessageLike[] {
   const results = new Map<string, unknown>();
   for (const message of messages) {
     if (message.role === "tool") {
@@ -158,7 +200,7 @@ function convertAguiMessages(messages: readonly Message[]): ThreadMessageLike[] 
     }
   }
   return messages
-    .map((message) => convertAguiMessage(message, results))
+    .map((message) => convertAguiMessage(message, results, uploadedArtifacts))
     .filter((item): item is ThreadMessageLike => item !== null);
 }
 
@@ -171,6 +213,13 @@ type HistoryMessage = {
   role: string;
   content: string;
   created_at: string;
+  attachments: HistoryAttachment[];
+};
+
+type HistoryAttachment = {
+  id: string;
+  title: string;
+  mime_type: string;
 };
 
 type HistoryToolCall = {
@@ -216,11 +265,34 @@ function parseThreadHistory(value: unknown): ThreadHistory | null {
     ) {
       return null;
     }
+    const attachments: HistoryAttachment[] = [];
+    if (item.attachments !== undefined) {
+      if (!Array.isArray(item.attachments)) {
+        return null;
+      }
+      for (const attachment of item.attachments) {
+        if (
+          !isRecord(attachment) ||
+          typeof attachment.id !== "string" ||
+          !isUuid(attachment.id) ||
+          typeof attachment.title !== "string" ||
+          typeof attachment.mime_type !== "string"
+        ) {
+          return null;
+        }
+        attachments.push({
+          id: attachment.id,
+          title: attachment.title,
+          mime_type: attachment.mime_type,
+        });
+      }
+    }
     messages.push({
       id: item.id,
       role: item.role,
       content: item.content,
       created_at: item.created_at,
+      attachments,
     });
   }
 
@@ -275,7 +347,9 @@ function historyToAgentMessages(history: ThreadHistory): Message[] {
   );
 }
 
-function historyToDisplayMessages(history: ThreadHistory): Message[] {
+type HistoryDisplayMessage = Message & { uploadAttachments?: HistoryAttachment[] };
+
+function historyToDisplayMessages(history: ThreadHistory): HistoryDisplayMessage[] {
   const callsByAssistantMessageId = new Map<string, HistoryToolCall[]>();
   const unpairedCallsByUserMessageId = new Map<string, HistoryToolCall[]>();
 
@@ -310,12 +384,13 @@ function historyToDisplayMessages(history: ThreadHistory): Message[] {
 
   return history.messages.flatMap((message) => {
     const toolCalls = callsByAssistantMessageId.get(message.id);
-    const converted: Message = {
+    const converted: HistoryDisplayMessage = {
       id: message.id,
       role: message.role,
       content: message.content,
+      ...(message.attachments.length === 0 ? {} : { uploadAttachments: message.attachments }),
       ...(toolCalls === undefined ? {} : { toolCalls: toToolCalls(toolCalls) }),
-    } as Message;
+    } as HistoryDisplayMessage;
 
     const unpairedCalls = unpairedCallsByUserMessageId.get(message.id);
     if (message.role !== "user" || unpairedCalls === undefined) {
@@ -534,7 +609,10 @@ export function useAguiRuntime({
         }
         agentRef.current = createAgent(history.thread_id, agentMessages, agentId);
         latestThreadIdRef.current = history.thread_id;
-        setMessages(convertAguiMessages(displayMessages));
+        const uploadedArtifacts = new Map(
+          [...artifactIdsRef.current.values()].map((artifact) => [artifact.id, artifact]),
+        );
+        setMessages(convertAguiMessages(displayMessages, uploadedArtifacts));
         callbacksRef.current.onThreadChanged?.(history.thread_id, history.agent_id);
         if (history.latest_run !== null) {
           lastRunIdRef.current = history.latest_run.id;
@@ -623,7 +701,10 @@ export function useAguiRuntime({
             }
           },
           onMessagesChanged: ({ messages: nextMessages }) => {
-            setMessages(convertAguiMessages(nextMessages));
+            const uploadedArtifacts = new Map(
+              [...artifactIdsRef.current.values()].map((artifact) => [artifact.id, artifact]),
+            );
+            setMessages(convertAguiMessages(nextMessages, uploadedArtifacts));
           },
           onRunErrorEvent: () => {
             // Errors surface through the message snapshot; no extra handling needed.

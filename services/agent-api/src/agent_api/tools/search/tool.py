@@ -35,7 +35,7 @@ class AgentDeps:
     user_account: str | None = None
     thread_id: UUID | None = None
     persist_tool_events: bool = True
-    # Shared Ollama/OpenAI-compatible client for embeddings (knowledge hybrid search).
+    # Shared OpenAI-compatible client for embeddings (knowledge hybrid search).
     http_client: httpx.AsyncClient | None = None
     # Internal Sandbox Manager client; the model never receives this transport directly.
     sandbox_client: httpx.AsyncClient | None = None

@@ -17,7 +17,7 @@ type OpsAgentVersion = {
   memory_enabled: boolean;
   case_enabled: boolean;
   knowledge_base_slugs: string[] | null;
-  model_provider_id: string | null;
+  model_provider_id: string;
   memory_recall_top_k: number | null;
   memory_recall_max_chars: number | null;
   history_max_runs: number | null;
@@ -31,7 +31,6 @@ type ModelProviderOption = {
   name: string;
   default_model: string;
   enabled: boolean;
-  is_builtin: boolean;
 };
 
 type OpsAgentDetail = {
@@ -238,7 +237,7 @@ export default function AgentDetailPage() {
             ? tool_policy_overrides
             : null,
           knowledge_base_slugs,
-          model_provider_id: modelProviderId === "" ? null : modelProviderId,
+          model_provider_id: modelProviderId,
           memory_recall_top_k: parseTuningValue(tuning.memory_recall_top_k),
           memory_recall_max_chars: parseTuningValue(tuning.memory_recall_max_chars),
           history_max_runs: parseTuningValue(tuning.history_max_runs),
@@ -260,7 +259,7 @@ export default function AgentDetailPage() {
   }
 
   const selectableProviders = providers.filter(
-    (provider) => !provider.is_builtin && (provider.enabled || provider.id === modelProviderId),
+    (provider) => provider.enabled || provider.id === modelProviderId,
   );
 
   function providerLabel(providerId: string | null): string {
@@ -394,12 +393,14 @@ export default function AgentDetailPage() {
               </span>
             </div>
             <label>
-              模型 Provider（可选）
+              <span className="req">*</span>模型 Provider
               <select
                 value={modelProviderId}
                 onChange={(event) => setModelProviderId(event.target.value)}
               >
-                <option value="">本地（默认）</option>
+                <option value="" disabled>
+                  请选择 Provider
+                </option>
                 {selectableProviders.map((provider) => (
                   <option key={provider.id} value={provider.id}>
                     {provider.name}（{provider.default_model}）
@@ -408,8 +409,7 @@ export default function AgentDetailPage() {
                 ))}
               </select>
               <span className="field-hint">
-                该 Agent 新对话使用的模型端点；「本地（默认）」= 本机
-                Ollama。发布级绑定，端点故障不会自动换模型。
+                该 Agent 新对话使用的第三方模型端点；发布级绑定，端点故障不会自动换模型。
               </span>
             </label>
             <div className="stack">

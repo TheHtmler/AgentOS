@@ -6,7 +6,8 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent_api.agent import create_agent, create_ollama_http_client
+from agent_api.agent import create_model_http_client
+from model_profile import create_test_agent
 from agent_api.db.knowledge_store import upsert_mma_pa_knowledge
 from agent_api.db.models import KnowledgeBase, KnowledgeChunk, KnowledgeDocument
 from agent_api.tools.knowledge.tool import (
@@ -292,15 +293,15 @@ async def test_run_knowledge_search_json(database_session: AsyncSession) -> None
 
 @pytest.mark.anyio
 async def test_create_agent_registers_knowledge_search() -> None:
-    async with create_ollama_http_client() as http_client:
-        enabled = create_agent(
+    async with create_model_http_client() as http_client:
+        enabled = create_test_agent(
             http_client,
             knowledge_enabled=True,
             growth_enabled=False,
             search_enabled=False,
             fetch_enabled=False,
         )
-        disabled = create_agent(
+        disabled = create_test_agent(
             http_client,
             knowledge_enabled=False,
             growth_enabled=False,

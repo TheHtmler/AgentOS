@@ -1,7 +1,5 @@
-import json
-
-import httpx
 import pytest
+from model_profile import REMOTE_MODEL_PROFILE
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 
 from agent_api.agent import (
@@ -10,9 +8,8 @@ from agent_api.agent import (
     create_agent,
     create_background_http_client,
     create_background_vision_http_client,
-    create_ollama_http_client,
+    create_model_http_client,
     inject_context_snapshot,
-    warm_up_ollama_model,
 )
 from agent_api.config import Settings
 
@@ -159,13 +156,7 @@ def test_default_settings() -> None:
         },
     )
 
-    assert settings.ollama_base_url == "http://127.0.0.1:11434/v1"
-    assert settings.ollama_model == "agentos-qwen3vl:16k"
     assert settings.model_temperature == 0.3
-    assert settings.model_max_concurrent_runs == 1
-    # Class default (local .env may still override the instance value).
-    assert Settings.model_fields["model_max_output_tokens"].default == 4_096
-    assert Settings.model_fields["model_context_window"].default == 16_384
 
     assert settings.search_enabled is True
     assert settings.search_providers == ["tavily", "duckduckgo"]
@@ -180,8 +171,7 @@ def test_default_settings() -> None:
     assert settings.auto_thread_title_timeout_seconds == 30.0
 
 
-def test_background_endpoint_defaults_fall_back_to_local_ollama() -> None:
-    """Empty background_* settings must reproduce the pre-remote behavior exactly."""
+def test_background_endpoint_requires_explicit_remote_configuration() -> None:
 
     settings = Settings.model_validate(
         {
@@ -203,10 +193,13 @@ def test_background_endpoint_defaults_fall_back_to_local_ollama() -> None:
     assert settings.background_embedding_model == ""
     assert settings.background_vision_base_url == ""
     assert settings.background_vision_api_key == ""
-    assert settings.resolved_background_base_url == "http://127.0.0.1:11434/v1"
-    assert settings.resolved_background_chat_model == "agentos-qwen3vl:16k"
+    with pytest.raises(RuntimeError, match="BACKGROUND_BASE_URL"):
+        _ = settings.resolved_background_base_url
+    with pytest.raises(RuntimeError, match="BACKGROUND_CHAT_MODEL"):
+        _ = settings.resolved_background_chat_model
     assert settings.resolved_background_embedding_model == "nomic-embed-text"
-    assert settings.resolved_background_vision_base_url == "http://127.0.0.1:11434/v1"
+    with pytest.raises(RuntimeError, match="BACKGROUND_BASE_URL"):
+        _ = settings.resolved_background_vision_base_url
     assert settings.resolved_background_vision_api_key == ""
 
 
@@ -324,59 +317,9 @@ def test_settings_reject_invalid_model_temperature(temperature: float) -> None:
         )
 
 
-def test_settings_reject_invalid_model_max_concurrent_runs() -> None:
-    with pytest.raises(ValueError, match="model_max_concurrent_runs must be at least 1"):
-        Settings.model_validate(
-            {
-                "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
-                "model_max_concurrent_runs": 0,
-            },
-        )
-
-
 @pytest.mark.anyio
 async def test_agent_can_be_created() -> None:
-    async with create_ollama_http_client() as http_client:
-        agent = create_agent(http_client)
+    async with create_model_http_client() as http_client:
+        agent = create_agent(http_client, model_profile=REMOTE_MODEL_PROFILE)
 
     assert agent is not None
-
-
-@pytest.mark.anyio
-async def test_warm_up_ollama_model_posts_minimal_completion() -> None:
-    settings = Settings.model_validate(
-        {
-            "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
-        },
-    )
-    requests: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        return httpx.Response(200, json={"choices": [{"message": {"content": "hi"}}]})
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        await warm_up_ollama_model(http_client, settings)
-
-    assert len(requests) == 1
-    request = requests[0]
-    assert str(request.url) == settings.ollama_base_url.rstrip("/") + "/chat/completions"
-    payload = json.loads(request.content)
-    assert payload["model"] == settings.ollama_model
-    assert payload["max_tokens"] == 1
-
-
-@pytest.mark.anyio
-async def test_warm_up_ollama_model_swallows_errors() -> None:
-    settings = Settings.model_validate(
-        {
-            "database_url": "postgresql+asyncpg://agentos:test@127.0.0.1:5432/agentos",
-        },
-    )
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("ollama is not reachable")
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        # Must not raise: a slow/unreachable Ollama shouldn't block or crash startup.
-        await warm_up_ollama_model(http_client, settings)

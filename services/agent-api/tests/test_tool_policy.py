@@ -2,7 +2,8 @@ from collections.abc import Iterator
 
 import pytest
 
-from agent_api.agent import create_agent, create_ollama_http_client
+from agent_api.agent import create_model_http_client
+from model_profile import create_test_agent
 from agent_api.config import Settings
 from agent_api.tools.policy import (
     PolicyAction,
@@ -136,8 +137,8 @@ async def test_ask_tool_mounted_with_requires_approval(
     class DummyFetchRouter:
         pass
 
-    async with create_ollama_http_client() as http_client:
-        agent = create_agent(
+    async with create_model_http_client() as http_client:
+        agent = create_test_agent(
             http_client,
             search_router=DummySearchRouter(),  # type: ignore[arg-type]
             fetch_router=DummyFetchRouter(),  # type: ignore[arg-type]
@@ -174,8 +175,8 @@ async def test_create_agent_omits_denied_tool(monkeypatch: pytest.MonkeyPatch) -
     class DummySearchRouter:
         pass
 
-    async with create_ollama_http_client() as http_client:
-        agent = create_agent(http_client, search_router=DummySearchRouter())  # type: ignore[arg-type]
+    async with create_model_http_client() as http_client:
+        agent = create_test_agent(http_client, search_router=DummySearchRouter())  # type: ignore[arg-type]
 
     from typing import cast
 

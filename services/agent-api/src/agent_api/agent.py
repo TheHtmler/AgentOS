@@ -7,13 +7,11 @@ import httpx
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
-from pydantic_ai.models.ollama import OllamaModel
 from pydantic_ai.models.openai import (
     OpenAIChatModel,
     OpenAIResponsesModel,
     OpenAIResponsesModelSettings,
 )
-from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import DeferredToolRequests
@@ -21,7 +19,7 @@ from pydantic_ai.toolsets import AbstractToolset
 
 from agent_api.config import Settings, get_settings
 from agent_api.context_budget import BudgetReport, make_step_history_processor
-from agent_api.db.provider_store import ResolvedModelProfile, local_profile_from_settings
+from agent_api.db.provider_store import ResolvedModelProfile
 from agent_api.runtime_context import (
     ScheduledTaskExecutionContext,
     format_runtime_context_pack,
@@ -393,8 +391,8 @@ def _parse_policy_overrides(
     return overrides
 
 
-def create_ollama_http_client() -> httpx.AsyncClient:
-    """Create a local-only client that never inherits shell proxy settings."""
+def create_model_http_client() -> httpx.AsyncClient:
+    """Create a model client that never inherits shell proxy settings."""
 
     return httpx.AsyncClient(
         timeout=httpx.Timeout(timeout=180.0, connect=5.0),
@@ -405,8 +403,8 @@ def create_ollama_http_client() -> httpx.AsyncClient:
 def create_background_http_client(settings: Settings) -> httpx.AsyncClient:
     """Create the client for background jobs (title/memory/case extraction + embeddings).
 
-    Same no-proxy policy as the Ollama client, plus an Authorization header when
-    ``background_api_key`` is configured (remote endpoints); local Ollama needs none.
+    The endpoint and credentials are explicit background settings, separate from
+    the Provider selected for interactive Agent runs.
     """
 
     headers: dict[str, str] = {}
@@ -443,36 +441,10 @@ def create_background_vision_http_client(settings: Settings) -> httpx.AsyncClien
     )
 
 
-async def warm_up_ollama_model(
-    http_client: httpx.AsyncClient,
-    settings: Settings,
-) -> None:
-    """Send a throwaway completion so Ollama loads the model before the first real request.
-
-    Ollama only loads model weights into memory on first inference, not on `ollama serve`
-    startup, so without this the first user message pays that load latency. Best-effort:
-    failures are logged, never raised, so a slow/unreachable Ollama can't block startup.
-    """
-
-    try:
-        response = await http_client.post(
-            settings.ollama_base_url.rstrip("/") + "/chat/completions",
-            json={
-                "model": settings.ollama_model,
-                "messages": [{"role": "user", "content": "hi"}],
-                "max_tokens": 1,
-                "stream": False,
-            },
-        )
-        response.raise_for_status()
-    except Exception:
-        logger.exception("ollama model warm-up request failed; continuing without it")
-
-
 def create_agent(
     http_client: httpx.AsyncClient,
     *,
-    model_profile: ResolvedModelProfile | None = None,
+    model_profile: ResolvedModelProfile,
     search_router: SearchRouter | None = None,
     search_enabled: bool | None = None,
     fetch_router: FetchRouter | None = None,
@@ -528,18 +500,8 @@ def create_agent(
         case_bound=case_bound,
     )
 
-    # Default (None) keeps tests and background helpers on the env-configured
-    # local model; request paths pass the version's resolved provider profile.
-    profile = model_profile or local_profile_from_settings(settings)
-    if profile.is_local:
-        model = OllamaModel(
-            profile.model_name,
-            provider=OllamaProvider(
-                base_url=profile.base_url,
-                http_client=http_client,
-            ),
-        )
-    elif profile.api_mode == "responses":
+    profile = model_profile
+    if profile.api_mode == "responses":
         # Codex-class subscription gateways only serve the Responses API.
         model = OpenAIResponsesModel(
             profile.model_name,

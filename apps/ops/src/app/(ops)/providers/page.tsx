@@ -6,14 +6,13 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
-import { PROVIDER_API_MODE_LABELS, PROVIDER_KIND_LABELS, boolZh, labelOf } from "@/lib/labels";
+import { PROVIDER_API_MODE_LABELS, boolZh, labelOf } from "@/lib/labels";
 import { OpsFetchError, opsJson } from "@/lib/ops-fetch";
 
 type ModelProvider = {
   id: string;
   slug: string;
   name: string;
-  kind: string;
   base_url: string;
   default_model: string;
   api_mode: string;
@@ -25,7 +24,6 @@ type ModelProvider = {
   supports_vision: boolean;
   supports_tools: boolean;
   enabled: boolean;
-  is_builtin: boolean;
   has_api_key: boolean;
   api_key_preview: string | null;
   created_at: string;
@@ -281,7 +279,7 @@ export default function ProvidersPage() {
       {toast.node}
       <PageHeader
         title="模型 Provider"
-        lead="本地 Ollama 为内置（env 管理）；远程 OpenAI 兼容端点在这里登记后，智能体发版时可选。"
+        lead="在这里登记第三方 OpenAI 兼容端点；智能体发布时必须绑定一个已启用的 Provider。"
         actions={
           <button type="button" onClick={startCreate} disabled={formOpen}>
             新建 Provider
@@ -518,11 +516,9 @@ export default function ProvidersPage() {
               <div>
                 <div className="row__title">
                   {provider.name}
-                  {provider.is_builtin ? <span className="pill">内置（env 管理）</span> : null}
                 </div>
                 <div className="row__meta">
                   <span>{provider.slug}</span>
-                  <span>{labelOf(PROVIDER_KIND_LABELS, provider.kind)}</span>
                   <span>{labelOf(PROVIDER_API_MODE_LABELS, provider.api_mode)}</span>
                   <span>{provider.base_url}</span>
                   <span>模型 {provider.default_model}</span>
@@ -536,8 +532,7 @@ export default function ProvidersPage() {
               <span className={`badge badge--${provider.enabled ? "active" : "disabled"}`}>
                 {provider.enabled ? "启用中" : "已禁用"}
               </span>
-              {provider.is_builtin ? null : (
-                <div className="btn-row">
+              <div className="btn-row">
                   <button
                     type="button"
                     className="ghost"
@@ -566,7 +561,6 @@ export default function ProvidersPage() {
                     {confirmId === provider.id ? "确认删除" : "删除"}
                   </button>
                 </div>
-              )}
             </article>
           ))}
         </div>
