@@ -572,16 +572,6 @@ export function ChatWorkspace({
           </div>
           <div className={activeView === "chat" ? "h-full min-h-0" : "hidden"}>
             <>
-              <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
-                <AgentSelector
-                  agents={agents}
-                  value={selectedAgentId}
-                  onChange={handleSelectAgent}
-                />
-                <span className="truncate text-xs text-muted-foreground">
-                  {agents.find((agent) => agent.id === selectedAgentId)?.description ?? ""}
-                </span>
-              </div>
               <PendingCaseFactsBanner
                 agentId={selectedAgentId}
                 caseEnabled={
@@ -602,6 +592,13 @@ export function ChatWorkspace({
                         <AssistantThread
                           selectedThreadId={slot.threadId}
                           agentId={selectedAgentId}
+                          composerFooter={
+                            <AgentSelector
+                              agents={agents}
+                              value={selectedAgentId}
+                              onChange={handleSelectAgent}
+                            />
+                          }
                           isScheduledTaskThread={
                             slot.threadId !== null && scheduledThreadIds.has(slot.threadId)
                           }

@@ -134,19 +134,19 @@
     BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   @keyframes collapsible-down {
-  from {
-    height: 0;
+    from {
+      height: 0;
     }
-  to {
-    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    to {
+      height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
     }
   }
   @keyframes collapsible-up {
-  from {
-    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    from {
+      height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
     }
-  to {
-    height: 0;
+    to {
+      height: 0;
     }
   }
 }
@@ -3533,3 +3533,30 @@ body {
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
 
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
+
+/* Chat layout guards: flex children must not create a second horizontal
+   scroller, especially when the viewport is narrower than a long message. */
+.agentos-codex-pinned-host,
+.agentos-codex-conversation-host,
+.agentos-conversation-list,
+.agentos-conversation-list-scroll,
+.agentos-main-column,
+.aui-root,
+.aui-thread-root,
+.aui-thread-viewport,
+.aui-thread-viewport-footer {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.agentos-codex-pinned-host,
+.agentos-codex-conversation-host,
+.agentos-conversation-list-scroll,
+.aui-thread-viewport {
+  overflow-y: auto;
+}
+
+.aui-thread-viewport-footer {
+  flex-shrink: 0;
+}

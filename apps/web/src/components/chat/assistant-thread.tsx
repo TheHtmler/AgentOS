@@ -12,8 +12,13 @@
  * `ChatWorkspace` can switch mount points with a one-line change.
  */
 
-import { AssistantRuntimeProvider, useExternalStoreRuntime } from "@assistant-ui/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AssistantRuntimeProvider,
+  type DictationAdapter,
+  useExternalStoreRuntime,
+  WebSpeechDictationAdapter,
+} from "@assistant-ui/react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval-panel";
@@ -95,6 +100,7 @@ type AssistantThreadProps = {
   onThreadChanged: (threadId: string | null, agentId?: string) => void;
   onRunFinalized: () => void;
   onRunStarted?: (runId: string) => void;
+  composerFooter?: ReactNode;
 };
 
 // ---------------------------------------------------------------------------
@@ -113,6 +119,7 @@ function AssistantSurface({
   onRunFinalized,
   onRunStarted,
   agentId,
+  composerFooter,
 }: AssistantThreadProps) {
   const [approval, setApproval] = useState<ApprovalState>({ runId: null, interrupts: [] });
   const lastRunIdRef = useRef<string | null>(null);
@@ -166,12 +173,14 @@ function AssistantSurface({
     [agui, approval.runId],
   );
 
+  const dictationAdapter = useMemo<DictationAdapter>(() => new WebSpeechDictationAdapter(), []);
   const runtime = useExternalStoreRuntime({
     messages: agui.messages,
     isRunning: agui.isRunning,
     onNew: agui.onNew,
     // Messages are already in ThreadMessageLike shape; no conversion needed.
     convertMessage: (message) => message,
+    adapters: { dictation: dictationAdapter },
   });
 
   return (
@@ -188,7 +197,7 @@ function AssistantSurface({
           </div>
         ) : null}
         <div className="min-h-0 flex-1">
-          <Thread />
+          <Thread composerFooter={composerFooter} />
         </div>
       </div>
     </AssistantRuntimeProvider>
