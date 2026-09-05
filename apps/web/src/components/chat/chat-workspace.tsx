@@ -232,7 +232,6 @@ export function ChatWorkspace({
 
   const handleOpenTaskThread = useCallback(
     (threadId: string, agentId?: string) => {
-      setScheduledThreadIds((current) => new Set(current).add(threadId));
       if (agentId !== undefined) {
         setSelectedAgentId(agentId);
       }
