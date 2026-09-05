@@ -19,6 +19,7 @@ import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval-panel";
 import { AgentOsToolFallback } from "@/components/chat/agentos-tool-fallback";
 import { AudioTranscriptionDictationAdapter } from "@/components/chat/audio-dictation-adapter";
+import { ComposerDictationVoice } from "@/components/chat/composer-dictation-voice";
 import { ComposerContextUsage } from "@/components/chat/session-stats-bar";
 import { useAguiRuntime } from "@/lib/agui-runtime";
 
@@ -206,6 +207,7 @@ function AssistantSurface({
             components={{ ToolFallback: AgentOsToolFallback }}
             composerFooter={
               <div className="flex min-w-0 items-center gap-1.5">
+                <ComposerDictationVoice />
                 {composerFooter}
                 <ComposerContextUsage
                   threadId={selectedThreadId ?? null}

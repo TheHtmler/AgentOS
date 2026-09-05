@@ -59,6 +59,7 @@ export function ComposerContextUsage({
         messages: inputTokens / 1_000,
         total: contextWindow / 1_000,
       }}
+      className="z-30 shrink-0"
       aria-label={`最近一轮输入 ${inputTokens} / ${contextWindow} tokens`}
     />
   );
