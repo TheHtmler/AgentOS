@@ -463,6 +463,7 @@ export function ChatWorkspace({
               <AgentOsLogo className="agentos-codex-brand" />
             </header>
 
+            <p className="agentos-codex-sidebar-label">工作区</p>
             <nav className="agentos-codex-primary-nav" aria-label="主导航">
               <button type="button" onClick={handleNewConversation}>
                 <SquarePen aria-hidden="true" className="size-4" />
@@ -536,6 +537,9 @@ export function ChatWorkspace({
             </div>
 
             <div className="agentos-codex-sidebar-section agentos-codex-tasks-section">
+              <div className="agentos-codex-sidebar-section-heading">
+                <p>会话</p>
+              </div>
               <div className="agentos-codex-conversation-host">
                 <ConversationList
                   activeThreadId={activeThreadId}
