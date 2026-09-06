@@ -7,8 +7,9 @@ function source(relativePath) {
 }
 
 test("interactive primitives expose accessible tooltip and bounded scrolling behavior", () => {
-  assert.match(source("components/ui/tooltip.tsx"), /role="tooltip"/);
-  assert.match(source("components/ui/tooltip.tsx"), /group-focus-within:visible/);
+  const tooltip = source("components/ui/tooltip.tsx");
+  assert.match(tooltip, /@radix-ui\/react-tooltip/);
+  assert.match(tooltip, /TooltipPrimitive\.Content/);
   assert.match(source("components/ui/scroll-area.tsx"), /overscroll-contain/);
 });
 
@@ -24,8 +25,8 @@ test("conversation actions use the shared DropdownMenu primitive", () => {
   assert.doesNotMatch(conversations, /agentos-conversation-menu-button/);
 });
 
-test("assistant-ui message editing submits the revised query through AG-UI", () => {
+test("append-only chat does not advertise unsupported editing or regeneration", () => {
   const thread = source("components/chat/assistant-thread.tsx");
   assert.match(thread, /onNew:\s*agui\.onNew/);
-  assert.match(thread, /onEdit:\s*agui\.onNew/);
+  assert.doesNotMatch(thread, /onEdit:|onReload:/);
 });

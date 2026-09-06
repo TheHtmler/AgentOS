@@ -69,3 +69,14 @@ adapter 在 `apps/web/src/lib/agui-runtime.ts`，事件解析在 `apps/web/src/l
 - `ComposerContext` 继续作为 Context rail：最近一轮真实 `input_tokens/context_window` 驱动其 token ring 和标准分段；其面板内部用 Radix portal 挂到 Composer 外，避免被 Thread viewport 裁剪。AgentOS 的完整会话观测（轮数、步骤、LLM/工具耗时、首 token、累计输入/输出、缓存命中）作为该元素的领域详情插入面板，后端没有可靠的 system/tool/history 分项时不伪造分项占用。
 
 `ChatPanel` 已在迁移中删除；它不再是回滚目标。以后调整生成的 `components/assistant-ui/*` 文件必须通过 assistant-ui registry 重新生成，领域协议继续放在 `components/chat/*` 与 `lib/agui-runtime.ts`。
+
+## 多轮消息与历史一致性（2026-09-06）
+
+- 新会话的 `RUN_STARTED` 把临时会话提升为服务端 Thread ID 时，保留当前 `HttpAgent`，不能触发历史加载并用尚未落库的回复覆盖实时状态。上传提前创建的 Thread 同样处理。
+- 每轮流式快照只更新该轮用户消息及之后的内容；之前已展示的历史保留，避免传输消息不包含的工具摘要、附件被下一轮快照抹掉。
+- 使用 assistant-ui 的 `useExternalMessageConverter`，通过 `joinStrategy: "concat-content"` 将连续的 assistant 步骤合并为一轮回复，保留 part 顺序；`reasoning` role 映射为思考 part，空文本不能隔断工具组。
+- 向 ExternalStoreRuntime 提供完整、线性的 `messageRepository`，历史替换时清除过期 ID，不能把实时 ID 与持久化 ID 的差异积累成虚假的消息分支。后端没有编辑、重新生成及分支持久化协议，因此不声明 `onEdit` / `onReload`。
+- `AgentOsAssistantMessage` 通过 `Thread.components.AssistantMessage` 插槽复用 `MessagePrimitive.GroupedParts`、`ToolGroup`、`Reasoning`、`MarkdownText` 和 `ActionBarPrimitive`；复制、导出只显示在含正文的整轮回复末尾，纯工具过程不显示回复操作栏。生成的 registry 文件保持独立。
+- 历史接口的工具摘要按各轮执行顺序放在最终正文前，不能追加到最终正文后。当前接口不保存逐段思考或中间文本与工具的完整交错时间线；这一边界不等同于完整事件回放。
+
+回归验证覆盖：新会话连续两轮、刷新历史、刷新后继续追问、工具摘要排序、假分支计数、操作栏数量及移动端宽度。消息转换单测位于 `apps/web/src/lib/agui-runtime.test.mjs`。

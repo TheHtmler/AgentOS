@@ -12,12 +12,18 @@
  * `ChatWorkspace` can switch mount points with a one-line change.
  */
 
-import { AssistantRuntimeProvider, useExternalStoreRuntime } from "@assistant-ui/react";
+import {
+  AssistantRuntimeProvider,
+  useExternalMessageConverter,
+  useExternalStoreRuntime,
+  type ThreadMessage,
+} from "@assistant-ui/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval-panel";
 import { AgentOsToolFallback } from "@/components/chat/agentos-tool-fallback";
+import { AgentOsAssistantMessage } from "@/components/chat/agentos-assistant-message";
 import { AudioTranscriptionDictationAdapter } from "@/components/chat/audio-dictation-adapter";
 import { ComposerDictationVoice } from "@/components/chat/composer-dictation-voice";
 import { ComposerContextUsage } from "@/components/chat/session-stats-bar";
@@ -174,16 +180,31 @@ function AssistantSurface({
   );
   const dictationAdapter = useMemo(() => new AudioTranscriptionDictationAdapter(), []);
 
-  const runtime = useExternalStoreRuntime({
+  const messages = useExternalMessageConverter({
     messages: agui.messages,
+    callback: (message) => message,
+    isRunning: agui.isRunning,
+    joinStrategy: "concat-content",
+  });
+  // This product has a linear audit trail. Replace the complete repository so
+  // optimistic/history ID changes cannot accumulate phantom branches.
+  const messageRepository = useMemo(
+    () => ({
+      headId: messages.at(-1)?.id ?? null,
+      messages: messages.map((message, index) => ({
+        message,
+        parentId: messages[index - 1]?.id ?? null,
+      })),
+    }),
+    [messages],
+  );
+
+  const runtime = useExternalStoreRuntime<ThreadMessage>({
+    messageRepository,
     isRunning: agui.isRunning,
     isLoading: agui.isLoading,
     onNew: agui.onNew,
-    // AgentOS persists messages as an append-only audit trail. An edited query
-    // is therefore submitted as the next user turn rather than mutating history.
-    onEdit: agui.onNew,
-    // Messages are already in ThreadMessageLike shape; no conversion needed.
-    convertMessage: (message) => message,
+    isSendDisabled: agui.isLoading,
     onCancel: agui.cancelRun,
     onRefetchThread: async () => agui.refreshHistory(),
     adapters: {
@@ -207,7 +228,10 @@ function AssistantSurface({
         ) : null}
         <div className="min-h-0 flex-1">
           <Thread
-            components={{ ToolFallback: AgentOsToolFallback }}
+            components={{
+              ToolFallback: AgentOsToolFallback,
+              AssistantMessage: AgentOsAssistantMessage,
+            }}
             composerFooter={
               <div className="flex min-w-0 items-center gap-1.5">
                 <ComposerDictationVoice />

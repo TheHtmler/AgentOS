@@ -69,13 +69,15 @@ export function convertAguiMessage(
 ): ThreadMessageLike | null {
   const { id, role } = message;
 
-  if (role === "tool") {
+  if (role !== "user" && role !== "assistant" && role !== "reasoning") {
     return null;
   }
 
   const content: ThreadMessageLike["content"][number][] = [];
 
-  if (typeof message.content === "string") {
+  if (role === "reasoning" && typeof message.content === "string") {
+    content.push({ type: "reasoning", text: message.content } satisfies ReasoningMessagePart);
+  } else if (typeof message.content === "string" && message.content !== "") {
     content.push({
       type: "text",
       text: role === "user" ? userVisibleContent(message.content) : message.content,
@@ -188,7 +190,7 @@ export function convertAguiMessage(
   };
 }
 
-function convertAguiMessages(
+export function convertAguiMessages(
   messages: readonly Message[],
   uploadedArtifacts: ReadonlyMap<string, UploadedArtifact> = new Map(),
 ): ThreadMessageLike[] {
@@ -349,7 +351,7 @@ function historyToAgentMessages(history: ThreadHistory): Message[] {
 
 type HistoryDisplayMessage = Message & { uploadAttachments?: HistoryAttachment[] };
 
-function historyToDisplayMessages(history: ThreadHistory): HistoryDisplayMessage[] {
+export function historyToDisplayMessages(history: ThreadHistory): HistoryDisplayMessage[] {
   const callsByAssistantMessageId = new Map<string, HistoryToolCall[]>();
   const unpairedCallsByUserMessageId = new Map<string, HistoryToolCall[]>();
 
@@ -389,8 +391,19 @@ function historyToDisplayMessages(history: ThreadHistory): HistoryDisplayMessage
       role: message.role,
       content: message.content,
       ...(message.attachments.length === 0 ? {} : { uploadAttachments: message.attachments }),
-      ...(toolCalls === undefined ? {} : { toolCalls: toToolCalls(toolCalls) }),
     } as HistoryDisplayMessage;
+
+    // Stored assistant text is the final answer; tool summaries precede it.
+    if (toolCalls !== undefined) {
+      return [
+        {
+          id: `history-tools-${message.id}`,
+          role: "assistant",
+          toolCalls: toToolCalls(toolCalls),
+        } as unknown as HistoryDisplayMessage,
+        converted,
+      ];
+    }
 
     const unpairedCalls = unpairedCallsByUserMessageId.get(message.id);
     if (message.role !== "user" || unpairedCalls === undefined) {
@@ -453,6 +466,7 @@ export function useAguiRuntime({
   const activeRunIdRef = useRef<string | null>(null);
   const lastRunIdRef = useRef<string | null>(null);
   const latestThreadIdRef = useRef<string | null>(selectedThreadId ?? null);
+  const locallyCreatedThreadIdRef = useRef<string | null>(null);
   const artifactIdsRef = useRef(new Map<string, UploadedArtifact>());
   const recoveryInFlightRef = useRef(false);
   const recoverRunRef = useRef<((runId: string) => Promise<void>) | null>(null);
@@ -502,6 +516,7 @@ export function useAguiRuntime({
     const threadAgentId =
       typeof payload.agent_id === "string" && isUuid(payload.agent_id) ? payload.agent_id : agentId;
     latestThreadIdRef.current = threadId;
+    locallyCreatedThreadIdRef.current = threadId;
     agentRef.current = createAgent(threadId, [], threadAgentId);
     callbacksRef.current.onThreadChanged?.(threadId, threadAgentId ?? undefined);
     return threadId;
@@ -566,6 +581,13 @@ export function useAguiRuntime({
     const controller = new AbortController();
     let current = true;
 
+    // Publishing the ID of our own new thread is not a history navigation.
+    // Reloading here replaces the live agent with a partially persisted run.
+    if (selectedThreadId != null && locallyCreatedThreadIdRef.current === selectedThreadId) {
+      locallyCreatedThreadIdRef.current = null;
+      return;
+    }
+
     if (selectedThreadId === null || selectedThreadId === undefined) {
       latestThreadIdRef.current = null;
       agentRef.current = createAgent("new", [], agentId);
@@ -576,7 +598,10 @@ export function useAguiRuntime({
           setIsLoading(false);
         }
       });
-      return () => controller.abort();
+      return () => {
+        current = false;
+        controller.abort();
+      };
     }
 
     latestThreadIdRef.current = selectedThreadId;
@@ -639,7 +664,7 @@ export function useAguiRuntime({
   const send = useCallback(
     async (text: string, artifacts: readonly UploadedArtifact[] = []) => {
       const agent = agentRef.current;
-      if (agent === null) {
+      if (agent === null || isLoading || isRunning) {
         return;
       }
 
@@ -688,6 +713,10 @@ export function useAguiRuntime({
       setMessages((current) => [...current, userMessage]);
       setIsRunning(true);
 
+      // Transport history omits display-only tool summaries and attachments.
+      // Only replace the new turn, preserving the already displayed prefix.
+      const previousMessages = messages;
+
       try {
         await agent.runAgent(undefined, {
           onRunStartedEvent: ({ event }) => {
@@ -695,16 +724,25 @@ export function useAguiRuntime({
             lastRunIdRef.current = event.runId;
             callbacksRef.current.onRunStarted?.(event.runId);
             if (event.threadId !== undefined) {
+              if (agent.threadId === "new") {
+                locallyCreatedThreadIdRef.current = event.threadId;
+              }
               agent.threadId = event.threadId;
               latestThreadIdRef.current = event.threadId;
               callbacksRef.current.onThreadChanged?.(event.threadId);
             }
           },
           onMessagesChanged: ({ messages: nextMessages }) => {
+            if (agentRef.current !== agent) return;
             const uploadedArtifacts = new Map(
               [...artifactIdsRef.current.values()].map((artifact) => [artifact.id, artifact]),
             );
-            setMessages(convertAguiMessages(nextMessages, uploadedArtifacts));
+            const turnStart = nextMessages.findIndex((item) => item.id === userMessageId);
+            if (turnStart < 0) return;
+            setMessages([
+              ...previousMessages,
+              ...convertAguiMessages(nextMessages.slice(turnStart), uploadedArtifacts),
+            ]);
           },
           onRunErrorEvent: () => {
             // Errors surface through the message snapshot; no extra handling needed.
@@ -727,7 +765,7 @@ export function useAguiRuntime({
         void recoverRunRef.current?.(runId);
       }
     },
-    [refreshHistory],
+    [isLoading, isRunning, messages],
   );
 
   // HITL resume: consume `/api/runs/{runId}/stream` and merge into the same store.
