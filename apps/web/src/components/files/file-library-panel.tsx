@@ -103,7 +103,10 @@ function FileTypeIcon({ file }: { file: LibraryFile }) {
   return <File className="size-5 text-muted-foreground" />;
 }
 
-function FileThumbnail({ file }: { file: LibraryFile }) {
+function FileThumbnail({ file, large = false }: { file: LibraryFile; large?: boolean }) {
+  const frameClass = large
+    ? "aspect-[4/3] w-full overflow-hidden bg-muted"
+    : "size-12 shrink-0 overflow-hidden rounded-md border bg-muted";
   const thumbnailUrl = file.mime_type.startsWith("image/")
     ? `/api/uploads/${file.id}/content`
     : file.mime_type === "application/pdf"
@@ -112,14 +115,14 @@ function FileThumbnail({ file }: { file: LibraryFile }) {
 
   if (thumbnailUrl === null) {
     return (
-      <div className="grid size-12 shrink-0 place-items-center rounded-md bg-muted">
+      <div className={`grid ${frameClass} place-items-center`}>
         <FileTypeIcon file={file} />
       </div>
     );
   }
 
   return (
-    <div className="size-12 shrink-0 overflow-hidden rounded-md border bg-muted">
+    <div className={frameClass}>
       {/* The content endpoint performs the owner check before serving this thumbnail. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
@@ -221,6 +224,7 @@ export function FileLibraryPanel({ agentId, onOpenThread }: FileLibraryPanelProp
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "image" | "pdf">("all");
+  const [visibleCount, setVisibleCount] = useState(24);
   const [previewFile, setPreviewFile] = useState<LibraryFile | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LibraryFile | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -259,6 +263,7 @@ export function FileLibraryPanel({ agentId, onOpenThread }: FileLibraryPanelProp
       );
     });
   }, [files, query, typeFilter]);
+  const displayedFiles = visibleFiles.slice(0, visibleCount);
 
   async function uploadFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -343,7 +348,10 @@ export function FileLibraryPanel({ agentId, onOpenThread }: FileLibraryPanelProp
           />
           <Input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setVisibleCount(24);
+            }}
             className="pl-9"
             placeholder="搜索文件"
           />
@@ -354,7 +362,10 @@ export function FileLibraryPanel({ agentId, onOpenThread }: FileLibraryPanelProp
             type="button"
             variant={typeFilter === filter ? "secondary" : "ghost"}
             size="sm"
-            onClick={() => setTypeFilter(filter)}
+            onClick={() => {
+              setTypeFilter(filter);
+              setVisibleCount(24);
+            }}
           >
             {filter === "all" ? "全部" : filter === "image" ? "图片" : "PDF"}
           </Button>
@@ -366,7 +377,7 @@ export function FileLibraryPanel({ agentId, onOpenThread }: FileLibraryPanelProp
           {error}
         </p>
       ) : null}
-      <div className="mt-4 min-h-0 flex-1 overflow-auto rounded-md border bg-card">
+      <div className="mt-4 min-h-0 flex-1 overflow-auto">
         {isLoading ? (
           <div className="grid h-40 place-items-center text-sm text-muted-foreground">
             正在加载文件…
@@ -386,68 +397,102 @@ export function FileLibraryPanel({ agentId, onOpenThread }: FileLibraryPanelProp
           </div>
         ) : null}
         {!isLoading && visibleFiles.length > 0 ? (
-          <ul className="divide-y" aria-label="文件列表">
-            {visibleFiles.map((file) => (
-              <li key={file.id} className="flex min-w-0 items-center gap-3 px-4 py-3">
-                <FileThumbnail file={file} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground" title={file.title}>
-                    {file.title}
-                  </p>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {file.source === "generated" ? "系统生成" : "我上传的"} ·{" "}
-                    {file.original_filename} · {formatSize(file.byte_size)} ·{" "}
-                    {formatDate(file.created_at)}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
+          <>
+            <p className="mb-3 text-xs text-muted-foreground">
+              显示 {displayedFiles.length} / {visibleFiles.length} 个文件
+            </p>
+            <ul
+              className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3"
+              aria-label="文件列表"
+            >
+              {displayedFiles.map((file) => (
+                <li key={file.id} className="overflow-hidden rounded-md border bg-card">
+                  <button
                     type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="预览文件"
-                    title="预览"
+                    className="block w-full text-left hover:opacity-85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    aria-label={`预览 ${file.title}`}
                     onClick={() => setPreviewFile(file)}
                   >
-                    <Eye className="size-4" />
-                  </Button>
-                  <a
-                    href={`/api/uploads/${file.id}/content`}
-                    download
-                    aria-label="下载文件"
-                    title="下载"
-                    className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    <Download className="size-4" />
-                  </a>
-                  {file.thread_id !== null ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="hidden sm:inline-flex"
-                      onClick={() =>
-                        onOpenThread(file.thread_id!, file.thread_agent_id ?? undefined)
-                      }
+                    <FileThumbnail file={file} large />
+                  </button>
+                  <div className="min-w-0 p-3">
+                    <p className="truncate text-sm font-medium text-foreground" title={file.title}>
+                      {file.title}
+                    </p>
+                    <p
+                      className="mt-1 truncate text-xs text-muted-foreground"
+                      title={file.original_filename}
                     >
-                      会话
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="删除文件"
-                    title="删除"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => setDeleteTarget(file)}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                      {file.source === "generated" ? "系统生成" : "我上传的"} ·{" "}
+                      {formatSize(file.byte_size)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {formatDate(file.created_at)}
+                    </p>
+                    <div className="mt-2 flex items-center justify-between border-t pt-2">
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label="预览文件"
+                          title="预览"
+                          onClick={() => setPreviewFile(file)}
+                        >
+                          <Eye className="size-4" />
+                        </Button>
+                        <a
+                          href={`/api/uploads/${file.id}/content`}
+                          download
+                          aria-label="下载文件"
+                          title="下载"
+                          className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          <Download className="size-4" />
+                        </a>
+                        {file.thread_id !== null ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label="打开来源会话"
+                            title="打开来源会话"
+                            onClick={() =>
+                              onOpenThread(file.thread_id!, file.thread_agent_id ?? undefined)
+                            }
+                          >
+                            <FileText className="size-4" />
+                          </Button>
+                        ) : null}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="删除文件"
+                        title="删除"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(file)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {displayedFiles.length < visibleFiles.length ? (
+              <div className="flex justify-center py-5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setVisibleCount((count) => count + 24)}
+                >
+                  加载更多（剩余 {visibleFiles.length - displayedFiles.length}）
+                </Button>
+              </div>
+            ) : null}
+          </>
         ) : null}
       </div>
 
