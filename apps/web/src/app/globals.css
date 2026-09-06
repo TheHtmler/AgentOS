@@ -3561,6 +3561,23 @@ body {
   flex-shrink: 0;
 }
 
+@media (max-width: 767px) {
+  /* The phone bar is rendered beside Thread so its keyboard-aware geometry
+     does not compete with the viewport footer's desktop composer. */
+  .aui-thread-viewport-footer > .aui-composer-root {
+    display: none;
+  }
+
+  .aui-agentos-mobile-composer {
+    flex: none;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .aui-agentos-mobile-composer .aui-composer-attachments {
+    padding: 0.5rem 0.75rem 0;
+  }
+}
+
 /* Keep uploaded image previews compact inside the user's text bubble. */
 [data-slot="aui_user-message-image"] [data-slot="image-root"] {
   max-width: 12rem;

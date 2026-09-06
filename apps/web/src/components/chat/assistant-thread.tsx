@@ -24,6 +24,7 @@ import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval-panel";
 import { AgentOsToolFallback } from "@/components/chat/agentos-tool-fallback";
 import { AgentOsAssistantMessage } from "@/components/chat/agentos-assistant-message";
+import { AgentOsMobileComposer } from "@/components/chat/agentos-mobile-composer";
 import { AudioTranscriptionDictationAdapter } from "@/components/chat/audio-dictation-adapter";
 import { ComposerDictationVoice } from "@/components/chat/composer-dictation-voice";
 import { ComposerContextUsage } from "@/components/chat/session-stats-bar";
@@ -245,6 +246,7 @@ function AssistantSurface({
             }
           />
         </div>
+        <AgentOsMobileComposer />
       </div>
     </AssistantRuntimeProvider>
   );
