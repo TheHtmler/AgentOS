@@ -12,23 +12,23 @@
 
 ## 新增 UI 原语（src/components/ui/）
 
-| 原语 | 说明 |
-|---|---|
-| `input.tsx` / `textarea.tsx` / `label.tsx` | 标准 shadcn 表单原语（CVA + focus ring + aria-invalid） |
-| `card.tsx` | Card / CardHeader / CardTitle / CardDescription / CardContent / CardFooter |
-| `badge.tsx` | 状态徽章（default / secondary / destructive / outline） |
-| `avatar.tsx` | Avatar / AvatarImage / AvatarFallback |
-| `separator.tsx` / `scroll-area.tsx` / `tooltip.tsx` | 布局与提示原语 |
+| 原语                                                | 说明                                                                       |
+| --------------------------------------------------- | -------------------------------------------------------------------------- |
+| `input.tsx` / `textarea.tsx` / `label.tsx`          | 标准 shadcn 表单原语（CVA + focus ring + aria-invalid）                    |
+| `card.tsx`                                          | Card / CardHeader / CardTitle / CardDescription / CardContent / CardFooter |
+| `badge.tsx`                                         | 状态徽章（default / secondary / destructive / outline）                    |
+| `avatar.tsx`                                        | Avatar / AvatarImage / AvatarFallback                                      |
+| `separator.tsx` / `scroll-area.tsx` / `tooltip.tsx` | 布局与提示原语                                                             |
 
 ## 重写的 AI 核心组件
 
-| 组件 | 改造 |
-|---|---|
-| `thinking-step-card.tsx` | 从 `agentos-*` 手写类 → Card + Badge + theme tokens；运行态脉冲指示、可折叠思考内容，逻辑不变 |
-| `process-group.tsx` | 从 `agentos-*` → Collapsible + 主题化；运行中自动展开、结束自动收起，逻辑不变 |
-| `approval-panel.tsx` | 从 `agentos-*` → Card + Button + Input + Label + Badge；HITL 审批/资料补充逻辑不动 |
-| `tool-call-card.tsx` | 视觉层全换 shadcn tokens（状态色 / 图标框 / 命中片段卡 / sandbox 输出块 / 文件列表 / 预览面板）；解析与 `summarizeToolResultContent` 逻辑零改动 |
-| `chat-panel.tsx` | header / 空状态 / 消息气泡（user 右、assistant 左圆角卡）/ meta / composer 容器 → 全部 Tailwind + theme tokens；回调与状态零改动 |
+| 组件                     | 改造                                                                                                                                            |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `thinking-step-card.tsx` | 从 `agentos-*` 手写类 → Card + Badge + theme tokens；运行态脉冲指示、可折叠思考内容，逻辑不变                                                   |
+| `process-group.tsx`      | 从 `agentos-*` → Collapsible + 主题化；运行中自动展开、结束自动收起，逻辑不变                                                                   |
+| `approval-panel.tsx`     | 从 `agentos-*` → Card + Button + Input + Label + Badge；HITL 审批/资料补充逻辑不动                                                              |
+| `tool-call-card.tsx`     | 视觉层全换 shadcn tokens（状态色 / 图标框 / 命中片段卡 / sandbox 输出块 / 文件列表 / 预览面板）；解析与 `summarizeToolResultContent` 逻辑零改动 |
+| `chat-panel.tsx`         | header / 空状态 / 消息气泡（user 右、assistant 左圆角卡）/ meta / composer 容器 → 全部 Tailwind + theme tokens；回调与状态零改动                |
 
 ## 样式清理
 
@@ -38,15 +38,21 @@
 
 ## 验证
 
-| 检查 | 结果 |
-|---|---|
-| `tsc --noEmit` | 0 错误 |
-| `eslint`（chat + ui 全量） | 0 错误（3 个既有 img warning） |
-| `next build` | 沙箱内 Turbopack 被禁（`Operation not permitted`，需绑定端口）——非代码问题，需在 Mac mini 部署侧构建验证 |
-| 后端 pytest / ruff / pyright | 此前轮次已全绿（纯函数 8 passed） |
+| 检查                         | 结果                                                                                                     |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `tsc --noEmit`               | 0 错误                                                                                                   |
+| `eslint`（chat + ui 全量）   | 0 错误（3 个既有 img warning）                                                                           |
+| `next build`                 | 沙箱内 Turbopack 被禁（`Operation not permitted`，需绑定端口）——非代码问题，需在 Mac mini 部署侧构建验证 |
+| 后端 pytest / ruff / pyright | 此前轮次已全绿（纯函数 8 passed）                                                                        |
 
 ## 后续
 
 - 部署后请在浏览器确认：消息气泡、思考步骤、工具调用卡、审批面板、composer 的视觉与交互
 - 剩余存量 `agentos-*` 类（会话列表、移动端抽屉、邀请弹窗、mermaid）未在本轮动，遵循 AGENTS.md「随页面重写逐批替换」约定
 - 若需继续，下一步可把 `conversation-list` / `scheduled-tasks-panel` / `wechat-binding-panel` 同样 shadcn 化
+
+## 文件库（2026-09-06）
+
+- Web 工作区左侧主导航新增「文件库」，移动抽屉同步提供入口；账户底部的弹窗收敛为「记忆管理」，不再和文件管理混放。
+- `components/files/file-library-panel.tsx` 使用 shadcn `Button` / `Input` / `Dialog` / `AlertDialog` 与 lucide 图标，实现上传文件列表、搜索、图片/PDF 预览、下载、来源会话跳转和删除确认。
+- 页面只消费 `/api/me/files` 的用户可见上传文件契约；没有原始字节或只属于工具工作数据的 Artifact 不显示。Office 文档转换预览与公共资料页不能先在该 UI 上伪造入口，待后端处理与授权模型完成后再扩展。

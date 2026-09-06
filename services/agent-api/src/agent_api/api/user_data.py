@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from agent_api.api.auth import get_current_user
 from agent_api.config import get_settings
-from agent_api.db.models import Artifact, User, UserMemory
+from agent_api.db.models import Artifact, Thread, User, UserMemory
 from agent_api.db.session import session_factory
 from agent_api.uploads.storage import resolve_stored_upload_path
 
@@ -53,6 +53,23 @@ class ArtifactResponse(BaseModel):
 
 class ArtifactListResponse(BaseModel):
     artifacts: list[ArtifactResponse]
+
+
+class FileLibraryItemResponse(BaseModel):
+    """A user-visible uploaded file with its durable original bytes."""
+
+    id: UUID
+    title: str
+    original_filename: str
+    mime_type: str
+    byte_size: int | None
+    thread_id: UUID | None
+    thread_agent_id: UUID | None
+    created_at: datetime
+
+
+class FileLibraryListResponse(BaseModel):
+    files: list[FileLibraryItemResponse]
 
 
 @router.get("/memories", response_model=MemoryListResponse)
@@ -118,6 +135,51 @@ async def list_artifacts(user: Annotated[User, Depends(get_current_user)]) -> Ar
             for row in artifacts
         ]
     )
+
+
+@router.get("/files", response_model=FileLibraryListResponse)
+async def list_files(user: Annotated[User, Depends(get_current_user)]) -> FileLibraryListResponse:
+    """List original uploads that are safe to expose in the user's file library.
+
+    Artifacts also carry internal fetch bodies and sandbox stdout. Those are model
+    working data, not user files, so this intentionally includes only uploads
+    with the existing owner check.
+    """
+
+    async with session_factory() as session:
+        rows = await session.execute(
+            select(Artifact, Thread.agent_id)
+            .outerjoin(Thread, Artifact.thread_id == Thread.id)
+            .where(Artifact.owner_user_id == user.id, Artifact.kind == "upload")
+            .order_by(Artifact.created_at.desc())
+            .limit(200)
+        )
+
+        files = [
+            FileLibraryItemResponse(
+                id=artifact.id,
+                title=artifact.title,
+                original_filename=(
+                    str(artifact.meta.get("original_filename"))
+                    if isinstance(artifact.meta, dict)
+                    and isinstance(artifact.meta.get("original_filename"), str)
+                    else artifact.title
+                ),
+                mime_type=artifact.mime_type,
+                byte_size=(
+                    value
+                    if isinstance(artifact.meta, dict)
+                    and isinstance((value := artifact.meta.get("byte_size")), int)
+                    else None
+                ),
+                thread_id=artifact.thread_id,
+                thread_agent_id=agent_id,
+                created_at=artifact.created_at,
+            )
+            for artifact, agent_id in rows.tuples()
+        ]
+
+    return FileLibraryListResponse(files=files)
 
 
 @router.delete("/artifacts/{artifact_id}", status_code=status.HTTP_204_NO_CONTENT)

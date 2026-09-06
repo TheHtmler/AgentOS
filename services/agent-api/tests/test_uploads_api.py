@@ -101,6 +101,77 @@ async def test_upload_creates_artifact_and_stores_original(
 
 
 @pytest.mark.anyio
+async def test_file_library_lists_only_owned_uploads(
+    authenticated_api_user: UUID,
+) -> None:
+    """The file library must not expose internal Artifact working data."""
+
+    async with session_factory() as session, session.begin():
+        started = await start_run(
+            session,
+            thread_id=None,
+            user_content="文件库测试",
+            model_name="test",
+            user_id=authenticated_api_user,
+        )
+        thread = await session.get(Thread, started.thread_id)
+        assert thread is not None
+        uploaded = Artifact(
+            owner_user_id=authenticated_api_user,
+            thread_id=started.thread_id,
+            kind="upload",
+            title="报告",
+            mime_type="application/pdf",
+            content="报告内容",
+            content_chars=4,
+            meta={"original_filename": "report.pdf", "byte_size": 1024},
+        )
+        internal = Artifact(
+            owner_user_id=authenticated_api_user,
+            kind="fetch_url",
+            title="Internal fetch",
+            content="internal",
+            content_chars=8,
+        )
+        other_user = User(email=f"file-library-{uuid4().hex}@example.com", status="active")
+        session.add_all([uploaded, internal, other_user])
+        await session.flush()
+        session.add(
+            Artifact(
+                owner_user_id=other_user.id,
+                kind="upload",
+                title="别人的文件",
+                mime_type="application/pdf",
+                content="private",
+                content_chars=7,
+                meta={"original_filename": "private.pdf", "byte_size": 1},
+            )
+        )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get("/v1/me/files")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "files": [
+            {
+                "id": str(uploaded.id),
+                "title": "报告",
+                "original_filename": "report.pdf",
+                "mime_type": "application/pdf",
+                "byte_size": 1024,
+                "thread_id": str(started.thread_id),
+                "thread_agent_id": str(thread.agent_id),
+                "created_at": uploaded.created_at.isoformat().replace("+00:00", "Z"),
+            }
+        ]
+    }
+
+
+@pytest.mark.anyio
 async def test_upload_rejects_foreign_thread_before_extracting(
     authenticated_api_user: UUID,
     monkeypatch: pytest.MonkeyPatch,
@@ -187,11 +258,10 @@ async def test_upload_ocr_failure_still_stores_original(
         artifact = await session.get(Artifact, artifact_id)
         assert artifact is not None
         assert artifact.content == ""
+        assert isinstance(artifact.meta, dict)
         assert artifact.meta["ocr_status"] == "failed"
         assert artifact.meta["ocr_error"] == "OCR unavailable"
-        assert artifact.meta["stored_path"] == (
-            f"{authenticated_api_user}/{artifact_id}/scan.jpg"
-        )
+        assert artifact.meta["stored_path"] == (f"{authenticated_api_user}/{artifact_id}/scan.jpg")
 
     stored = tmp_path / str(authenticated_api_user) / str(artifact_id) / "scan.jpg"
     assert stored.read_bytes() == b"jpeg bytes"

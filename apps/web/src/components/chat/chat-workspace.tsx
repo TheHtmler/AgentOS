@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
+  FolderOpen,
   Link2,
   LogOut,
   MessageCircle,
@@ -15,6 +16,7 @@ import { AgentOsLogo } from "@/components/brand/agentos-logo";
 import { AgentSelector } from "@/components/chat/agent-selector";
 import { AssistantThread } from "@/components/chat/assistant-thread";
 import { DataManagementDialog } from "@/components/account/data-management-dialog";
+import { FileLibraryPanel } from "@/components/files/file-library-panel";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PendingCaseFactsBanner } from "@/components/chat/pending-case-facts-banner";
 import { ScheduledTasksPanel } from "@/components/chat/scheduled-tasks-panel";
@@ -102,7 +104,7 @@ export function ChatWorkspace({
   onLogout,
 }: ChatWorkspaceProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [activeView, setActiveView] = useState<"chat" | "scheduled" | "wechat">("chat");
+  const [activeView, setActiveView] = useState<"chat" | "files" | "scheduled" | "wechat">("chat");
   const [scheduledUnreadCount, setScheduledUnreadCount] = useState(0);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState(() => resolveSelectedAgentId(null, []));
@@ -476,6 +478,17 @@ export function ChatWorkspace({
               </button>
               <button
                 type="button"
+                className={activeView === "files" ? "is-active" : undefined}
+                onClick={() => {
+                  setActiveView("files");
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <FolderOpen aria-hidden="true" className="size-4" />
+                文件库
+              </button>
+              <button
+                type="button"
                 className={activeView === "scheduled" ? "is-active" : undefined}
                 onClick={() => {
                   setActiveView("scheduled");
@@ -568,6 +581,9 @@ export function ChatWorkspace({
           <div className={activeView === "wechat" ? "h-full min-h-0" : "hidden"}>
             <WeChatBindingPanel />
           </div>
+          <div className={activeView === "files" ? "h-full min-h-0" : "hidden"}>
+            <FileLibraryPanel agentId={selectedAgentId} onOpenThread={handleOpenTaskThread} />
+          </div>
           <div className={activeView === "chat" ? "h-full min-h-0" : "hidden"}>
             <>
               <PendingCaseFactsBanner
@@ -655,6 +671,18 @@ export function ChatWorkspace({
               >
                 <SquarePen aria-hidden="true" className="size-4" />
                 新建任务
+              </button>
+              <button
+                type="button"
+                aria-current={activeView === "files" ? "page" : undefined}
+                className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-sm text-foreground hover:bg-muted aria-[current=page]:bg-muted"
+                onClick={() => {
+                  setActiveView("files");
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <FolderOpen aria-hidden="true" className="size-4" />
+                文件库
               </button>
               <button
                 type="button"
