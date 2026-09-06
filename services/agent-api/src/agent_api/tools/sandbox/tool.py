@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Any, cast
 from uuid import UUID
 
@@ -13,6 +14,7 @@ from pydantic_ai import RunContext
 
 from agent_api.config import get_settings
 from agent_api.tools.search.tool import AgentDeps
+from agent_api.uploads.storage import store_upload
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +130,7 @@ async def run_sandbox_exec(
     if settings.artifact_enabled and len(output) > settings.sandbox_output_preview_chars:
         artifact_id = await _persist_output_artifact(deps, output, normalized_command)
     result = dict(result)
+    await _persist_generated_files(deps, _sandbox_files(result))
     result["output_preview"] = output[: settings.sandbox_output_preview_chars]
     if artifact_id is not None:
         # Keep the model-facing result small; the complete bounded output is in the
@@ -225,6 +228,92 @@ async def _persist_output_artifact(
     except Exception:
         logger.exception("Unable to persist Sandbox output Artifact")
         return None
+
+
+async def _persist_generated_files(deps: AgentDeps, files: list[dict[str, object]]) -> None:
+    """Copy newly generated workspace files into durable owner-scoped storage.
+
+    Sandbox workspaces are intentionally private and may be cleaned independently.
+    The file library therefore owns a separate copy rather than linking a mutable
+    workspace path into the user's long-lived file list.
+    """
+
+    if not files or deps.user_id is None or deps.run_id is None or not deps.user_account:
+        return
+    if deps.sandbox_client is None:
+        return
+    settings = get_settings()
+    token = settings.sandbox_manager_token.strip()
+    if not token:
+        return
+
+    for file in files:
+        path = file.get("path")
+        size = file.get("size")
+        mime_type = file.get("mime_type")
+        if (
+            not isinstance(path, str)
+            or not isinstance(size, int)
+            or size < 0
+            or size > settings.upload_max_bytes
+            or not isinstance(mime_type, str)
+        ):
+            continue
+
+        try:
+            response = await deps.sandbox_client.get(
+                "/v1/sandboxes/files",
+                params={
+                    "user_id": str(deps.user_id),
+                    "account": deps.user_account,
+                    "path": path,
+                    "download": "true",
+                },
+                headers={"X-AgentOS-Sandbox-Token": token},
+                timeout=settings.sandbox_timeout_seconds + 15,
+            )
+            response.raise_for_status()
+            data = response.content
+            if len(data) != size or len(data) > settings.upload_max_bytes:
+                continue
+
+            from agent_api.db.artifact_store import create_artifact
+            from agent_api.db.session import session_factory
+
+            filename = Path(path).name or "generated-file"
+            async with session_factory() as session, session.begin():
+                row = await create_artifact(
+                    session,
+                    owner_user_id=deps.user_id,
+                    kind="sandbox",
+                    title=filename,
+                    content="",
+                    mime_type=mime_type.strip() or "application/octet-stream",
+                    case_id=deps.case_id,
+                    thread_id=deps.thread_id,
+                    run_id=deps.run_id,
+                    meta={
+                        "original_filename": filename,
+                        "byte_size": len(data),
+                        "source": "sandbox",
+                        "workspace_path": path,
+                    },
+                )
+                stored_path = store_upload(
+                    root=settings.upload_root,
+                    owner_user_id=deps.user_id,
+                    artifact_id=row.id,
+                    filename=filename,
+                    data=data,
+                )
+                row.meta = {
+                    **cast(dict[str, object], row.meta),
+                    "stored_path": str(stored_path.relative_to(settings.upload_root.resolve())),
+                }
+        except Exception:
+            # A failed archival copy must not turn a successful user command into
+            # an error. The original remains available through the sandbox event.
+            logger.exception("Unable to persist generated sandbox file %s", path)
 
 
 async def _persist_tool_call(run_id: UUID, payload: dict[str, Any]) -> None:

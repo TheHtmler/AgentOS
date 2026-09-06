@@ -37,6 +37,7 @@ type LibraryFile = {
   byte_size: number | null;
   thread_id: string | null;
   thread_agent_id: string | null;
+  source: "uploaded" | "generated";
   created_at: string;
 };
 
@@ -65,6 +66,7 @@ function isLibraryFile(value: unknown): value is LibraryFile {
     (typeof value.byte_size === "number" || value.byte_size === null) &&
     (typeof value.thread_id === "string" || value.thread_id === null) &&
     (typeof value.thread_agent_id === "string" || value.thread_agent_id === null) &&
+    (value.source === "uploaded" || value.source === "generated") &&
     typeof value.created_at === "string"
   );
 }
@@ -99,6 +101,29 @@ function FileTypeIcon({ file }: { file: LibraryFile }) {
   if (file.original_filename.endsWith(".csv"))
     return <FileSpreadsheet className="size-5 text-emerald-600" />;
   return <File className="size-5 text-muted-foreground" />;
+}
+
+function FileThumbnail({ file }: { file: LibraryFile }) {
+  if (!file.mime_type.startsWith("image/")) {
+    return (
+      <div className="grid size-12 shrink-0 place-items-center rounded-md bg-muted">
+        <FileTypeIcon file={file} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="size-12 shrink-0 overflow-hidden rounded-md border bg-muted">
+      {/* The content endpoint performs the owner check before serving this thumbnail. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/api/uploads/${file.id}/content`}
+        alt=""
+        className="h-full w-full object-cover"
+        loading="lazy"
+      />
+    </div>
+  );
 }
 
 function PreviewContent({ file }: { file: LibraryFile }) {
@@ -288,7 +313,9 @@ export function FileLibraryPanel({ agentId, onOpenThread }: FileLibraryPanelProp
       <header className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
         <div>
           <h1 className="text-xl font-semibold text-foreground">文件库</h1>
-          <p className="mt-1 text-sm text-muted-foreground">管理上传到会话的原始文件。</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            管理上传文件和 Agent 生成的系统文件。
+          </p>
         </div>
         <input
           ref={fileInputRef}
@@ -352,7 +379,7 @@ export function FileLibraryPanel({ agentId, onOpenThread }: FileLibraryPanelProp
                 {files.length === 0 ? "还没有文件" : "没有匹配的文件"}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                上传的文件会保存在这里，之后可随时预览和下载。
+                上传或由 Agent 生成的文件会保存在这里。
               </p>
             </div>
           </div>
@@ -361,14 +388,13 @@ export function FileLibraryPanel({ agentId, onOpenThread }: FileLibraryPanelProp
           <ul className="divide-y" aria-label="文件列表">
             {visibleFiles.map((file) => (
               <li key={file.id} className="flex min-w-0 items-center gap-3 px-4 py-3">
-                <div className="grid size-9 shrink-0 place-items-center rounded-md bg-muted">
-                  <FileTypeIcon file={file} />
-                </div>
+                <FileThumbnail file={file} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground" title={file.title}>
                     {file.title}
                   </p>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {file.source === "generated" ? "系统生成" : "我上传的"} ·{" "}
                     {file.original_filename} · {formatSize(file.byte_size)} ·{" "}
                     {formatDate(file.created_at)}
                   </p>

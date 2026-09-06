@@ -1,7 +1,7 @@
 """Authenticated chat file upload API."""
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 from uuid import UUID
 
 import httpx
@@ -89,13 +89,14 @@ async def post_upload(
         }
         try:
             async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
-                extracted_text, extraction_meta = await extract_upload_text(
+                extracted_text, extracted_meta = await extract_upload_text(
                     data=data,
                     filename=filename,
                     mime_type=mime_type,
                     client=client,
                     settings=settings,
                 )
+                extraction_meta = cast(dict[str, object], extracted_meta)
         except OcrError as error:
             extraction_meta = {
                 "ocr_pages": 0,
@@ -138,13 +139,15 @@ async def post_upload(
                 "stored_path": str(stored_path.relative_to(settings.upload_root.resolve())),
             }
 
+            ocr_pages = extraction_meta.get("ocr_pages", 0)
+            text_layer_pages = extraction_meta.get("text_layer_pages", 0)
             return UploadResponse(
                 artifact_id=artifact.id,
                 title=artifact.title,
                 mime_type=artifact.mime_type,
                 content_chars=artifact.content_chars,
-                ocr_pages=int(extraction_meta.get("ocr_pages", 0)),
-                text_layer_pages=int(extraction_meta.get("text_layer_pages", 0)),
+                ocr_pages=ocr_pages if isinstance(ocr_pages, int) else 0,
+                text_layer_pages=text_layer_pages if isinstance(text_layer_pages, int) else 0,
                 case_id=artifact.case_id,
             )
     except HTTPException:
@@ -169,9 +172,9 @@ async def get_upload_content(
     if (
         artifact is None
         or artifact.owner_user_id != user.id
-        or artifact.kind != "upload"
+        or artifact.kind not in {"upload", "sandbox"}
     ):
-        raise HTTPException(status_code=404, detail="Upload not found")
+        raise HTTPException(status_code=404, detail="File not found")
 
     meta = artifact.meta if isinstance(artifact.meta, dict) else None
     path = resolve_stored_upload_path(root=settings.upload_root, meta=meta)

@@ -54,5 +54,5 @@
 ## 文件库（2026-09-06）
 
 - Web 工作区左侧主导航新增「文件库」，移动抽屉同步提供入口；账户底部的弹窗收敛为「记忆管理」，不再和文件管理混放。
-- `components/files/file-library-panel.tsx` 使用 shadcn `Button` / `Input` / `Dialog` / `AlertDialog` 与 lucide 图标，实现上传文件列表、搜索、图片/PDF 预览、下载、来源会话跳转和删除确认。
+- `components/files/file-library-panel.tsx` 使用 shadcn `Button` / `Input` / `Dialog` / `AlertDialog` 与 lucide 图标，实现上传文件与系统生成文件列表、图片缩略图、搜索、图片/PDF 预览、下载、来源会话跳转和删除确认。
 - 页面只消费 `/api/me/files` 的用户可见上传文件契约；没有原始字节或只属于工具工作数据的 Artifact 不显示。Office 文档转换预览与公共资料页不能先在该 UI 上伪造入口，待后端处理与授权模型完成后再扩展。

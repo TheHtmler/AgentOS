@@ -65,6 +65,7 @@ class FileLibraryItemResponse(BaseModel):
     byte_size: int | None
     thread_id: UUID | None
     thread_agent_id: UUID | None
+    source: str
     created_at: datetime
 
 
@@ -150,34 +151,38 @@ async def list_files(user: Annotated[User, Depends(get_current_user)]) -> FileLi
         rows = await session.execute(
             select(Artifact, Thread.agent_id)
             .outerjoin(Thread, Artifact.thread_id == Thread.id)
-            .where(Artifact.owner_user_id == user.id, Artifact.kind == "upload")
+            .where(
+                Artifact.owner_user_id == user.id,
+                Artifact.kind.in_(("upload", "sandbox")),
+            )
             .order_by(Artifact.created_at.desc())
             .limit(200)
         )
 
-        files = [
-            FileLibraryItemResponse(
-                id=artifact.id,
-                title=artifact.title,
-                original_filename=(
-                    str(artifact.meta.get("original_filename"))
-                    if isinstance(artifact.meta, dict)
-                    and isinstance(artifact.meta.get("original_filename"), str)
-                    else artifact.title
-                ),
-                mime_type=artifact.mime_type,
-                byte_size=(
-                    value
-                    if isinstance(artifact.meta, dict)
-                    and isinstance((value := artifact.meta.get("byte_size")), int)
-                    else None
-                ),
-                thread_id=artifact.thread_id,
-                thread_agent_id=agent_id,
-                created_at=artifact.created_at,
+        files: list[FileLibraryItemResponse] = []
+        for artifact, agent_id in rows.tuples():
+            meta = artifact.meta if isinstance(artifact.meta, dict) else {}
+            # A sandbox stdout spill is an Artifact but not a downloadable file.
+            # Only entries copied into UPLOAD_ROOT have durable original bytes.
+            if not isinstance(meta.get("stored_path"), str):
+                continue
+            original_filename = meta.get("original_filename")
+            byte_size = meta.get("byte_size")
+            files.append(
+                FileLibraryItemResponse(
+                    id=artifact.id,
+                    title=artifact.title,
+                    original_filename=(
+                        original_filename if isinstance(original_filename, str) else artifact.title
+                    ),
+                    mime_type=artifact.mime_type,
+                    byte_size=byte_size if isinstance(byte_size, int) else None,
+                    thread_id=artifact.thread_id,
+                    thread_agent_id=agent_id,
+                    source="generated" if artifact.kind == "sandbox" else "uploaded",
+                    created_at=artifact.created_at,
+                )
             )
-            for artifact, agent_id in rows.tuples()
-        ]
 
     return FileLibraryListResponse(files=files)
 
@@ -195,9 +200,8 @@ async def delete_artifact(
         )
         if row is None:
             raise HTTPException(status_code=404, detail="Artifact not found")
-        if row.kind == "upload":
-            meta = row.meta if isinstance(row.meta, dict) else None
-            stored_path = resolve_stored_upload_path(root=settings.upload_root, meta=meta)
+        meta = row.meta if isinstance(row.meta, dict) else None
+        stored_path = resolve_stored_upload_path(root=settings.upload_root, meta=meta)
         await session.delete(row)
 
     if stored_path is not None:

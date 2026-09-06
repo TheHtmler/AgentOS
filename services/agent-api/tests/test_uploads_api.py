@@ -124,7 +124,11 @@ async def test_file_library_lists_only_owned_uploads(
             mime_type="application/pdf",
             content="报告内容",
             content_chars=4,
-            meta={"original_filename": "report.pdf", "byte_size": 1024},
+            meta={
+                "original_filename": "report.pdf",
+                "byte_size": 1024,
+                "stored_path": f"{authenticated_api_user}/report/report.pdf",
+            },
         )
         internal = Artifact(
             owner_user_id=authenticated_api_user,
@@ -165,6 +169,7 @@ async def test_file_library_lists_only_owned_uploads(
                 "byte_size": 1024,
                 "thread_id": str(started.thread_id),
                 "thread_agent_id": str(thread.agent_id),
+                "source": "uploaded",
                 "created_at": uploaded.created_at.isoformat().replace("+00:00", "Z"),
             }
         ]
