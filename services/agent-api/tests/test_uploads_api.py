@@ -18,6 +18,7 @@ async def test_upload_route_is_registered() -> None:
     paths = app.openapi()["paths"]
     assert "post" in paths["/v1/uploads"]
     assert "get" in paths["/v1/uploads/{artifact_id}/content"]
+    assert "get" in paths["/v1/uploads/{artifact_id}/thumbnail"]
 
 
 @pytest.fixture(autouse=True)

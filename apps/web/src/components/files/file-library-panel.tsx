@@ -104,7 +104,13 @@ function FileTypeIcon({ file }: { file: LibraryFile }) {
 }
 
 function FileThumbnail({ file }: { file: LibraryFile }) {
-  if (!file.mime_type.startsWith("image/")) {
+  const thumbnailUrl = file.mime_type.startsWith("image/")
+    ? `/api/uploads/${file.id}/content`
+    : file.mime_type === "application/pdf"
+      ? `/api/uploads/${file.id}/thumbnail`
+      : null;
+
+  if (thumbnailUrl === null) {
     return (
       <div className="grid size-12 shrink-0 place-items-center rounded-md bg-muted">
         <FileTypeIcon file={file} />
@@ -116,12 +122,7 @@ function FileThumbnail({ file }: { file: LibraryFile }) {
     <div className="size-12 shrink-0 overflow-hidden rounded-md border bg-muted">
       {/* The content endpoint performs the owner check before serving this thumbnail. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/api/uploads/${file.id}/content`}
-        alt=""
-        className="h-full w-full object-cover"
-        loading="lazy"
-      />
+      <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
     </div>
   );
 }

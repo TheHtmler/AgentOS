@@ -1,12 +1,13 @@
 """Authenticated chat file upload API."""
 
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 from uuid import UUID
 
 import httpx
+import pymupdf
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -189,4 +190,47 @@ async def get_upload_content(
         media_type=mime_type,
         filename=path.name,
         content_disposition_type="inline",
+    )
+
+
+@router.get("/{artifact_id}/thumbnail")
+async def get_upload_thumbnail(
+    artifact_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    """Render the first PDF page into a small owner-scoped list thumbnail."""
+
+    settings = get_settings()
+    async with session_factory() as session:
+        artifact = await session.get(Artifact, artifact_id)
+
+    if (
+        artifact is None
+        or artifact.owner_user_id != user.id
+        or artifact.kind not in {"upload", "sandbox"}
+    ):
+        raise HTTPException(status_code=404, detail="File not found")
+    if artifact.mime_type != "application/pdf":
+        raise HTTPException(status_code=415, detail="Thumbnail is only available for PDFs")
+
+    meta = artifact.meta if isinstance(artifact.meta, dict) else None
+    path = resolve_stored_upload_path(root=settings.upload_root, meta=meta)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Upload file missing")
+
+    try:
+        with pymupdf.open(path) as document:
+            if document.page_count < 1:  # pyright: ignore[reportUnknownMemberType]
+                raise ValueError("PDF has no pages")
+            page = cast(Any, document[0])
+            pixmap = page.get_pixmap(
+                matrix=pymupdf.Matrix(0.32, 0.32),
+                alpha=False,
+            )
+            image = cast(bytes, pixmap.tobytes("png"))
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail="Unable to render PDF thumbnail") from error
+
+    return Response(
+        content=image, media_type="image/png", headers={"Cache-Control": "private, max-age=300"}
     )
