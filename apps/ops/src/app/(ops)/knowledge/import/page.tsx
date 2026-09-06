@@ -7,7 +7,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { OpsFetchError, errorMessage as fetchErrorMessage, opsJson } from "@/lib/ops-fetch";
 
-type ImportMode = "json" | "text" | "url" | "file";
+type ImportMode = "json" | "text" | "url" | "file" | "pubmed";
 
 type ImportedDocument = {
   id: string;
@@ -38,11 +38,20 @@ type DocumentStatus = {
 const POLL_INTERVAL_MS = 2000;
 
 const MODES: Array<{ value: ImportMode; label: string }> = [
+  { value: "pubmed", label: "PubMed" },
   { value: "json", label: "JSON" },
   { value: "text", label: "文本" },
   { value: "url", label: "链接" },
   { value: "file", label: "文件" },
 ];
+
+type PubMedArticle = {
+  pmid: string;
+  title: string;
+  journal: string | null;
+  publication_date: string | null;
+  authors: string | null;
+};
 
 const JSON_EXAMPLE = JSON.stringify(
   {
@@ -79,6 +88,9 @@ export default function KnowledgeImportPage() {
   const [title, setTitle] = useState("");
   const [textBody, setTextBody] = useState("");
   const [url, setUrl] = useState("");
+  const [pubMedQuery, setPubMedQuery] = useState("");
+  const [pubMedArticles, setPubMedArticles] = useState<PubMedArticle[]>([]);
+  const [searchingPubMed, setSearchingPubMed] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -212,6 +224,13 @@ export default function KnowledgeImportPage() {
             body: textBody,
             base: "mma-pa",
           };
+        } else if (mode === "pubmed") {
+          payload = {
+            mode,
+            pmid: slug.trim(),
+            slug: `pubmed-${slug.trim()}`,
+            base: "mma-pa",
+          };
         } else {
           payload = {
             mode,
@@ -250,6 +269,25 @@ export default function KnowledgeImportPage() {
         setError(err instanceof Error ? err.message : "导入失败");
       }
       setBusy(false);
+    }
+  }
+
+  async function searchPubMed() {
+    if (pubMedQuery.trim().length < 3) {
+      setError("请输入至少 3 个字符的检索词");
+      return;
+    }
+    setSearchingPubMed(true);
+    setError(null);
+    try {
+      const result = await opsJson<{ articles: PubMedArticle[] }>(
+        `/api/ops/knowledge/evidence/pubmed?query=${encodeURIComponent(pubMedQuery.trim())}`,
+      );
+      setPubMedArticles(result.articles);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "PubMed 检索失败");
+    } finally {
+      setSearchingPubMed(false);
     }
   }
 
@@ -300,6 +338,63 @@ export default function KnowledgeImportPage() {
               批量导入的文档数组；每个文档含 slug、title 和 chunks（切片）。
             </span>
           </label>
+        ) : null}
+
+        {mode === "pubmed" ? (
+          <>
+            <div className="form-grid cols-2">
+              <label>
+                <span className="req">*</span>文献检索词
+                <input
+                  value={pubMedQuery}
+                  placeholder="例如：methylmalonic acidemia guideline"
+                  onChange={(event) => setPubMedQuery(event.target.value)}
+                />
+              </label>
+              <div className="field-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={searchingPubMed}
+                  onClick={() => void searchPubMed()}
+                >
+                  {searchingPubMed ? "检索中…" : "检索候选"}
+                </button>
+              </div>
+            </div>
+            {pubMedArticles.length > 0 ? (
+              <div className="doc-list always">
+                {pubMedArticles.map((article) => (
+                  <button
+                    key={article.pmid}
+                    type="button"
+                    className="doc-card text-left"
+                    onClick={() => setSlug(article.pmid)}
+                  >
+                    <span className="doc-card__title">{article.title}</span>
+                    <span className="doc-card__meta">
+                      PMID {article.pmid} · {article.journal ?? "—"} ·{" "}
+                      {article.publication_date ?? "—"}
+                    </span>
+                    <span className="muted">{article.authors ?? ""}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <label>
+              <span className="req">*</span>选择的 PMID
+              <input
+                value={slug}
+                required
+                inputMode="numeric"
+                placeholder="点击上方候选自动填入"
+                onChange={(event) => setSlug(event.target.value)}
+              />
+              <span className="field-hint">
+                导入的是 PubMed 摘要，状态固定为“待复核”，不会进入用户对话检索。
+              </span>
+            </label>
+          </>
         ) : null}
 
         {mode === "text" ? (

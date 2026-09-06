@@ -83,6 +83,20 @@ async def test_p0_retrieval_evaluation(database_session: AsyncSession) -> None:
     withdrawn.review_status = "curated"
     await database_session.commit()
 
+    pending = documents[1]
+    pending.review_status = "pending_review"
+    await database_session.commit()
+    pending_hits = await search_knowledge_chunks(
+        database_session,
+        query="甲基丙二酸",
+        disease_tags=[],
+        max_results=8,
+        knowledge_base_slugs=["mma-pa"],
+    )
+    assert all(hit["document_slug"] != pending.slug for hit in pending_hits)
+    pending.review_status = "curated"
+    await database_session.commit()
+
 
 @pytest.mark.anyio
 async def test_p0_retrieval_precision_rejects_unrelated_query(

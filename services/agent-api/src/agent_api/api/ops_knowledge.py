@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 from uuid import UUID
+from xml.etree import ElementTree
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -35,7 +36,9 @@ from agent_api.knowledge.import_jobs import (
     static_extract,
 )
 from agent_api.knowledge.normalize import normalize_json_payload, normalize_plain_text
-from agent_api.knowledge.types import ChunkSpec, DocumentSpec
+from agent_api.knowledge.ontology import resolve_ontology_terms
+from agent_api.knowledge.pubmed import fetch_pubmed_abstract, search_pubmed
+from agent_api.knowledge.types import ChunkSpec, DocumentSpec, OntologyTermSpec
 from agent_api.knowledge.url_extract import fetch_url_text
 from agent_api.knowledge.vision_extract import (
     VisionExtractError,
@@ -52,8 +55,10 @@ _IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
 _TEXT_SUFFIXES = {".txt", ".md", ".markdown"}
 _JSON_SUFFIXES = {".json"}
 
-ReviewStatus = Literal["curated", "clinically_reviewed", "withdrawn"]
-SourceKind = Literal["official_reference", "clinical_guideline", "curated_summary"]
+ReviewStatus = Literal["pending_review", "curated", "clinically_reviewed", "withdrawn"]
+SourceKind = Literal[
+    "official_reference", "clinical_guideline", "curated_summary", "research_article"
+]
 
 
 class KnowledgeBaseOut(BaseModel):
@@ -76,6 +81,7 @@ class KnowledgeDocumentOut(BaseModel):
     source_label: str | None
     source_date: str | None
     version_label: str | None
+    ontology_terms: list[dict[str, str]]
     review_status: str
     reviewed_at: datetime | None
     chunk_count: int
@@ -113,6 +119,16 @@ class KnowledgeDocumentDetailOut(KnowledgeDocumentOut):
     chunks: list[KnowledgeChunkOut]
 
 
+class OntologyTermSpecIn(BaseModel):
+    curie: str = Field(
+        min_length=3,
+        max_length=64,
+        pattern=r"^[A-Za-z][A-Za-z0-9_]*:[A-Za-z0-9._-]+$",
+    )
+    label: str = Field(min_length=1, max_length=256)
+    ontology: str = Field(min_length=1, max_length=64)
+
+
 class PatchDocumentRequest(BaseModel):
     review_status: ReviewStatus | None = None
     title: str | None = Field(default=None, min_length=1, max_length=256)
@@ -121,6 +137,7 @@ class PatchDocumentRequest(BaseModel):
     source_label: str | None = Field(default=None, max_length=256)
     source_url: str | None = None
     source_date: str | None = Field(default=None, max_length=32)
+    ontology_terms: list[OntologyTermSpecIn] | None = None
 
     @model_validator(mode="after")
     def require_at_least_one_field(self) -> PatchDocumentRequest:
@@ -164,6 +181,28 @@ class ImportResponse(BaseModel):
     documents: list[ImportDocumentOut]
 
 
+class PubMedArticleOut(BaseModel):
+    pmid: str
+    title: str
+    journal: str | None
+    publication_date: str | None
+    authors: str | None
+
+
+class PubMedSearchResponse(BaseModel):
+    articles: list[PubMedArticleOut]
+
+
+class OntologyCandidateOut(BaseModel):
+    curie: str
+    label: str
+    ontology: str
+
+
+class OntologyResolveResponse(BaseModel):
+    terms: list[OntologyCandidateOut]
+
+
 def _document_out(
     doc: KnowledgeDocument,
     chunk_count: int,
@@ -179,6 +218,7 @@ def _document_out(
         source_label=doc.source_label,
         source_date=doc.source_date,
         version_label=doc.version_label,
+        ontology_terms=list(doc.ontology_terms or []),
         review_status=doc.review_status,
         reviewed_at=doc.reviewed_at,
         chunk_count=chunk_count,
@@ -362,7 +402,95 @@ async def _import_json_body(
             embedding_client=_background_http_client(request),
         )
         return ImportResponse(documents=[_submitted_out(submitted)])
+    if mode == "pubmed":
+        pmid = _required_text(payload, "pmid")
+        if not pmid.isdigit() or len(pmid) > 16:
+            raise ValueError("pmid must be a numeric PubMed identifier")
+        slug = _required_text(payload, "slug")
+
+        async def extract_pubmed(_on_progress: ProgressFn) -> ExtractResult:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                article = await fetch_pubmed_abstract(pmid, client)
+            source_label = (
+                " · ".join(value for value in (article.journal, article.authors) if value)
+                or "PubMed"
+            )
+            spec = normalize_plain_text(
+                slug=slug,
+                title=article.title,
+                body=article.abstract or "",
+                source_kind="research_article",
+                source_url=f"https://pubmed.ncbi.nlm.nih.gov/{article.pmid}/",
+                source_label=source_label,
+                source_date=article.publication_date,
+                version_label=f"PMID:{article.pmid}",
+                # Literature candidates cannot enter a family-facing corpus
+                # before an Ops reviewer has checked applicability and scope.
+                review_status="pending_review",
+            )
+            return spec, 0, 0
+
+        submitted = await start_import(
+            base_slug=base_slug,
+            slug=slug,
+            title=slug,
+            created_by=subject,
+            extract=extract_pubmed,
+            embedding_client=_background_http_client(request),
+        )
+        return ImportResponse(documents=[_submitted_out(submitted)])
     raise ValueError(f"unsupported import mode: {mode}")
+
+
+@router.get("/evidence/pubmed", response_model=PubMedSearchResponse)
+async def search_pubmed_evidence(
+    query: Annotated[str, Query(min_length=3, max_length=256)],
+    _subject: Annotated[str, Depends(get_ops_subject)],
+) -> PubMedSearchResponse:
+    # This fixed public endpoint accepts only an operator's literature query;
+    # it is deliberately outside the product chat path and never sees Case data.
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            articles = await search_pubmed(query, client)
+    except (httpx.HTTPError, ValueError, ElementTree.ParseError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="PubMed 检索失败",
+        ) from exc
+    return PubMedSearchResponse(
+        articles=[
+            PubMedArticleOut(
+                pmid=article.pmid,
+                title=article.title,
+                journal=article.journal,
+                publication_date=article.publication_date,
+                authors=article.authors,
+            )
+            for article in articles
+        ],
+    )
+
+
+@router.get("/ontology/resolve", response_model=OntologyResolveResponse)
+async def resolve_knowledge_ontology(
+    query: Annotated[str, Query(min_length=2, max_length=128)],
+    ontology: Annotated[Literal["mondo", "hp", "ordo"], Query()],
+    _subject: Annotated[str, Depends(get_ops_subject)],
+) -> OntologyResolveResponse:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            terms = await resolve_ontology_terms(query, ontology, client)
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="术语服务暂不可用",
+        ) from exc
+    return OntologyResolveResponse(
+        terms=[
+            OntologyCandidateOut(curie=term.curie, label=term.label, ontology=term.ontology)
+            for term in terms
+        ],
+    )
 
 
 async def _import_multipart(request: Request, subject: str) -> ImportResponse:
@@ -617,6 +745,24 @@ async def patch_knowledge_document(
             document.source_url = updates["source_url"]
         if "source_date" in updates:
             document.source_date = updates["source_date"]
+        if "ontology_terms" in updates and updates["ontology_terms"] is not None:
+            terms = payload.ontology_terms
+            assert terms is not None
+            prior_curies = {
+                term["curie"]
+                for term in document.ontology_terms or []
+                if isinstance(term.get("curie"), str)
+            }
+            document.ontology_terms = [term.model_dump() for term in terms]
+            current_curies = [term.curie for term in terms]
+            chunks = list(
+                await session.scalars(
+                    select(KnowledgeChunk).where(KnowledgeChunk.document_id == document.id),
+                ),
+            )
+            for chunk in chunks:
+                retained = [tag for tag in chunk.tags if tag not in prior_curies]
+                chunk.tags = list(dict.fromkeys([*retained, *current_curies]))
 
         await session.flush()
         chunk_count = await _chunk_count(session, document.id)
@@ -750,6 +896,10 @@ def _spec_from_snapshot(document: KnowledgeDocument, payload: dict[str, Any]) ->
         source_date=_optional_str(doc_meta.get("source_date")),
         version_label=version_label,
         review_status=str(doc_meta.get("review_status") or document.review_status),
+        ontology_terms=[
+            OntologyTermSpec(**term)
+            for term in cast(list[dict[str, str]], doc_meta.get("ontology_terms") or [])
+        ],
     )
 
 

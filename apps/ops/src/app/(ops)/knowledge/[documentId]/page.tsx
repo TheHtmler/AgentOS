@@ -26,6 +26,7 @@ type DocumentDetail = {
   source_label: string | null;
   source_date: string | null;
   version_label: string | null;
+  ontology_terms: Array<{ curie: string; label: string; ontology: string }>;
   review_status: string;
   reviewed_at: string | null;
   chunk_count: number;
@@ -40,9 +41,15 @@ type Snapshot = {
 };
 
 type SnapshotDetail = Snapshot & { payload: Record<string, unknown> };
+type OntologyCandidate = { curie: string; label: string; ontology: string };
 
-const REVIEW_OPTIONS = ["curated", "clinically_reviewed", "withdrawn"] as const;
-const SOURCE_KINDS = ["official_reference", "clinical_guideline", "curated_summary"] as const;
+const REVIEW_OPTIONS = ["pending_review", "curated", "clinically_reviewed", "withdrawn"] as const;
+const SOURCE_KINDS = [
+  "official_reference",
+  "clinical_guideline",
+  "curated_summary",
+  "research_article",
+] as const;
 
 function excerpt(text: string, max = 180): string {
   const compact = text.replace(/\s+/g, " ").trim();
@@ -72,6 +79,11 @@ export default function KnowledgeDetailPage() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [sourceDate, setSourceDate] = useState("");
   const [reviewStatus, setReviewStatus] = useState<string>("curated");
+  const [ontologyTerms, setOntologyTerms] = useState("[]");
+  const [ontologyQuery, setOntologyQuery] = useState("");
+  const [ontologyName, setOntologyName] = useState("mondo");
+  const [ontologyCandidates, setOntologyCandidates] = useState<OntologyCandidate[]>([]);
+  const [resolvingTerms, setResolvingTerms] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -84,6 +96,7 @@ export default function KnowledgeDetailPage() {
       setSourceUrl(detail.source_url ?? "");
       setSourceDate(detail.source_date ?? "");
       setReviewStatus(detail.review_status);
+      setOntologyTerms(JSON.stringify(detail.ontology_terms, null, 2));
       const snaps = await opsJson<{ snapshots: Snapshot[] }>(
         `/api/ops/knowledge/documents/${documentId}/snapshots`,
       );
@@ -105,6 +118,8 @@ export default function KnowledgeDetailPage() {
     setSaving(true);
     setError(null);
     try {
+      const parsedTerms = JSON.parse(ontologyTerms) as unknown;
+      if (!Array.isArray(parsedTerms)) throw new Error("术语必须是 JSON 数组");
       await opsJson(`/api/ops/knowledge/documents/${documentId}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -115,6 +130,7 @@ export default function KnowledgeDetailPage() {
           source_url: sourceUrl || null,
           source_date: sourceDate || null,
           review_status: reviewStatus,
+          ontology_terms: parsedTerms,
         }),
       });
       await load();
@@ -123,6 +139,44 @@ export default function KnowledgeDetailPage() {
       setError(err instanceof Error ? err.message : "保存失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function resolveTerms() {
+    if (ontologyQuery.trim().length < 2) {
+      setError("术语检索词至少需要 2 个字符");
+      return;
+    }
+    setResolvingTerms(true);
+    setError(null);
+    try {
+      const result = await opsJson<{ terms: OntologyCandidate[] }>(
+        `/api/ops/knowledge/ontology/resolve?query=${encodeURIComponent(ontologyQuery.trim())}&ontology=${ontologyName}`,
+      );
+      setOntologyCandidates(result.terms);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "术语服务暂不可用");
+    } finally {
+      setResolvingTerms(false);
+    }
+  }
+
+  function addOntologyTerm(candidate: OntologyCandidate) {
+    try {
+      const existing = JSON.parse(ontologyTerms) as unknown;
+      if (!Array.isArray(existing)) throw new Error("术语必须是 JSON 数组");
+      const terms = existing.filter(
+        (term): term is OntologyCandidate =>
+          typeof term === "object" &&
+          term !== null &&
+          "curie" in term &&
+          "label" in term &&
+          "ontology" in term,
+      );
+      if (!terms.some((term) => term.curie === candidate.curie)) terms.push(candidate);
+      setOntologyTerms(JSON.stringify(terms, null, 2));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "术语 JSON 无效");
     }
   }
 
@@ -247,6 +301,57 @@ export default function KnowledgeDetailPage() {
               来源链接
               <input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} />
             </label>
+            <label>
+              受控术语（JSON）
+              <textarea
+                rows={4}
+                value={ontologyTerms}
+                spellCheck={false}
+                onChange={(e) => setOntologyTerms(e.target.value)}
+              />
+              <span className="field-hint">
+                每项包含 curie、label、ontology。保存后 CURIE
+                会进入全部切片标签，用于亚型和基因召回。
+              </span>
+            </label>
+            <div className="stack">
+              <div className="form-grid cols-2">
+                <label>
+                  OLS 术语检索
+                  <input
+                    value={ontologyQuery}
+                    placeholder="例如：propionic acidemia"
+                    onChange={(e) => setOntologyQuery(e.target.value)}
+                  />
+                </label>
+                <label>
+                  本体
+                  <select value={ontologyName} onChange={(e) => setOntologyName(e.target.value)}>
+                    <option value="mondo">MONDO（疾病）</option>
+                    <option value="hp">HPO（表型）</option>
+                    <option value="ordo">Orphanet（罕见病）</option>
+                  </select>
+                </label>
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                disabled={resolvingTerms}
+                onClick={() => void resolveTerms()}
+              >
+                {resolvingTerms ? "查询中…" : "查询术语"}
+              </button>
+              {ontologyCandidates.map((candidate) => (
+                <button
+                  key={candidate.curie}
+                  type="button"
+                  className="ghost text-left"
+                  onClick={() => addOntologyTerm(candidate)}
+                >
+                  {candidate.label} · {candidate.curie}
+                </button>
+              ))}
+            </div>
             <p className="muted" style={{ margin: 0 }}>
               审核时间：
               {doc.reviewed_at ? new Date(doc.reviewed_at).toLocaleString() : "—"}

@@ -7,7 +7,16 @@ class ChunkSpec:
     title: str
     content: str
     section_label: str | None = None
-    tags: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=lambda: [])
+
+
+@dataclass(frozen=True)
+class OntologyTermSpec:
+    """A human-reviewed controlled-vocabulary term attached to a document."""
+
+    curie: str
+    label: str
+    ontology: str
 
 
 @dataclass
@@ -21,3 +30,4 @@ class DocumentSpec:
     source_date: str | None = None
     version_label: str | None = None
     review_status: str = "curated"
+    ontology_terms: list[OntologyTermSpec] = field(default_factory=lambda: [])

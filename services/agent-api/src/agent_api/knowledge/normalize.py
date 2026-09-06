@@ -3,7 +3,34 @@ from __future__ import annotations
 from typing import Any, cast
 
 from agent_api.knowledge.chunking import chunk_text
-from agent_api.knowledge.types import ChunkSpec, DocumentSpec
+from agent_api.knowledge.types import ChunkSpec, DocumentSpec, OntologyTermSpec
+
+
+def ontology_terms_from_payload(value: object) -> list[OntologyTermSpec]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("ontology_terms must be a list")
+    terms: list[OntologyTermSpec] = []
+    raw_terms = cast(list[object], value)
+    for item in raw_terms:
+        if not isinstance(item, dict):
+            raise ValueError("ontology_terms must contain objects")
+        term = cast(dict[str, object], item)
+        curie = term.get("curie")
+        label = term.get("label")
+        ontology = term.get("ontology")
+        if not all(isinstance(value, str) and value.strip() for value in (curie, label, ontology)):
+            raise ValueError("ontology_terms require curie, label, and ontology")
+        assert isinstance(curie, str)
+        assert isinstance(label, str)
+        assert isinstance(ontology, str)
+        terms.append(
+            OntologyTermSpec(
+                curie=curie.strip(), label=label.strip(), ontology=ontology.strip().lower()
+            )
+        )
+    return terms
 
 
 def document_payloads_from_json(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -46,6 +73,7 @@ def document_spec_from_payload(payload: dict[str, Any]) -> DocumentSpec:
         source_date=payload.get("source_date"),
         version_label=payload.get("version_label"),
         review_status=str(payload.get("review_status", "curated")),
+        ontology_terms=ontology_terms_from_payload(payload.get("ontology_terms")),
     )
 
 
@@ -77,4 +105,5 @@ def normalize_plain_text(
         source_date=source_fields.get("source_date"),
         version_label=source_fields.get("version_label"),
         review_status=str(source_fields.get("review_status", "curated")),
+        ontology_terms=ontology_terms_from_payload(source_fields.get("ontology_terms")),
     )

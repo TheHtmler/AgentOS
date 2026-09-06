@@ -1,12 +1,14 @@
 /** Display labels for ops enums (API values stay English). */
 
 export const REVIEW_STATUS_LABELS: Record<string, string> = {
+  pending_review: "待复核",
   curated: "待审核",
   clinically_reviewed: "已审核",
   withdrawn: "已下架",
 };
 
 export const REVIEW_STATUS_HINTS: Record<string, string> = {
+  pending_review: "外部证据候选，尚未进入对话检索",
   curated: "已入库，对话里能搜到，还没人工复核",
   clinically_reviewed: "人工复核通过，对话里能搜到",
   withdrawn: "文档还在，但对话里搜不到",
@@ -16,6 +18,7 @@ export const SOURCE_KIND_LABELS: Record<string, string> = {
   official_reference: "官方资料",
   clinical_guideline: "临床指南",
   curated_summary: "内部摘要",
+  research_article: "研究论文",
 };
 
 export const AGENT_STATUS_LABELS: Record<string, string> = {

@@ -127,6 +127,10 @@ async def _upsert_knowledge_document(
         "source_date": spec.source_date,
         "version_label": spec.version_label,
         "review_status": spec.review_status,
+        "ontology_terms": [
+            {"curie": term.curie, "label": term.label, "ontology": term.ontology}
+            for term in spec.ontology_terms
+        ],
         # A completed import always lands in the ready state with a clean slate.
         "import_status": "ready",
         "import_error": None,
@@ -160,6 +164,7 @@ async def _upsert_knowledge_document(
                             "source_date": document.source_date,
                             "version_label": document.version_label,
                             "review_status": document.review_status,
+                            "ontology_terms": list(document.ontology_terms or []),
                         },
                         "chunks": [
                             {
@@ -209,7 +214,13 @@ async def _upsert_knowledge_document(
                 title=chunk.title,
                 content=chunk.content,
                 section_label=chunk.section_label,
-                tags=list(chunk.tags),
+                # Make reviewed CURIEs queryable on every chunk while retaining
+                # the curator's finer-grained content tags.
+                tags=list(
+                    dict.fromkeys(
+                        [*chunk.tags, *(term.curie for term in spec.ontology_terms)],
+                    ),
+                ),
                 embedding=embedding,
                 embedding_model=(
                     settings.resolved_background_embedding_model if embedding is not None else None

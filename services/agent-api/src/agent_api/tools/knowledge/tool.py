@@ -197,7 +197,7 @@ async def search_knowledge_chunks(
         .join(KnowledgeBase, KnowledgeDocument.knowledge_base_id == KnowledgeBase.id)
         .where(
             KnowledgeBase.status == "active",
-            KnowledgeDocument.review_status != "withdrawn",
+            KnowledgeDocument.review_status.in_(("curated", "clinically_reviewed")),
         )
     )
     if knowledge_base_slugs:

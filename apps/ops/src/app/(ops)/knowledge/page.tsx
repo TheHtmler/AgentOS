@@ -26,11 +26,12 @@ type KnowledgeDocument = {
   embedding_model?: string | null;
 };
 
-const REVIEW_OPTIONS = ["curated", "clinically_reviewed", "withdrawn"] as const;
+const REVIEW_OPTIONS = ["pending_review", "curated", "clinically_reviewed", "withdrawn"] as const;
 const FILTERS = ["all", ...REVIEW_OPTIONS] as const;
 
 const FILTER_LABELS: Record<(typeof FILTERS)[number], string> = {
   all: "全部",
+  pending_review: REVIEW_STATUS_LABELS.pending_review,
   curated: REVIEW_STATUS_LABELS.curated,
   clinically_reviewed: REVIEW_STATUS_LABELS.clinically_reviewed,
   withdrawn: REVIEW_STATUS_LABELS.withdrawn,
@@ -144,8 +145,8 @@ export default function KnowledgePage() {
       />
 
       <p className="hint">
-        <strong>待审核</strong> 已入库、对话可搜 · <strong>已审核</strong> 人工复核通过 ·{" "}
-        <strong>已下架</strong> 对话搜不到，文件还在
+        <strong>待复核</strong> 外部证据候选、对话不可搜 · <strong>待审核</strong> 已入库、对话可搜
+        · <strong>已审核</strong> 人工复核通过 · <strong>已下架</strong> 对话搜不到，文件还在
       </p>
 
       <div className="toolbar">
@@ -184,13 +185,19 @@ export default function KnowledgePage() {
                   <span>{doc.slug}</span>
                   <span>v{doc.version_label ?? "—"}</span>
                   <span>{doc.chunk_count} 条</span>
-                  {doc.chunk_count > 0 &&
-                  (doc.embedded_chunks ?? 0) < doc.chunk_count ? (
-                    <span className="error" title="部分切片缺少向量，混合检索的向量通道对这些切片失效（仅关键词可命中）。可在部署侧检查 BACKGROUND_* embedding 配置后重新导入。">
+                  {doc.chunk_count > 0 && (doc.embedded_chunks ?? 0) < doc.chunk_count ? (
+                    <span
+                      className="error"
+                      title="部分切片缺少向量，混合检索的向量通道对这些切片失效（仅关键词可命中）。可在部署侧检查 BACKGROUND_* embedding 配置后重新导入。"
+                    >
                       向量 {doc.embedded_chunks ?? 0}/{doc.chunk_count}
                     </span>
                   ) : doc.chunk_count > 0 ? (
-                    <span title={doc.embedding_model ? `embedding 模型: ${doc.embedding_model}` : undefined}>
+                    <span
+                      title={
+                        doc.embedding_model ? `embedding 模型: ${doc.embedding_model}` : undefined
+                      }
+                    >
                       向量 {doc.embedded_chunks ?? 0}/{doc.chunk_count} ✓
                     </span>
                   ) : null}

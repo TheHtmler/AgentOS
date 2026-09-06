@@ -105,6 +105,7 @@ Web 聊天执行流按 DSH Web 的信息层级收敛：每轮步骤与回答和 
 - 调研笔记：`docs/13-mma-knowledge-and-mcp-inventory.md`（MMA/PA 知识分层 + 候选 MCP/Skills）。
 - 内建 `growth_assess`：WHO 2006（`anthro`）z 分数/百分位；`GROWTH_ASSESS_ENABLED`；育儿 overlay 优先调用；无需 search/fetch router。
 - 知识库表：`knowledge_bases` / `knowledge_documents` / `knowledge_chunks`（基础迁移 `e9f0a1b2c3d4`，来源治理迁移 `k7l8m9n0o1p2`）；内容与向量改为完全走 Ops 导入管理（`POST /v1/ops/knowledge/import`），部署链路不再自动播种；`scripts/seed_knowledge.py` 已下线，`seed/knowledge/mma_pa_chunks.json` 仅作 `test_knowledge_evaluation.py` 等测试的夹具留存。
+- 医学证据编审 P0：Ops 可检索 PubMed 候选并按 PMID 导入摘要；新论文固定为 `pending_review`，不进入 `knowledge_search`，人工改为 `curated` 或 `clinically_reviewed` 后才可供对话使用。Ops 文档详情支持经 OLS 查询并选择 MONDO/HPO/Orphanet 的受控术语；文档元数据保存 CURIE，导入时追加到切片 tags，用于疾病/亚型/表型召回。
 - 内建 `knowledge_search`：关键词 + tags overlap + 可选 Ollama embedding 混合召回；结果返回来源、版本、审核状态和章节；`KNOWLEDGE_SEARCH_ENABLED`；垂类 Agent「遗传代谢」(`imd`) 优先使用。
 - MMA/PA P0 检索评测集：`seed/knowledge/mma_pa_eval.json`，覆盖分型、C3 筛查、急症、饮食边界、监测和证据限制。
 - 平台 util 工具：`ToolDomain.UTIL` 下 `time_diff`（可注入 now、日历月/年）与 `calculate`（白名单 AST）；`UTIL_TOOLS_ENABLED`；挂载时注入 `UTIL_INSTRUCTIONS`。

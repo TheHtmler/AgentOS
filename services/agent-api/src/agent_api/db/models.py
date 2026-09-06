@@ -708,11 +708,13 @@ class KnowledgeDocument(Base):
     __tablename__ = "knowledge_documents"
     __table_args__ = (
         CheckConstraint(
-            "source_kind IN ('official_reference', 'clinical_guideline', 'curated_summary')",
+            "source_kind IN ("
+            "'official_reference', 'clinical_guideline', 'curated_summary', 'research_article'"
+            ")",
             name="ck_knowledge_documents_source_kind",
         ),
         CheckConstraint(
-            "review_status IN ('curated', 'clinically_reviewed', 'withdrawn')",
+            "review_status IN ('pending_review', 'curated', 'clinically_reviewed', 'withdrawn')",
             name="ck_knowledge_documents_review_status",
         ),
         UniqueConstraint(
@@ -743,6 +745,13 @@ class KnowledgeDocument(Base):
     )
     source_date: Mapped[str | None] = mapped_column(String(32))
     version_label: Mapped[str | None] = mapped_column(String(128))
+    # Controlled-vocabulary terms are document-level provenance, not user facts.
+    # Their CURIEs are copied into chunk tags on import for deterministic retrieval.
+    ontology_terms: Mapped[list[dict[str, str]]] = mapped_column(
+        JSONB,
+        server_default=text("'[]'::jsonb"),
+        nullable=False,
+    )
     review_status: Mapped[str] = mapped_column(
         String(24),
         server_default=text("'curated'"),

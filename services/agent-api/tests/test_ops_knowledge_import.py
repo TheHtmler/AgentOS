@@ -26,6 +26,7 @@ from agent_api.config import get_settings
 from agent_api.db.models import KnowledgeDocumentSnapshot
 from agent_api.db.ops_store import create_ops_session
 from agent_api.db.session import close_database, session_factory
+from agent_api.knowledge.pubmed import PubMedArticle
 from agent_api.main import app
 from agent_api.runtime import AgentRuntime
 
@@ -288,6 +289,7 @@ async def test_ops_import_pdf_uses_vision_model(monkeypatch: pytest.MonkeyPatch)
         *,
         http_client: httpx.AsyncClient,
         settings: object,
+        on_progress: object,
     ) -> tuple[str, int, int]:
         assert data == b"%PDF-1.4 fake pdf bytes"
         return "[第 1 页]\n第一页内容。\n\n[第 2 页]\n第二页内容。", 0, 2
@@ -522,3 +524,99 @@ async def test_ops_import_rejects_unsupported_file(monkeypatch: pytest.MonkeyPat
 
     assert response.status_code == 400
     assert "仅支持" in str(response.json()["detail"])
+
+
+@pytest.mark.anyio
+async def test_ops_import_keeps_ontology_terms_and_makes_curie_queryable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slug = f"ops-ontology-{uuid4().hex}"
+    token = await _ops_cookie(monkeypatch)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        client.cookies.set("ops_session", token)
+        response = await client.post(
+            "/v1/ops/knowledge/import",
+            json={
+                "mode": "json",
+                "payload": {
+                    "documents": [
+                        {
+                            "slug": slug,
+                            "title": "术语规范化导入",
+                            "ontology_terms": [
+                                {
+                                    "curie": "MONDO:0010975",
+                                    "label": "propionic acidemia",
+                                    "ontology": "mondo",
+                                },
+                            ],
+                            "chunks": [
+                                {
+                                    "chunk_index": 0,
+                                    "title": "摘要",
+                                    "content": "丙酸血症教育资料。",
+                                },
+                            ],
+                        },
+                    ],
+                },
+            },
+        )
+        assert response.status_code == 200
+        settled = await _wait_import_done(client, slug)
+        detail = await client.get(f"/v1/ops/knowledge/documents/{settled['id']}")
+    assert detail.status_code == 200
+    payload = detail.json()
+    assert payload["ontology_terms"] == [
+        {"curie": "MONDO:0010975", "label": "propionic acidemia", "ontology": "mondo"},
+    ]
+    assert "MONDO:0010975" in payload["chunks"][0]["tags"]
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as updater:
+        updater.cookies.set("ops_session", token)
+        updated = await updater.patch(
+            f"/v1/ops/knowledge/documents/{settled['id']}",
+            json={
+                "ontology_terms": [
+                    {"curie": "HP:0001945", "label": "fever", "ontology": "hp"},
+                ],
+            },
+        )
+        refreshed = await updater.get(f"/v1/ops/knowledge/documents/{settled['id']}")
+    assert updated.status_code == 200
+    assert refreshed.status_code == 200
+    tags = refreshed.json()["chunks"][0]["tags"]
+    assert "HP:0001945" in tags
+    assert "MONDO:0010975" not in tags
+
+
+@pytest.mark.anyio
+async def test_ops_pubmed_candidate_import_stays_pending_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_fetch(pmid: str, _client: httpx.AsyncClient) -> PubMedArticle:
+        assert pmid == "12345678"
+        return PubMedArticle(
+            pmid=pmid,
+            title="MMA/PA evidence",
+            journal="JIMD",
+            publication_date="2026",
+            authors="Author et al.",
+            abstract="A source-bound educational abstract.",
+        )
+
+    monkeypatch.setattr("agent_api.api.ops_knowledge.fetch_pubmed_abstract", fake_fetch)
+    slug = f"pubmed-{uuid4().hex}"
+    token = await _ops_cookie(monkeypatch)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        client.cookies.set("ops_session", token)
+        response = await client.post(
+            "/v1/ops/knowledge/import",
+            json={"mode": "pubmed", "pmid": "12345678", "slug": slug},
+        )
+        assert response.status_code == 200
+        settled = await _wait_import_done(client, slug)
+    assert settled["review_status"] == "pending_review"
+    assert settled["source_kind"] == "research_article"

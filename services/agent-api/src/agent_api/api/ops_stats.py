@@ -19,6 +19,7 @@ router = APIRouter(prefix="/v1/ops", tags=["ops"])
 
 class KnowledgeStats(BaseModel):
     documents_total: int
+    pending_review: int
     curated: int
     clinically_reviewed: int
     withdrawn: int
@@ -110,12 +111,14 @@ async def get_ops_stats(
             )
         ).all()
 
+    pending_review = review_counts.get("pending_review", 0)
     curated = review_counts.get("curated", 0)
     clinically_reviewed = review_counts.get("clinically_reviewed", 0)
     withdrawn = review_counts.get("withdrawn", 0)
     return OpsStatsResponse(
         knowledge=KnowledgeStats(
-            documents_total=curated + clinically_reviewed + withdrawn,
+            documents_total=pending_review + curated + clinically_reviewed + withdrawn,
+            pending_review=pending_review,
             curated=curated,
             clinically_reviewed=clinically_reviewed,
             withdrawn=withdrawn,
