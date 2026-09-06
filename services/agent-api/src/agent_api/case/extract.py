@@ -26,6 +26,7 @@ _inflight: set[UUID] = set()
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _THINK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 _WHITESPACE_RE = re.compile(r"\s+")
+_NUMBER_RE = re.compile(r"(?<!\d)(\d+(?:\.\d+)?)(?!\d)")
 
 # Capture height/weight numbers from colloquial Chinese user text.
 _HEIGHT_RE = re.compile(
@@ -88,6 +89,31 @@ class ExtractedCasePayload:
 
 def _normalize_content(content: str) -> str:
     return _WHITESPACE_RE.sub(" ", content).strip().casefold()
+
+
+def _canonical_slot_value(key: str | None, content: str) -> str:
+    """Compare structured slots by their value, not the extractor's wording.
+
+    The model may emit ``15.2 kg`` while the deterministic extractor emits
+    ``体重 15.2 kg``. Those are the same measurement, so accepting either must
+    not create a fake update, reopen HITL, or reset its recorded timestamp.
+    """
+
+    normalized = _normalize_content(content)
+    number = _NUMBER_RE.search(normalized)
+    if key in {"height_cm", "weight_kg", "age_months"} and number is not None:
+        value = float(number.group(1))
+        return f"{key}:{value:g}"
+    if key == "sex":
+        if "女" in normalized or "female" in normalized:
+            return "sex:female"
+        if "男" in normalized or "male" in normalized:
+            return "sex:male"
+    if key == "date_of_birth":
+        digits = "".join(char for char in normalized if char.isdigit())
+        if len(digits) == 8:
+            return f"date_of_birth:{digits}"
+    return normalized
 
 
 def infer_case_fact_key(content: str, tags: list[str]) -> str | None:
@@ -408,26 +434,64 @@ async def upsert_case_fact(
     source_thread_id: UUID | None,
     source_run_id: UUID | None,
 ) -> bool:
-    """Insert or replace one Case fact; keyed slots replace prior same-key rows."""
+    """Insert or replace one Case fact without downgrading confirmed values."""
 
     if fact_update.key:
-        existing = await session.scalar(
-            select(CaseFact)
-            .where(
-                CaseFact.case_id == case_id,
-                CaseFact.key == fact_update.key,
-                CaseFact.status.in_(("proposed", "confirmed")),
+        existing = list(
+            await session.scalars(
+                select(CaseFact)
+                .where(
+                    CaseFact.case_id == case_id,
+                    CaseFact.key == fact_update.key,
+                    CaseFact.status.in_(("proposed", "confirmed")),
+                )
+                .order_by(CaseFact.updated_at.desc())
             )
-            .order_by(CaseFact.updated_at.desc())
-            .limit(1),
         )
-        if (
-            existing is not None
-            and existing.status == status
-            and _normalize_content(existing.content) == _normalize_content(fact_update.content)
-        ):
-            existing.updated_at = datetime.now(UTC)
-            return False
+        matching = next(
+            (
+                row
+                for row in existing
+                if _canonical_slot_value(row.key, row.content)
+                == _canonical_slot_value(fact_update.key, fact_update.content)
+            ),
+            None,
+        )
+        if matching is not None:
+            if matching.status == "confirmed" or matching.status == status:
+                return False
+            # HITL confirmation promotes the exact pending value in place.
+            await session.execute(
+                update(CaseFact)
+                .where(
+                    CaseFact.case_id == case_id,
+                    CaseFact.key == fact_update.key,
+                    CaseFact.status.in_(("proposed", "confirmed")),
+                    CaseFact.id != matching.id,
+                )
+                .values(status="archived", updated_at=datetime.now(UTC))
+            )
+            matching.status = "confirmed"
+            matching.source_thread_id = source_thread_id
+            matching.source_run_id = source_run_id
+            matching.updated_at = datetime.now(UTC)
+            return True
+
+        # Background extraction must never hide a confirmed current value. A
+        # changed candidate stays proposed until its own HITL confirmation.
+        if status == "proposed" and any(row.status == "confirmed" for row in existing):
+            session.add(
+                CaseFact(
+                    case_id=case_id,
+                    key=fact_update.key,
+                    content=fact_update.content,
+                    tags=fact_update.tags,
+                    status=status,
+                    source_thread_id=source_thread_id,
+                    source_run_id=source_run_id,
+                )
+            )
+            return True
         # Archive prior active rows for the same slot before writing the new value.
         await session.execute(
             update(CaseFact)

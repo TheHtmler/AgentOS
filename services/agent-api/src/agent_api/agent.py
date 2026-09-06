@@ -259,6 +259,20 @@ UPLOAD_ATTACHMENT_INSTRUCTIONS = """\
 5. 不要把用户附件写入公共知识库；不要臆造未在附件中出现的数值。
 """
 
+DOSING_TABLE_INSTRUCTIONS = """\
+## Capability: 已给定剂量表的条件换算
+当知识库或用户附件明确给出“指标条件 -> mg/kg 剂量 / 给药途径 / 次数”的表，且用户
+提供了体重或指标时：
+1. 先逐项列出命中的表格条件和未满足/缺失条件；不能把“血氨正常”误当作“血精氨酸
+   已知”或反过来。
+2. 对已满足的条件，用 calculate 精确算出 `mg/kg × kg` 的总量范围；表明确“每天”时
+   再按次数给出每次范围。数字必须直接来自该表，不得用泛泛的“不能计算”替代。
+3. 若缺少一个决定条件，给出条件式换算，例如“若血精氨酸 <10，按表为……”，并只说清
+   需要补哪一项化验；不要虚构条件。
+4. 这是对既有表/处方的核对和换算，不是新增医嘱。若来源未给明确表格或存在急性风险，
+   说明不能从现有资料推出剂量并升级就医建议。
+"""
+
 CASE_INSTRUCTIONS = """\
 ## Capability: Case archive (default subject)
 A Case profile block is the durable default subject archive for this Agent. It is created
@@ -308,6 +322,8 @@ def build_instructions(
     if "read_artifact" in mounted_names:
         sections.append(UPLOAD_ATTACHMENT_INSTRUCTIONS.strip())
         sections.append(REPORT_ANALYSIS_INSTRUCTIONS.strip())
+    if "calculate" in mounted_names and "knowledge_search" in mounted_names:
+        sections.append(DOSING_TABLE_INSTRUCTIONS.strip())
     if "web_search" in mounted_names:
         sections.append(SEARCH_INSTRUCTIONS.strip())
     if "fetch_url" in mounted_names:

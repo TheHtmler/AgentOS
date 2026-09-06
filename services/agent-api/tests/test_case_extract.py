@@ -16,6 +16,7 @@ from agent_api.case.extract import (
     merge_user_slot_hints,
     parse_case_extract_payload,
     slot_hints_from_user_message,
+    upsert_case_fact,
 )
 from agent_api.db.case_store import ensure_default_case
 from agent_api.db.models import CaseFact, User
@@ -416,3 +417,90 @@ async def test_height_update_preserves_weight(database_session: AsyncSession) ->
     }
     assert "82.5" in confirmed["height_cm"]
     assert "15.2" in confirmed["weight_kg"]
+
+
+@pytest.mark.anyio
+async def test_same_measurement_does_not_reopen_or_downgrade_case_fact(
+    database_session: AsyncSession,
+) -> None:
+    user = User(email=f"case-idempotent-{uuid4().hex}@example.com", status="active")
+    database_session.add(user)
+    await database_session.flush()
+    case_id = await ensure_default_case(
+        database_session,
+        user_id=user.id,
+        agent_id=IMD_AGENT_ID,
+    )
+    current = CaseFactUpdate(key="weight_kg", content="体重 15.2 kg", tags=["体重"])
+    assert await upsert_case_fact(
+        database_session,
+        case_id=case_id,
+        fact_update=current,
+        status="confirmed",
+        source_thread_id=None,
+        source_run_id=None,
+    )
+    await database_session.flush()
+    saved = await database_session.scalar(
+        select(CaseFact).where(CaseFact.case_id == case_id, CaseFact.status == "confirmed"),
+    )
+    assert saved is not None
+    original_updated_at = saved.updated_at
+
+    # The background extractor's terse value is the same measurement.
+    assert not await upsert_case_fact(
+        database_session,
+        case_id=case_id,
+        fact_update=CaseFactUpdate(key="weight_kg", content="15.2kg", tags=["体重"]),
+        status="proposed",
+        source_thread_id=None,
+        source_run_id=None,
+    )
+    await database_session.flush()
+    facts = list(
+        await database_session.scalars(
+            select(CaseFact).where(
+                CaseFact.case_id == case_id,
+                CaseFact.status.in_(("confirmed", "proposed")),
+            ),
+        )
+    )
+    assert len(facts) == 1
+    assert facts[0].updated_at == original_updated_at
+
+    # A changed background value remains pending and does not hide Current.
+    assert await upsert_case_fact(
+        database_session,
+        case_id=case_id,
+        fact_update=CaseFactUpdate(key="weight_kg", content="体重 15.3 kg", tags=["体重"]),
+        status="proposed",
+        source_thread_id=None,
+        source_run_id=None,
+    )
+    await database_session.flush()
+    active = list(
+        await database_session.scalars(
+            select(CaseFact).where(
+                CaseFact.case_id == case_id,
+                CaseFact.status.in_(("confirmed", "proposed")),
+            ),
+        )
+    )
+    assert {fact.status for fact in active} == {"confirmed", "proposed"}
+
+    # Confirmation replaces the old current value once.
+    assert await upsert_case_fact(
+        database_session,
+        case_id=case_id,
+        fact_update=CaseFactUpdate(key="weight_kg", content="15.3 kg", tags=["体重"]),
+        status="confirmed",
+        source_thread_id=None,
+        source_run_id=None,
+    )
+    await database_session.flush()
+    confirmed = list(
+        await database_session.scalars(
+            select(CaseFact).where(CaseFact.case_id == case_id, CaseFact.status == "confirmed"),
+        )
+    )
+    assert [fact.content for fact in confirmed] == ["体重 15.3 kg"]

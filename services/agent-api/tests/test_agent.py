@@ -111,6 +111,18 @@ def test_build_instructions_includes_upload_guidance_for_artifact_capable_agent(
     assert "明确要求解读" in text or "明确要解读" in text
 
 
+def test_build_instructions_includes_given_dosing_table_calculation_rules() -> None:
+    text = build_instructions(
+        overlay=None,
+        mounted_names={"calculate", "knowledge_search"},
+    )
+
+    assert "已给定剂量表的条件换算" in text
+    assert "mg/kg × kg" in text
+    assert "不能把“血氨正常”误当作“血精氨酸" in text
+    assert "已知”或反过来" in text
+
+
 def test_build_instructions_omits_upload_report_without_artifact_capability() -> None:
     text = build_instructions(
         overlay=None,
