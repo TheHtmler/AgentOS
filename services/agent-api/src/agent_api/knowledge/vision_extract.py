@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import logging
 import re
 from collections.abc import Awaitable, Callable
@@ -37,6 +38,7 @@ _TRANSCRIBE_PROMPT = (
     "relationships in accurate prose instead of skipping it or outputting "
     "garbled characters. Output only the transcribed text/description in the "
     "document's own language — no preamble, no commentary, no markdown fences."
+    " Preserve headings using Markdown heading levels and tables using Markdown tables."
 )
 
 
@@ -54,6 +56,7 @@ async def _transcribe_image(
     *,
     http_client: httpx.AsyncClient,
     settings: Settings,
+    max_tokens: int = 4096,
 ) -> str:
     """Call the background vision model on one image; always raises VisionExtractError."""
 
@@ -74,7 +77,7 @@ async def _transcribe_image(
                         ],
                     },
                 ],
-                "max_tokens": 2048,
+                "max_tokens": max_tokens,
                 "temperature": 0,
             },
             timeout=settings.background_vision_timeout_seconds,
@@ -94,7 +97,14 @@ async def _transcribe_image(
         raise VisionExtractError(f"视觉模型请求失败：{exc}") from exc
 
     try:
-        raw = response.json()["choices"][0]["message"]["content"]
+        choice = response.json()["choices"][0]
+        if choice.get("finish_reason") == "length":
+            if max_tokens < 8192:
+                return await _transcribe_image(
+                    image, http_client=http_client, settings=settings, max_tokens=8192
+                )
+            raise VisionExtractError("页面转录被截断，请拆分页图后重新上传")
+        raw = choice["message"]["content"]
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         raise VisionExtractError("视觉模型返回内容格式异常") from exc
     if not isinstance(raw, str):
@@ -124,6 +134,7 @@ async def extract_pdf_text_vision(
     http_client: httpx.AsyncClient,
     settings: Settings,
     on_progress: Callable[[int, int], Awaitable[None]] | None = None,
+    page_reports: list[dict[str, object]] | None = None,
 ) -> tuple[str, int, int]:
     """Vision-transcribe every PDF page; a failed page falls back to its text layer.
 
@@ -140,32 +151,55 @@ async def extract_pdf_text_vision(
             raise ValueError(f"PDF 超过 {_MAX_PAGES} 页上限")
 
         fallback_texts: list[str] = []
-        images: list[bytes] = []
         for page in document:
             text = cast(
                 str,
                 page.get_text("text"),  # pyright: ignore[reportUnknownMemberType]
             ).strip()
             fallback_texts.append(text)
-            pixmap = page.get_pixmap(dpi=_RENDER_DPI)  # pyright: ignore[reportUnknownMemberType]
-            images.append(cast(bytes, pixmap.tobytes("png")))  # pyright: ignore[reportUnknownMemberType]
 
     page_texts: list[str | None] = [None] * page_count
     semaphore = asyncio.Semaphore(_MAX_CONCURRENT_PAGES)
     vision_pages = 0
     fallback_pages = 0
     settled_pages = 0
+    reports = page_reports if page_reports is not None else []
 
     async def transcribe_one(index: int) -> None:
         nonlocal vision_pages, fallback_pages, settled_pages
         async with semaphore:
             try:
-                page_texts[index] = await _transcribe_image(
-                    images[index],
-                    http_client=http_client,
-                    settings=settings,
-                )
+                # Render only active pages; a 50-page PDF must not keep every
+                # high-resolution bitmap in the 16 GB host's memory at once.
+                with pymupdf.open(stream=data, filetype="pdf") as source:
+                    page = source[index]
+                    pixmap = page.get_pixmap(dpi=_RENDER_DPI)  # pyright: ignore[reportUnknownMemberType]
+                    image = cast(bytes, pixmap.tobytes("png"))  # pyright: ignore[reportUnknownMemberType]
+                cache_key = hashlib.sha256(
+                    image
+                    + (
+                        settings.resolved_background_vision_model
+                        + settings.resolved_background_vision_base_url
+                        + _TRANSCRIBE_PROMPT
+                    ).encode()
+                ).hexdigest()
+                cache = settings.knowledge_source_root / "pages" / cache_key
+                # Ops supplies page_reports; standalone extraction/tests stay
+                # stateless. Only complete successful vision pages are cached.
+                if page_reports is not None and cache.is_file():
+                    page_texts[index] = cache.read_text()
+                else:
+                    page_texts[index] = await _transcribe_image(
+                        image, http_client=http_client, settings=settings
+                    )
+                    if page_reports is not None:
+                        cache.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                        cache.write_text(page_texts[index] or "")
+                        cache.chmod(0o600)
                 vision_pages += 1
+                reports.append(
+                    {"page": index + 1, "status": "vision", "chars": len(page_texts[index] or "")}
+                )
             except VisionExtractError as error:
                 logger.warning(
                     "Vision transcription failed for PDF page %d/%d: %s",
@@ -177,6 +211,13 @@ async def extract_pdf_text_vision(
                 if fallback:
                     page_texts[index] = fallback
                     fallback_pages += 1
+                reports.append(
+                    {
+                        "page": index + 1,
+                        "status": "fallback" if fallback else "missing",
+                        "error": str(error),
+                    }
+                )
             settled_pages += 1
             if on_progress is not None:
                 await on_progress(settled_pages, page_count)
@@ -184,6 +225,9 @@ async def extract_pdf_text_vision(
     if on_progress is not None:
         await on_progress(0, page_count)
     await asyncio.gather(*(transcribe_one(index) for index in range(page_count)))
+    reports.sort(key=lambda report: int(cast(int, report["page"])))
+    if any(report["status"] == "missing" for report in reports):
+        raise VisionExtractError("PDF 存在缺失页，未发布本次导入；请重试或补充清晰原件")
 
     full_text = "\n\n".join(
         f"[第 {index + 1} 页]\n{text}" for index, text in enumerate(page_texts) if text

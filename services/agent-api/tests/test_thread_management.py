@@ -3,7 +3,6 @@ from collections.abc import AsyncIterator
 from uuid import UUID
 
 import pytest
-from conftest import create_run_via_ag_ui
 from httpx import ASGITransport, AsyncClient
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
@@ -14,6 +13,7 @@ from agent_api.db.models import Artifact, Thread
 from agent_api.db.session import close_database, session_factory
 from agent_api.main import app
 from agent_api.runtime import AgentRuntime
+from tests.conftest import create_run_via_ag_ui
 
 
 @pytest.fixture(autouse=True)

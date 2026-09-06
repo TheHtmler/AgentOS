@@ -2,13 +2,15 @@
 
 本目录是项目的架构与运维事实来源。修改跨服务行为、部署方式、数据模型或关键依赖前，先更新相应文档或新增 ADR。
 
+知识库改造与验收见 [20-knowledge-retrieval.md](20-knowledge-retrieval.md)。
+
 | 文档                                                                                                                                       | 内容                                                                   | 何时更新                                     |
 | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | -------------------------------------------- |
 | [01-architecture-baseline.md](01-architecture-baseline.md)                                                                                 | 当前技术选型、服务边界、数据流与部署拓扑                               | 架构或依赖变化时                             |
 | [14-macmini-frp-ops-deploy.md](14-macmini-frp-ops-deploy.md)                                                                               | Ops 子域 + FRP + launchd + 宝塔部署                                    | 变更 ops 公网入口或 Mac mini 托管方式时      |
 | [16-agent-runtime-architecture.md](16-agent-runtime-architecture.md)                                                                       | Agent 运行时建成态：prompt 组装、上下文预算、模型 Provider、工具、HITL | 改动模型调用组装、预算护栏或工具挂载时       |
 | [17-scheduled-tasks.md](17-scheduled-tasks.md)                                                                                             | 用户定时任务、日历调度、结果回看与运行恢复边界                         | 定时任务、通知或调度器行为变化时             |
-| [18-frontend-ui-component-library.md](18-frontend-ui-component-library.md)                                                                 | 前端聊天 UI 组件库（shadcn 化 AI Chat 组件集）与样式清理记录           | 改动聊天组件、UI 原语或 globals.css 时        |
+| [18-frontend-ui-component-library.md](18-frontend-ui-component-library.md)                                                                 | 前端聊天 UI 组件库（shadcn 化 AI Chat 组件集）与样式清理记录           | 改动聊天组件、UI 原语或 globals.css 时       |
 | [02-mvp-roadmap.md](02-mvp-roadmap.md)                                                                                                     | MVP 实施顺序与完成标准                                                 | 迭代计划变化时                               |
 | [03-development-workflow.md](03-development-workflow.md)                                                                                   | 代码所有权、协作方式与每轮交付格式                                     | 协作边界或开发流程变化时                     |
 | [04-foundation-setup.md](04-foundation-setup.md)                                                                                           | 首轮工程初始化命令、代码和验收标准                                     | 工具链或工程骨架变化时                       |

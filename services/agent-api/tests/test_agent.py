@@ -1,5 +1,4 @@
 import pytest
-from model_profile import REMOTE_MODEL_PROFILE
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 
 from agent_api.agent import (
@@ -12,6 +11,7 @@ from agent_api.agent import (
     inject_context_snapshot,
 )
 from agent_api.config import Settings
+from tests.model_profile import REMOTE_MODEL_PROFILE
 
 
 def test_instructions_exclude_volatile_blocks_and_snapshot_carries_them() -> None:

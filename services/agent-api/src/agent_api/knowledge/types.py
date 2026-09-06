@@ -31,3 +31,4 @@ class DocumentSpec:
     version_label: str | None = None
     review_status: str = "curated"
     ontology_terms: list[OntologyTermSpec] = field(default_factory=lambda: [])
+    ingestion: dict[str, object] = field(default_factory=lambda: {})

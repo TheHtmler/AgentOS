@@ -186,13 +186,20 @@ totals, rates, or multi-step formulas when a tool result is available.
 KNOWLEDGE_INSTRUCTIONS = """\
 ## Capability: knowledge_search
 Call knowledge_search first for questions the curated knowledge base(s) you're scoped to
-may cover — prefer it over web_search when it applies. Build query from short keywords
-(topic, analyte/report type, etc.), never a full question sentence; put category/subtype
+may cover — prefer it over web_search when it applies. For disease education and report
+interpretation, retrieve evidence before making domain-specific claims. Build a concise,
+self-contained query retaining the user's question intent and relevant qualifiers; resolve
+follow-up references from the conversation. Put category/subtype
 tags in disease_tags instead when the base uses them. Cite source_url values, and include
 source_label / version_label when a hit has them. Fall back to web_search only when the
 curated base is insufficient or the user needs a newer external page. Treat curated
 summaries as educational evidence, not individualized prescriptions; if the retrieved
-evidence does not answer the question, say so instead of filling the gap.
+evidence does not answer the question, say so instead of filling the gap. Hits are candidate
+evidence, not proof of relevance. Read their content and adjacent source passages. If evidence
+is insufficient, retry at most twice using alternate clinical terms or separate subquestions;
+do not repeat the same query or infer relevance from a disease tag alone. Cite document_title
+and section_label when a source has no public URL; never invent a source URL. Retrieval
+diagnostics describe availability, not clinical confidence.
 """
 
 MEMORY_HEADER = "## Known user facts (for this agent only; use when relevant)"

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent_api.config import get_settings
 from agent_api.db.models import KnowledgeBase, KnowledgeChunk, KnowledgeDocument
 from agent_api.db.session import session_factory
+from agent_api.knowledge.vectors import EMBEDDING_VERSION, valid_vector
 from agent_api.memory.embed import cosine_similarity, embed_text
 from agent_api.rrf import reciprocal_rank_fusion
 from agent_api.tools.search.tool import AgentDeps
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
-_TOKEN_CAP = 24
+_TOKEN_CAP = 64
 _VECTOR_WEIGHT = 10.0
 _MIN_VECTOR_KEEP = 0.28
 
@@ -36,6 +37,10 @@ _MIN_VECTOR_KEEP = 0.28
 # short queries low, and _MIN_VECTOR_KEEP then drops them). Each frozenset is
 # added as a whole when ANY member appears, same shape as memory/recall.py.
 SYNONYM_GROUPS: tuple[frozenset[str], ...] = (
+    frozenset(("甲基丙二酸血症", "methylmalonic", "mma")),
+    frozenset(("丙酸血症", "propionic", "pa")),
+    frozenset(("高氨", "血氨", "hyperammonemia", "ammonia")),
+    frozenset(("生长", "growth")),
     frozenset(("发烧", "发热", "热")),
     frozenset(("吐", "呕吐", "吐奶")),
     frozenset(("拉肚子", "腹泻", "稀便")),
@@ -65,23 +70,33 @@ def tokenize_query(query: str) -> list[str]:
         if len(token) > 4 and _CJK_RE.search(token)
         for index in range(len(token) - 1)
     ]
-    expanded = list(dict.fromkeys([*tokens, *bigrams]))
+    expanded = list(dict.fromkeys(tokens))
     # Expand colloquial query words to their clinical synonyms so keyword
     # matching works for family-facing phrasing. If the user wrote 发烧, also
     # match 发热; if 吐, also match 呕吐/吐奶. Trigger on the original tokens
     # (not bigrams) to avoid noise from a coincidental 2-char overlap.
     lowered = query.lower()
+
+    def contains(term: str) -> bool:
+        if term.isascii():
+            return (
+                re.search(r"(?<![a-z0-9])" + re.escape(term) + r"(?![a-z0-9])", lowered) is not None
+            )
+        return (len(term) >= 2 and term in lowered) or term == lowered.strip()
+
     for group in SYNONYM_GROUPS:
         # Only multi-char terms trigger a group: a bare 热/吃/尿 must not
         # drag the whole clinical group in on a coincidental substring.
-        if any(len(term) >= 2 and term in lowered for term in group):
+        if any(contains(term) for term in group):
             # Single-char synonyms (热/尿/吃) are too noisy for keyword
             # scoring and ILIKE filtering — keep only 2+ char additions.
-            expanded.extend(term for term in group if len(term) >= 2 and term not in expanded)
-    return expanded[:_TOKEN_CAP]
+            expanded.extend(
+                term for term in sorted(group) if len(term) >= 2 and term not in expanded
+            )
+    return list(dict.fromkeys([*expanded, *bigrams]))[:_TOKEN_CAP]
 
 
-def _parse_disease_tags(raw: str | None) -> list[str]:
+def parse_disease_tags(raw: str | None) -> list[str]:
     if not raw or not raw.strip():
         return []
     return [part.strip().lower() for part in raw.split(",") if part.strip()][:16]
@@ -112,9 +127,9 @@ def _score_components(
     """Return (keyword, vector) components (keyword includes disease-tag boost)."""
 
     keyword = _keyword_score(content, title, tags, tokens)
-    if disease_tags:
+    if disease_tags and keyword > 0:
         overlap = len(set(disease_tags) & {tag.lower() for tag in tags})
-        keyword += overlap * 4.0
+        keyword *= 1 + min(overlap, 2) * 0.1
 
     vector = 0.0
     if query_embedding and chunk_embedding:
@@ -164,6 +179,7 @@ async def search_knowledge_chunks(
     knowledge_base_slugs: Sequence[str] | None = None,
     query_embedding: list[float] | None = None,
     current_embedding_model: str | None = None,
+    diagnostics: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Hybrid keyword + optional embedding search over published knowledge chunks.
 
@@ -174,13 +190,8 @@ async def search_knowledge_chunks(
     ``AgentDeps``, not a model-supplied argument, so a vertical agent cannot
     be talked into reading another vertical's content.
 
-    ``disease_tags`` is a Python-side scoring signal only (see
-    ``_score_components``'s tag-overlap boost), not a SQL filter — a small
-    model misspelling a tag (``mma`` instead of ``isolated_mma``) must not
-    zero out the candidate set. The knowledge base is small enough (well
-    under the 200-row candidate cap below) that skipping a tag WHERE clause
-    costs nothing and only the Python-level keyword/vector threshold decides
-    what survives.
+    Disease tags only boost already relevant keyword candidates. All authorized
+    chunks are scanned in bounded batches; only the best candidates are retained.
 
     ``current_embedding_model`` gates vector scoring to chunks embedded by
     that same model — left ``None`` (unit tests that don't model this
@@ -216,23 +227,39 @@ async def search_knowledge_chunks(
             )
         stmt = stmt.where(or_(*like_clauses))
 
-    # Pull a modest candidate set, then rank in Python for predictable scoring.
-    stmt = stmt.order_by(KnowledgeDocument.slug, KnowledgeChunk.chunk_index).limit(200)
-    rows = (await session.execute(stmt)).all()
+    stmt = stmt.order_by(KnowledgeDocument.slug, KnowledgeChunk.chunk_index).execution_options(
+        yield_per=128
+    )
+    rows = await session.stream(stmt)
 
     keyword_candidates: list[tuple[float, dict[str, Any]]] = []
     vector_candidates: list[tuple[float, dict[str, Any]]] = []
     model_mismatches = 0
-    for chunk, document, base in rows:
+    scanned = usable = 0
+    minimum = get_settings().knowledge_vector_min_score
+    async for chunk, document, base in rows:
+        scanned += 1
         tags = [str(item) for item in cast(list[Any], chunk.tags or [])]
         chunk_embedding = list(cast(list[float], chunk.embedding)) if chunk.embedding else None
         if (
             chunk_embedding is not None
             and current_embedding_model is not None
-            and chunk.embedding_model not in (None, current_embedding_model)
+            and (
+                chunk.embedding_model != current_embedding_model
+                or chunk.embedding_version != EMBEDDING_VERSION
+            )
         ):
             chunk_embedding = None
             model_mismatches += 1
+        if not valid_vector(
+            chunk_embedding,
+            len(query_embedding)
+            if query_embedding
+            else get_settings().knowledge_embedding_dimensions,
+        ):
+            chunk_embedding = None
+        if chunk_embedding is not None:
+            usable += 1
         keyword, vector = _score_components(
             content=chunk.content,
             title=chunk.title,
@@ -242,10 +269,12 @@ async def search_knowledge_chunks(
             query_embedding=query_embedding,
             chunk_embedding=chunk_embedding,
         )
-        if keyword <= 0 and vector < _MIN_VECTOR_KEEP:
+        if keyword <= 0 and vector < minimum:
             continue
         payload = {
             "chunk_id": str(chunk.id),
+            "document_id": str(document.id),
+            "chunk_index": chunk.chunk_index,
             "title": chunk.title,
             "content": chunk.content,
             "tags": tags,
@@ -260,11 +289,23 @@ async def search_knowledge_chunks(
             "section_label": chunk.section_label,
             "knowledge_base": base.slug,
             "score": round(keyword + vector * _VECTOR_WEIGHT, 4),
+            "keyword_score": round(keyword, 4),
+            "vector_score": round(vector, 4),
         }
         if keyword > 0:
             keyword_candidates.append((keyword, payload))
-        if vector >= _MIN_VECTOR_KEEP:
+        if vector >= minimum:
             vector_candidates.append((vector, payload))
+        # Keep memory bounded independently of corpus size, without excluding
+        # later documents from competing for either signal's top positions.
+        if len(keyword_candidates) > 128:
+            keyword_candidates = sorted(keyword_candidates, key=lambda item: item[0], reverse=True)[
+                :64
+            ]
+        if len(vector_candidates) > 128:
+            vector_candidates = sorted(vector_candidates, key=lambda item: item[0], reverse=True)[
+                :64
+            ]
 
     if model_mismatches:
         logger.warning(
@@ -278,16 +319,72 @@ async def search_knowledge_chunks(
     # comparing keyword counts and cosine similarity on a shared scale.
     keyword_ranked = [
         payload for _, payload in sorted(keyword_candidates, key=lambda item: item[0], reverse=True)
-    ]
+    ][:64]
     vector_ranked = [
         payload for _, payload in sorted(vector_candidates, key=lambda item: item[0], reverse=True)
-    ]
+    ][:64]
+    for rank, payload in enumerate(keyword_ranked, 1):
+        payload["keyword_rank"] = rank
+    for rank, payload in enumerate(vector_ranked, 1):
+        payload["vector_rank"] = rank
     fused = reciprocal_rank_fusion(
         keyword_ranked,
         vector_ranked,
         key=lambda payload: cast(str, payload["chunk_id"]),
     )
-    return fused[:max_results]
+    selected: list[dict[str, Any]] = []
+    deferred: list[dict[str, Any]] = []
+    per_document: dict[str, int] = {}
+    seen: set[str] = set()
+    for payload in fused:
+        fingerprint = re.sub(r"\s+", "", str(payload["content"]))
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        document_id = str(payload["document_id"])
+        if per_document.get(document_id, 0) >= 3:
+            deferred.append(payload)
+            continue
+        per_document[document_id] = per_document.get(document_id, 0) + 1
+        selected.append(payload)
+        if len(selected) >= max_results:
+            break
+    selected.extend(deferred[: max(0, max_results - len(selected))])
+    # Neighbors inherit the selected document's authorization and remain
+    # separate evidence with their own IDs and labels, never invented context.
+    for payload in selected:
+        neighbors = list(
+            await session.scalars(
+                select(KnowledgeChunk)
+                .where(
+                    KnowledgeChunk.document_id == UUID(payload["document_id"]),
+                    KnowledgeChunk.chunk_index.in_(
+                        [payload["chunk_index"] - 1, payload["chunk_index"] + 1]
+                    ),
+                )
+                .order_by(KnowledgeChunk.chunk_index)
+            )
+        )
+        payload["adjacent"] = [
+            {"chunk_id": str(c.id), "section_label": c.section_label, "content": c.content[:450]}
+            for c in neighbors
+            if payload["section_label"] and c.section_label == payload["section_label"]
+        ]
+    if diagnostics is not None:
+        diagnostics.update(
+            scanned_chunks=scanned,
+            usable_vector_chunks=usable,
+            model_mismatches=model_mismatches,
+            keyword_candidates=len(keyword_ranked),
+            vector_candidates=len(vector_ranked),
+            retrieval_version="hybrid-v2",
+            degraded_reason="query_embedding_unavailable"
+            if query_embedding is None
+            else "no_usable_document_vectors"
+            if not usable
+            else None,
+        )
+    return selected
 
 
 async def run_knowledge_search(
@@ -310,12 +407,12 @@ async def run_knowledge_search(
     if blocked is not None:
         return blocked
 
-    normalized = query.strip()
+    normalized = query.strip()[:1000]
     if not normalized:
         return json.dumps({"error": "query must not be blank"}, ensure_ascii=False)
 
     limit = max(1, min(8, max_results if max_results is not None else 5))
-    tags = _parse_disease_tags(disease_tags)
+    tags = parse_disease_tags(disease_tags)
     settings = get_settings()
     args: dict[str, object] = {
         "query": normalized[:200],
@@ -336,8 +433,11 @@ async def run_knowledge_search(
             settings=settings,
             enabled=True,
         )
+        if not valid_vector(query_embedding, settings.knowledge_embedding_dimensions):
+            query_embedding = None
 
     try:
+        diagnostics: dict[str, Any] = {}
         async with session_factory() as session:
             hits = await search_knowledge_chunks(
                 session,
@@ -347,6 +447,7 @@ async def run_knowledge_search(
                 knowledge_base_slugs=deps.knowledge_base_slugs,
                 query_embedding=query_embedding,
                 current_embedding_model=settings.resolved_background_embedding_model,
+                diagnostics=diagnostics,
             )
     except Exception as exc:
         logger.exception("knowledge_search failed")
@@ -366,6 +467,8 @@ async def run_knowledge_search(
         "count": len(hits),
         "results": hits,
         "embedding_used": query_embedding is not None,
+        "diagnostics": diagnostics,
+        "evidence_status": "candidates_found" if hits else "no_evidence",
         "note": (
             "Curated educational summaries with citations. "
             "Not a clinical diagnosis; prefer source_url when explaining."
@@ -373,7 +476,10 @@ async def run_knowledge_search(
     }
     raw = json.dumps(response, ensure_ascii=False)
     if deps.persist_tool_events and deps.run_id is not None:
-        embedding_flag = "embedding:on" if query_embedding is not None else "embedding:off"
+        embedding_flag = (
+            f"query_vector:{query_embedding is not None}, "
+            f"document_vectors:{diagnostics.get('usable_vector_chunks', 0)}"
+        )
         summary = f"{len(hits)} hits ({embedding_flag})"
         if hits:
             summary += f": {hits[0]['title']}"
@@ -398,7 +504,8 @@ async def knowledge_search(
     """Search this Agent's curated knowledge base(s) by keywords and optional tags.
 
     Prefer this over generic web_search for topics the curated base covers.
-    disease_tags: optional comma-separated tag filter, e.g. isolated_mma,pa,gene:MMUT
+    query: concise self-contained question or clinical terms retaining the intended topic.
+    disease_tags: optional comma-separated ranking hints, e.g. isolated_mma,pa,gene:MMUT
     (only meaningful when the knowledge base you're scoped to uses those tags).
     """
 

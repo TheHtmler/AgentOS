@@ -191,7 +191,7 @@ async def test_ag_ui_ignores_client_supplied_history(authenticated_api_user: UUI
         assert isinstance(first_answer, TextPart)
         assert first_answer.content == "AG-UI 回复 1"
 
-        second_prompt = second_request_messages[2].parts[0]
+        second_prompt = second_request_messages[2].parts[-1]
         assert isinstance(second_prompt, UserPromptPart)
         assert second_prompt.content == "服务器第二轮问题"
     finally:

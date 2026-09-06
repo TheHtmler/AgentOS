@@ -767,6 +767,13 @@ class KnowledgeDocument(Base):
         nullable=False,
     )
     import_error: Mapped[str | None] = mapped_column(Text)
+    import_stage: Mapped[str | None] = mapped_column(String(32))
+    import_details: Mapped[dict[str, object]] = mapped_column(
+        JSONB, server_default=text("'{}'::jsonb"), nullable=False
+    )
+    ingestion: Mapped[dict[str, object]] = mapped_column(
+        JSONB, server_default=text("'{}'::jsonb"), nullable=False
+    )
     # Vision pages done/total while processing; NULL when not applicable.
     import_progress_done: Mapped[int | None] = mapped_column(Integer)
     import_progress_total: Mapped[int | None] = mapped_column(Integer)
@@ -818,6 +825,7 @@ class KnowledgeChunk(Base):
     # similarity between vectors from different models is meaningless, not
     # merely inaccurate, and dimension alone won't catch that.
     embedding_model: Mapped[str | None] = mapped_column(String(128))
+    embedding_version: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

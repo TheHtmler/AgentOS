@@ -31,8 +31,12 @@ def _pdf_bytes(*page_texts: str) -> bytes:
     return data
 
 
-def test_upload_settings_defaults() -> None:
-    settings = _settings()
+def test_upload_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("UPLOAD_ROOT", raising=False)
+    settings = Settings(
+        _env_file=None,  # pyright: ignore[reportCallIssue]
+        database_url="postgresql+asyncpg://test:test@localhost/test",
+    )
     assert settings.upload_root == SERVICE_ROOT / "data" / "uploads"
     assert settings.upload_max_bytes == 20_000_000
     assert settings.upload_max_files_per_message == 3

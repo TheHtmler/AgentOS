@@ -14,13 +14,18 @@ from xml.etree import ElementTree
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
+from sqlalchemy import cast as sql_cast
+from sqlalchemy.dialects.postgresql import JSONPATH
 from sqlalchemy.exc import IntegrityError
 from starlette.datastructures import FormData, UploadFile
 
 from agent_api.api.ops_auth import get_ops_subject
 from agent_api.config import get_settings
-from agent_api.db.knowledge_store import upsert_knowledge_document
+from agent_api.db.knowledge_store import (
+    lock_document_import,
+    upsert_knowledge_document,
+)
 from agent_api.db.models import (
     KnowledgeBase,
     KnowledgeChunk,
@@ -38,17 +43,48 @@ from agent_api.knowledge.import_jobs import (
 from agent_api.knowledge.normalize import normalize_json_payload, normalize_plain_text
 from agent_api.knowledge.ontology import resolve_ontology_terms
 from agent_api.knowledge.pubmed import fetch_pubmed_abstract, search_pubmed
+from agent_api.knowledge.sources import archive_bytes, load_checkpoint, source_path
 from agent_api.knowledge.types import ChunkSpec, DocumentSpec, OntologyTermSpec
 from agent_api.knowledge.url_extract import fetch_url_text
+from agent_api.knowledge.vectors import EMBEDDING_VERSION, retrieval_text, usable_vector
 from agent_api.knowledge.vision_extract import (
     VisionExtractError,
     extract_image_text_vision,
     extract_pdf_text_vision,
 )
-from agent_api.memory.embed import embed_texts
+from agent_api.memory.embed import embed_text, embed_texts
 from agent_api.runtime import AgentRuntime
 
 router = APIRouter(prefix="/v1/ops/knowledge", tags=["ops-knowledge"])
+
+
+def _usable_vector_conditions() -> list[Any]:
+    cfg = get_settings()
+    return [
+        KnowledgeChunk.embedding_model == cfg.resolved_background_embedding_model,
+        KnowledgeChunk.embedding_version == EMBEDDING_VERSION,
+        ~func.jsonb_path_exists(
+            KnowledgeChunk.embedding, sql_cast('$[*] ? (@.type() != "number")', JSONPATH)
+        ),
+        func.jsonb_path_exists(KnowledgeChunk.embedding, sql_cast("$[*] ? (@ != 0)", JSONPATH)),
+        func.jsonb_array_length(
+            case(
+                (func.jsonb_typeof(KnowledgeChunk.embedding) == "array", KnowledgeChunk.embedding),
+                else_=None,
+            )
+        )
+        == cfg.knowledge_embedding_dimensions,
+    ]
+
+
+async def _save_page_reports(slug: str, pages: list[dict[str, object]]) -> None:
+    from agent_api.db.knowledge_store import document_id_for_slug
+
+    async with session_factory() as session, session.begin():
+        document = await session.get(KnowledgeDocument, document_id_for_slug(slug))
+        if document is not None:
+            document.import_details = {**document.import_details, "pages": list(pages)}
+
 
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 _IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
@@ -96,6 +132,10 @@ class KnowledgeDocumentOut(BaseModel):
     # match keyword searches and the vector leg of hybrid search is dead.
     embedded_chunks: int = 0
     embedding_model: str | None = None
+    import_stage: str | None = None
+    quality: dict[str, object] = Field(default_factory=dict)
+    source_available: bool = False
+    vector_state: str = "missing"
 
 
 class KnowledgeDocumentListResponse(BaseModel):
@@ -228,6 +268,21 @@ def _document_out(
         import_progress_total=doc.import_progress_total,
         embedded_chunks=embedded_chunks,
         embedding_model=embedding_model,
+        import_stage=doc.import_stage,
+        quality={
+            key: value
+            for key, value in {**(doc.ingestion or {}), **(doc.import_details or {})}.items()
+            if key in ("pages", "parser_version", "embedded", "chunks")
+        },
+        source_available=bool(
+            (doc.ingestion or {}).get("source_digest")
+            or (doc.import_details or {}).get("source_digest")
+        ),
+        vector_state="complete"
+        if chunk_count and embedded_chunks == chunk_count
+        else "partial"
+        if embedded_chunks
+        else "missing",
     )
 
 
@@ -517,6 +572,11 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
     is_image = mime in _IMAGE_TYPES or suffix in _IMAGE_SUFFIXES
     is_json = mime == "application/json" or suffix in _JSON_SUFFIXES
     is_text = mime.startswith("text/") or suffix in _TEXT_SUFFIXES
+    source_info: dict[str, object] = {
+        "source_digest": archive_bytes(data),
+        "filename": Path(upload.filename or "document").name,
+        "source_type": "pdf" if is_pdf else "image" if is_image else "text",
+    }
 
     if is_image or is_pdf:
         vision_client = _background_vision_http_client(request)
@@ -533,19 +593,32 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
                     http_client=vision_client,
                     settings=settings,
                 )
-                return normalize_plain_text(slug=slug, title=title, body=body), 1, 0
+                spec = normalize_plain_text(slug=slug, title=title, body=body)
+                spec.ingestion.update(source_info)
+                return spec, 1, 0
 
             extract = extract_image
         else:
 
             async def extract_pdf(on_progress: ProgressFn) -> ExtractResult:
-                body, _fallback_pages, _vision_pages = await extract_pdf_text_vision(
+                pages: list[dict[str, object]] = []
+
+                async def progress(done: int, total: int) -> None:
+                    await on_progress(done, total)
+                    await _save_page_reports(slug, pages)
+
+                body, fallback_pages, vision_pages = await extract_pdf_text_vision(
                     data,
                     http_client=vision_client,
                     settings=settings,
-                    on_progress=on_progress,
+                    on_progress=progress,
+                    page_reports=pages,
                 )
-                return normalize_plain_text(slug=slug, title=title, body=body), 0, 0
+                spec = normalize_plain_text(slug=slug, title=title, body=body)
+                spec.ingestion.update({**source_info, "pages": pages})
+                if fallback_pages:
+                    spec.review_status = "pending_review"
+                return spec, vision_pages, fallback_pages
 
             extract = extract_pdf
 
@@ -556,6 +629,7 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
             created_by=subject,
             extract=extract,
             embedding_client=_background_http_client(request),
+            details=source_info,
         )
         return ImportResponse(documents=[_submitted_out(submitted)])
 
@@ -567,6 +641,7 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
     if is_text or suffix == "":
         body = data.decode("utf-8")
         spec = normalize_plain_text(slug=slug, title=title, body=body)
+        spec.ingestion.update(source_info)
         return await _submit_specs(request, [spec], base_slug=base_slug, subject=subject)
 
     raise ValueError("仅支持 txt、md、json、pdf、jpg、png、webp")
@@ -639,7 +714,7 @@ async def list_knowledge_documents(
             .select_from(KnowledgeChunk)
             .where(
                 KnowledgeChunk.document_id == KnowledgeDocument.id,
-                KnowledgeChunk.embedding.isnot(None),
+                *_usable_vector_conditions(),
             )
             .correlate(KnowledgeDocument)
             .scalar_subquery()
@@ -688,7 +763,10 @@ async def get_knowledge_document(
                 .order_by(KnowledgeChunk.chunk_index),
             ),
         )
-        embedded_chunks = sum(1 for chunk in chunks if chunk.embedding is not None)
+        embedded_chunks = sum(
+            usable_vector(chunk.embedding, chunk.embedding_model, chunk.embedding_version)
+            for chunk in chunks
+        )
         embedding_model = next(
             (chunk.embedding_model for chunk in chunks if chunk.embedding_model is not None),
             None,
@@ -709,7 +787,9 @@ async def get_knowledge_document(
                 content=chunk.content,
                 section_label=chunk.section_label,
                 tags=list(chunk.tags or []),
-                embedded=chunk.embedding is not None,
+                embedded=usable_vector(
+                    chunk.embedding, chunk.embedding_model, chunk.embedding_version
+                ),
                 embedding_model=chunk.embedding_model,
             )
             for chunk in chunks
@@ -726,14 +806,26 @@ async def patch_knowledge_document(
     updates = payload.model_dump(exclude_unset=True)
     now = datetime.now(UTC)
     async with session_factory() as session, session.begin():
+        await lock_document_import(session, document_id)
         document = await session.get(KnowledgeDocument, document_id)
         if document is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+        if document.import_status == "processing":
+            raise HTTPException(409, "导入进行中，请完成后修改")
 
         if "review_status" in updates:
             document.review_status = updates["review_status"]
             document.reviewed_at = now
         if "title" in updates and updates["title"] is not None:
+            if updates["title"] != document.title:
+                from sqlalchemy import update
+
+                await session.execute(
+                    update(KnowledgeChunk)
+                    .where(KnowledgeChunk.document_id == document_id)
+                    .values(embedding_version=None)
+                )
             document.title = updates["title"]
         if "version_label" in updates:
             document.version_label = updates["version_label"]
@@ -772,7 +864,7 @@ async def patch_knowledge_document(
                 .select_from(KnowledgeChunk)
                 .where(
                     KnowledgeChunk.document_id == document.id,
-                    KnowledgeChunk.embedding.isnot(None),
+                    *_usable_vector_conditions(),
                 ),
             )
             or 0,
@@ -797,9 +889,12 @@ async def delete_knowledge_document(
     _subject: Annotated[str, Depends(get_ops_subject)],
 ) -> None:
     async with session_factory() as session, session.begin():
+        await lock_document_import(session, document_id)
         document = await session.get(KnowledgeDocument, document_id)
         if document is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+        if document.import_status == "processing":
+            raise HTTPException(409, "导入进行中，请完成后删除")
         await session.delete(document)
 
 
@@ -900,7 +995,206 @@ def _spec_from_snapshot(document: KnowledgeDocument, payload: dict[str, Any]) ->
             OntologyTermSpec(**term)
             for term in cast(list[dict[str, str]], doc_meta.get("ontology_terms") or [])
         ],
+        ingestion=dict(doc_meta.get("ingestion") or {}),
     )
+
+
+class RebuildRequest(BaseModel):
+    mode: Literal["vectors", "retry", "reparse"] = "vectors"
+
+
+class SearchDebugRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=1000)
+    agent_slug: str = Field(default="imd", min_length=1, max_length=128)
+    disease_tags: str = Field(default="", max_length=500)
+    max_results: int = Field(default=5, ge=1, le=8)
+
+
+@router.post("/search")
+async def debug_knowledge_search(
+    payload: SearchDebugRequest,
+    request: Request,
+    _subject: Annotated[str, Depends(get_ops_subject)],
+) -> dict[str, Any]:
+    import time
+
+    from agent_api.db.models import Agent, AgentVersion
+    from agent_api.tools.knowledge.tool import (
+        parse_disease_tags,
+        search_knowledge_chunks,
+    )
+
+    started = time.monotonic()
+    cfg = get_settings()
+    client = _background_http_client(request)
+    vector = (
+        await embed_text(
+            payload.query, client, settings=cfg, enabled=cfg.knowledge_embedding_enabled
+        )
+        if client
+        else None
+    )
+    diagnostics: dict[str, Any] = {}
+    async with session_factory() as session:
+        version = await session.scalar(
+            select(AgentVersion)
+            .join(Agent)
+            .where(Agent.slug == payload.agent_slug, AgentVersion.is_published.is_(True))
+        )
+        if version is None:
+            raise HTTPException(404, "Published agent not found")
+        hits = await search_knowledge_chunks(
+            session,
+            query=payload.query,
+            disease_tags=parse_disease_tags(payload.disease_tags),
+            max_results=payload.max_results,
+            knowledge_base_slugs=version.knowledge_base_slugs,
+            query_embedding=vector,
+            current_embedding_model=cfg.resolved_background_embedding_model,
+            diagnostics=diagnostics,
+        )
+    return {
+        "results": hits,
+        "diagnostics": diagnostics,
+        "duration_ms": round((time.monotonic() - started) * 1000),
+        "query_embedding": vector is not None,
+    }
+
+
+@router.get("/documents/{document_id}/source")
+async def download_source(document_id: UUID, _subject: Annotated[str, Depends(get_ops_subject)]):
+    from fastapi.responses import FileResponse
+
+    async with session_factory() as session:
+        document = await session.get(KnowledgeDocument, document_id)
+        if document is None:
+            raise HTTPException(404, "Document not found")
+        metadata = (
+            document.ingestion
+            if document.ingestion.get("source_digest")
+            else document.import_details
+        )
+    try:
+        path = source_path(str(metadata.get("source_digest", "")))
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return FileResponse(
+        path,
+        filename=Path(str(metadata.get("filename", "source.txt"))).name,
+        media_type="application/octet-stream",
+    )
+
+
+@router.post("/documents/{document_id}/rebuild", response_model=ImportResponse)
+async def rebuild_document(
+    document_id: UUID,
+    payload: RebuildRequest,
+    request: Request,
+    subject: Annotated[str, Depends(get_ops_subject)],
+) -> ImportResponse:
+    async with session_factory() as session:
+        document = await session.get(KnowledgeDocument, document_id)
+        if document is None:
+            raise HTTPException(404, "Document not found")
+        base = await session.get(KnowledgeBase, document.knowledge_base_id)
+        if base is None:
+            raise HTTPException(404, "Knowledge base not found")
+        chunks = list(
+            await session.scalars(
+                select(KnowledgeChunk)
+                .where(KnowledgeChunk.document_id == document_id)
+                .order_by(KnowledgeChunk.chunk_index)
+            )
+        )
+        spec = DocumentSpec(
+            slug=document.slug,
+            title=document.title,
+            chunks=[
+                ChunkSpec(c.chunk_index, c.title, c.content, c.section_label, list(c.tags))
+                for c in chunks
+            ],
+            source_kind=document.source_kind,
+            source_url=document.source_url,
+            source_label=document.source_label,
+            source_date=document.source_date,
+            version_label=document.version_label,
+            review_status=document.review_status,
+            ontology_terms=[OntologyTermSpec(**term) for term in document.ontology_terms],
+            ingestion=dict(document.ingestion),
+        )
+        details = dict(document.import_details)
+        base_slug = base.slug
+    try:
+        if payload.mode == "retry" and details.get("checkpoint"):
+            spec = load_checkpoint(str(details["checkpoint"]))
+            extract = static_extract(spec)
+        elif payload.mode == "vectors":
+            if not spec.chunks:
+                raise ValueError("没有可向量化的正文，请重试解析或重新上传")
+            extract = static_extract(spec)
+        else:
+            metadata = (
+                {**spec.ingestion, **details}
+                if payload.mode == "retry" or not spec.ingestion.get("source_digest")
+                else dict(spec.ingestion)
+            )
+            # A fresh parse must not leave an older extraction checkpoint as
+            # the next retry target when the new parse fails before embedding.
+            details.pop("checkpoint", None)
+            data = source_path(str(metadata.get("source_digest", ""))).read_bytes()
+
+            async def extract_source(progress: ProgressFn) -> ExtractResult:
+                pages: list[dict[str, object]] = []
+                cfg = get_settings()
+                client = _background_vision_http_client(request)
+                kind = metadata.get("source_type", "text")
+                if kind in ("pdf", "image") and (
+                    client is None or not cfg.resolved_background_vision_model
+                ):
+                    raise ValueError("未配置视觉模型")
+                if kind == "pdf" and client is not None:
+
+                    async def report(done: int, total: int) -> None:
+                        await progress(done, total)
+                        await _save_page_reports(spec.slug, pages)
+
+                    body, fallback, _ = await extract_pdf_text_vision(
+                        data,
+                        http_client=client,
+                        settings=cfg,
+                        on_progress=report,
+                        page_reports=pages,
+                    )
+                    if fallback:
+                        spec.review_status = "pending_review"
+                elif kind == "image" and client is not None:
+                    body = await extract_image_text_vision(data, http_client=client, settings=cfg)
+                else:
+                    body = data.decode("utf-8")
+                from agent_api.knowledge.chunking import chunk_text
+
+                spec.chunks = chunk_text(body)
+                spec.ingestion = {
+                    **metadata,
+                    "text": body,
+                    "pages": pages,
+                    "parser_version": "structure-v2",
+                }
+                return spec, 0, 0
+
+            extract = extract_source
+        submitted = await start_import(
+            base_slug=base_slug,
+            slug=spec.slug,
+            title=spec.title,
+            created_by=subject,
+            extract=extract,
+            embedding_client=_background_http_client(request),
+            details=details,
+        )
+    except (ValueError, OSError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return ImportResponse(documents=[_submitted_out(submitted)])
 
 
 @router.post(
@@ -934,24 +1228,48 @@ async def restore_document_snapshot(
                 detail=f"invalid snapshot payload: {exc}",
             ) from exc
 
-        # Re-embed the restored chunks OUTSIDE the short replace transaction,
-        # exactly like import_jobs does — a restored document whose chunks have
-        # embedding=null silently loses the vector leg of hybrid search and
-        # drops to keyword-only (a real hit-rate trap).
-        settings = get_settings()
-        embeddings: list[list[float] | None] | None = None
-        embedding_client = _background_http_client(request)
-        if embedding_client is not None and settings.knowledge_embedding_enabled and spec.chunks:
-            embeddings = await embed_texts(
-                [f"{chunk.title}\n{chunk.content}" for chunk in spec.chunks],
-                embedding_client,
-                settings=settings,
-                enabled=True,
-            )
+        if document.import_status == "processing":
+            raise HTTPException(409, "导入进行中，请完成后恢复")
+        base_slug = base.slug
+        expected_update = document.updated_at
 
+    settings = get_settings()
+    embeddings: list[list[float] | None] | None = None
+    embedding_client = _background_http_client(request)
+    if embedding_client is not None and settings.knowledge_embedding_enabled and spec.chunks:
+        embeddings = await embed_texts(
+            [
+                retrieval_text(spec.title, chunk.section_label, chunk.title, chunk.content)
+                for chunk in spec.chunks
+            ],
+            embedding_client,
+            settings=settings,
+            enabled=True,
+        )
+
+    async with session_factory() as session, session.begin():
+        await lock_document_import(session, document_id)
+        document = await session.get(KnowledgeDocument, document_id)
+        if document is None:
+            raise HTTPException(404, "Document not found")
+        if document.updated_at != expected_update or document.import_status == "processing":
+            raise HTTPException(409, "文档已变化，请刷新后重试")
+        from agent_api.knowledge.vectors import valid_vector
+
+        if (
+            embedding_client is not None
+            and settings.knowledge_embedding_enabled
+            and (
+                embeddings is None
+                or any(
+                    not valid_vector(v, settings.knowledge_embedding_dimensions) for v in embeddings
+                )
+            )
+        ):
+            raise HTTPException(409, "恢复向量化失败，旧版本保持不变")
         await upsert_knowledge_document(
             session,
-            base_slug=base.slug,
+            base_slug=base_slug,
             spec=spec,
             created_by=subject,
             embeddings=embeddings,
@@ -966,7 +1284,10 @@ async def restore_document_snapshot(
                 .order_by(KnowledgeChunk.chunk_index),
             ),
         )
-        embedded_chunks = sum(1 for chunk in chunks if chunk.embedding is not None)
+        embedded_chunks = sum(
+            usable_vector(chunk.embedding, chunk.embedding_model, chunk.embedding_version)
+            for chunk in chunks
+        )
         embedding_model = next(
             (chunk.embedding_model for chunk in chunks if chunk.embedding_model is not None),
             None,
@@ -986,7 +1307,9 @@ async def restore_document_snapshot(
                     content=chunk.content,
                     section_label=chunk.section_label,
                     tags=list(chunk.tags or []),
-                    embedded=chunk.embedding is not None,
+                    embedded=usable_vector(
+                        chunk.embedding, chunk.embedding_model, chunk.embedding_version
+                    ),
                     embedding_model=chunk.embedding_model,
                 )
                 for chunk in chunks

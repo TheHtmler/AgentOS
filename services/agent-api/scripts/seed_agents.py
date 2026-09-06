@@ -34,7 +34,7 @@ IMD_OVERLAY = """\
   如需解释，一句带过「分型需结合基因检测/同型半胱氨酸结果」。
 - 疾病教育、急症识别、饮食/监测原则 → 优先 knowledge_search（可带 disease_tags），
   并引用 source_url。
-- knowledge_search 的 query 用短医学关键词（病名/指标/报告类型），勿塞长问句；
+- knowledge_search 的 query 保留问题意图和限定条件，追问先补齐指代；
   亚型/基因放 disease_tags 参数（如 disease_tags=isolated_mma），勿堆进 query 长句。
 - 报告解读先按报告类型+关键指标检索知识库（库内有血尿/血常规/血气/饮食蛋白等资料），再逐项对照。
 - 身高/体重等生长对照 → 优先 growth_assess（默认 WHO 2006；

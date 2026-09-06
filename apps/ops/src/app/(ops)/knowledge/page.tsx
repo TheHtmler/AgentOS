@@ -138,9 +138,14 @@ export default function KnowledgePage() {
         title="知识库"
         lead="改状态只影响检索；删除会去掉文档和历史快照。"
         actions={
-          <Link href="/knowledge/import" className="btn">
-            导入
-          </Link>
+          <>
+            <Link href="/knowledge/search" className="btn">
+              检索调试
+            </Link>
+            <Link href="/knowledge/import" className="btn">
+              导入
+            </Link>
+          </>
         }
       />
 
@@ -188,7 +193,7 @@ export default function KnowledgePage() {
                   {doc.chunk_count > 0 && (doc.embedded_chunks ?? 0) < doc.chunk_count ? (
                     <span
                       className="error"
-                      title="部分切片缺少向量，混合检索的向量通道对这些切片失效（仅关键词可命中）。可在部署侧检查 BACKGROUND_* embedding 配置后重新导入。"
+                      title="部分向量缺失、维度异常或模型版本过期，可进入文档重建向量。"
                     >
                       向量 {doc.embedded_chunks ?? 0}/{doc.chunk_count}
                     </span>

@@ -1,0 +1,26 @@
+{
+  "description": "Current curated corpus baseline; replace or extend with reviewed uploaded source passages.",
+  "cases": [
+    {
+      "id": "growth",
+      "query": "生长随访",
+      "disease_tags": ["isolated_mma", "gene:mmut"],
+      "expected": ["生长随访"]
+    },
+    { "id": "fever", "query": "孩子发烧和呕吐时需要注意什么", "expected": ["发热", "呕吐"] },
+    { "id": "colloquial", "query": "拉肚子没精神", "expected": ["腹泻", "嗜睡"] },
+    { "id": "ammonia", "query": "高氨血症", "expected": ["血氨", "高氨"] },
+    { "id": "b12", "query": "维生素B12反应性", "expected": ["B12", "维生素"] },
+    {
+      "id": "english",
+      "query": "methylmalonic acidemia growth follow up",
+      "expected": ["生长", "随访"]
+    },
+    {
+      "id": "negative",
+      "query": "汽车轮胎更换步骤",
+      "disease_tags": ["isolated_mma"],
+      "expected": []
+    }
+  ]
+}

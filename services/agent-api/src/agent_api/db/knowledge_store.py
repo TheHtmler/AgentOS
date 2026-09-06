@@ -25,6 +25,7 @@ from agent_api.knowledge.normalize import (
     normalize_json_payload,
 )
 from agent_api.knowledge.types import DocumentSpec
+from agent_api.knowledge.vectors import EMBEDDING_VERSION, retrieval_text, valid_vector
 from agent_api.memory.embed import embed_text
 
 logger = logging.getLogger(__name__)
@@ -88,7 +89,7 @@ async def _knowledge_base_for_slug(
     return base
 
 
-async def _lock_document_import(session: AsyncSession, document_id: UUID) -> None:
+async def lock_document_import(session: AsyncSession, document_id: UUID) -> None:
     """Serialize same-document import stages; released automatically on commit.
 
     A slow import keeps running server-side even after the client gives up
@@ -114,8 +115,10 @@ async def _upsert_knowledge_document(
 ) -> tuple[UUID, int, bool, int]:
     base = await _knowledge_base_for_slug(session, base_slug)
     document_id = document_id_for_slug(spec.slug)
-    await _lock_document_import(session, document_id)
+    await lock_document_import(session, document_id)
     document = await session.get(KnowledgeDocument, document_id)
+    if document is not None and document.knowledge_base_id != base.id:
+        raise ValueError("document slug already belongs to another knowledge base")
     overwrote = document is not None
     fields = {
         "knowledge_base_id": base.id,
@@ -136,6 +139,8 @@ async def _upsert_knowledge_document(
         "import_error": None,
         "import_progress_done": None,
         "import_progress_total": None,
+        "import_stage": "complete",
+        "ingestion": spec.ingestion,
     }
 
     if document is None:
@@ -165,6 +170,7 @@ async def _upsert_knowledge_document(
                             "version_label": document.version_label,
                             "review_status": document.review_status,
                             "ontology_terms": list(document.ontology_terms or []),
+                            "ingestion": dict(document.ingestion or {}),
                         },
                         "chunks": [
                             {
@@ -199,13 +205,15 @@ async def _upsert_knowledge_document(
                 embedded += 1
         elif embed_enabled and http_client is not None:
             embedding = await embed_text(
-                f"{chunk.title}\n{chunk.content}",
+                retrieval_text(spec.title, chunk.section_label, chunk.title, chunk.content),
                 http_client,
                 settings=settings,
                 enabled=True,
             )
             if embedding is not None:
                 embedded += 1
+        if not valid_vector(embedding, settings.knowledge_embedding_dimensions):
+            embedding = None
         session.add(
             KnowledgeChunk(
                 id=chunk_id_for_index(chunk.chunk_index, spec.slug),
@@ -225,6 +233,7 @@ async def _upsert_knowledge_document(
                 embedding_model=(
                     settings.resolved_background_embedding_model if embedding is not None else None
                 ),
+                embedding_version=EMBEDDING_VERSION if embedding is not None else None,
             ),
         )
 
@@ -270,7 +279,7 @@ async def prepare_document_for_import(
 
     base = await _knowledge_base_for_slug(session, base_slug)
     document_id = document_id_for_slug(slug)
-    await _lock_document_import(session, document_id)
+    await lock_document_import(session, document_id)
     document = await session.get(KnowledgeDocument, document_id)
     existed = document is not None
     if document is None:
@@ -281,12 +290,12 @@ async def prepare_document_for_import(
             title=title,
         )
         session.add(document)
+    elif document.knowledge_base_id != base.id:
+        raise ValueError("document slug already belongs to another knowledge base")
     elif document.import_status == "processing":
         return document, True, existed
-    else:
-        # Placeholder title until the import finishes and writes the real one.
-        document.title = title
     document.import_status = "processing"
+    document.import_stage = "extracting"
     document.import_error = None
     document.import_progress_done = None
     document.import_progress_total = None

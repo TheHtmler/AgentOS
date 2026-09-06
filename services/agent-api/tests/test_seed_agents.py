@@ -1,7 +1,7 @@
 import importlib.util
 from dataclasses import replace
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
@@ -39,6 +39,18 @@ async def test_seed_preserves_a_newer_ops_published_version(
         await module.upsert_seed_agent(database_session, seeded_agent)
         await database_session.flush()
 
+        database_session.add(
+            AgentVersion(
+                id=seeded_version.id,
+                agent_id=seeded_agent.id,
+                version=seeded_version.version,
+                model_provider_id=UUID("00000000-0000-0000-0000-000000000099"),
+                system_prompt_overlay="baseline",
+                memory_enabled=False,
+                is_published=True,
+            )
+        )
+        await database_session.flush()
         initial = await database_session.scalar(
             select(AgentVersion).where(
                 AgentVersion.agent_id == seeded_agent.id,
@@ -50,6 +62,7 @@ async def test_seed_preserves_a_newer_ops_published_version(
         database_session.add(
             AgentVersion(
                 agent_id=seeded_agent.id,
+                model_provider_id=UUID("00000000-0000-0000-0000-000000000099"),
                 version=seeded_version.version + 1,
                 system_prompt_overlay="ops-managed",
                 memory_enabled=True,

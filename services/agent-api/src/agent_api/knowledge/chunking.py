@@ -60,6 +60,7 @@ def _pack_sections(
 ) -> list[tuple[str | None, str | None, str]]:
     chunks: list[tuple[str | None, str | None, str]] = []
     heading: str | None = None
+    heading_path: list[str] = []
     page: str | None = None
     paragraphs: list[str] = []
 
@@ -76,7 +77,10 @@ def _pack_sections(
             continue
         if kind == "heading":
             flush()
-            heading = value
+            level, label = value.split("\t", 1)
+            del heading_path[int(level) - 1 :]
+            heading_path.append(label)
+            heading = " / ".join(heading_path)
             continue
         paragraphs.append(value)
 
@@ -107,7 +111,8 @@ def _iter_blocks(text: str) -> list[tuple[str, str]]:
         heading = _heading_text(line)
         if heading is not None:
             flush_buffer()
-            blocks.append(("heading", heading))
+            level = len(line) - len(line.lstrip("#")) if line.startswith("#") else 1
+            blocks.append(("heading", f"{level}\t{heading}"))
             continue
         if buffer and not _should_join(buffer[-1], line):
             flush_buffer()
@@ -131,6 +136,10 @@ def _heading_text(line: str) -> str | None:
 
 
 def _should_join(previous: str, current: str) -> bool:
+    if previous.startswith("|") and current.startswith("|"):
+        return True
+    if previous.startswith("|") or current.startswith("|"):
+        return False
     if _LIST_ITEM.match(current):
         return False
     return not _SENTENCE_END.search(previous)
@@ -139,7 +148,9 @@ def _should_join(previous: str, current: str) -> bool:
 def _join_wrapped(lines: list[str]) -> str:
     joined = lines[0]
     for line in lines[1:]:
-        if _CJK_START.search(line):
+        if line.startswith("|"):
+            joined += f"\n{line}"
+        elif _CJK_START.search(line):
             joined += line
         else:
             joined += f" {line}"
@@ -178,6 +189,19 @@ def _pack_paragraphs(paragraphs: list[str], *, max_chars: int, overlap: int) -> 
 
 
 def _split_long_segment(text: str, max_chars: int) -> list[str]:
+    if text.startswith("|") and "\n" in text:
+        lines = text.splitlines()
+        header = "\n".join(lines[:2])
+        if len(header) < max_chars // 2:
+            result: list[str] = []
+            current = header
+            for row in lines[2:]:
+                if len(current) + len(row) + 1 > max_chars:
+                    result.append(current)
+                    current = header
+                current += "\n" + row
+            result.append(current)
+            return result
     sentences = [part.strip() for part in _SENTENCE_SPLIT.split(text) if part.strip()]
     if not sentences:
         return _hard_slice(text, max_chars)

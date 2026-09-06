@@ -128,6 +128,24 @@ class Settings(BaseSettings):
     memory_embedding_model: str = "nomic-embed-text"
     # Knowledge chunk hybrid search reuses the background embedding endpoint.
     knowledge_embedding_enabled: bool = True
+    knowledge_embedding_dimensions: int = 1024
+    knowledge_source_root: Path = SERVICE_ROOT / "data" / "knowledge"
+    knowledge_vector_min_score: float = 0.4
+
+    @field_validator("knowledge_embedding_dimensions")
+    @classmethod
+    def validate_knowledge_dimensions(cls, value: int) -> int:
+        if not 1 <= value <= 16384:
+            raise ValueError("knowledge_embedding_dimensions must be between 1 and 16384")
+        return value
+
+    @field_validator("knowledge_vector_min_score")
+    @classmethod
+    def validate_knowledge_score(cls, value: float) -> float:
+        if not 0 < value < 1:
+            raise ValueError("knowledge_vector_min_score must be between 0 and 1")
+        return value
+
     # Fixed endpoint for background jobs (auto thread titles, memory/case
     # extraction) and embedding calls. Deliberately decoupled from any Agent's
     # chat provider: republishing an Agent must never silently reroute where

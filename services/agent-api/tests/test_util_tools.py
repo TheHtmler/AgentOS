@@ -4,9 +4,9 @@ from typing import cast
 import pytest
 
 from agent_api.agent import build_instructions, create_model_http_client
-from model_profile import create_test_agent
 from agent_api.tools.search.tool import AgentDeps
 from agent_api.tools.util.tool import run_calculate, run_time_diff
+from tests.model_profile import create_test_agent
 
 
 @pytest.mark.anyio

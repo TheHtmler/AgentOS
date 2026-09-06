@@ -31,7 +31,9 @@ from agent_api.db.knowledge_store import (
     upsert_knowledge_document,
 )
 from agent_api.db.session import session_factory
+from agent_api.knowledge.sources import archive_bytes, save_checkpoint
 from agent_api.knowledge.types import DocumentSpec
+from agent_api.knowledge.vectors import retrieval_text, valid_vector
 from agent_api.knowledge.vision_extract import VisionExtractError
 from agent_api.memory.embed import embed_texts
 
@@ -73,6 +75,7 @@ async def start_import(
     created_by: str,
     extract: ExtractFn,
     embedding_client: httpx.AsyncClient | None,
+    details: dict[str, object] | None = None,
 ) -> SubmittedImport:
     """Flip the document to ``processing`` and spawn its import task.
 
@@ -89,6 +92,8 @@ async def start_import(
         )
         document_id = document.id
         document_title = document.title
+        if not already_processing:
+            document.import_details = dict(details or {})
 
     if already_processing:
         return SubmittedImport(
@@ -147,6 +152,23 @@ async def _run_import(
 
         spec, _vision_pages, _fallback_pages = await extract(report_progress)
 
+        if not spec.ingestion.get("source_digest") and isinstance(spec.ingestion.get("text"), str):
+            spec.ingestion.update(
+                source_digest=archive_bytes(str(spec.ingestion["text"]).encode()),
+                source_type="text",
+                filename=f"{spec.slug}.txt",
+            )
+
+        checkpoint = save_checkpoint(spec)
+        async with session_factory() as session, session.begin():
+            from agent_api.db.models import KnowledgeDocument
+
+            document = await session.get(KnowledgeDocument, document_id)
+            if document is None:
+                raise ValueError("Document removed during import")
+            document.import_stage = "embedding"
+            document.import_details = {**document.import_details, "checkpoint": checkpoint}
+
         settings = get_settings()
         embeddings: list[list[float] | None] | None = None
         if embedding_client is not None and settings.knowledge_embedding_enabled and spec.chunks:
@@ -154,11 +176,60 @@ async def _run_import(
             # calls inside the transaction used to hold it open for tens of
             # seconds, which was the window behind the duplicate-key 500s.
             embeddings = await embed_texts(
-                [f"{chunk.title}\n{chunk.content}" for chunk in spec.chunks],
+                [
+                    retrieval_text(spec.title, chunk.section_label, chunk.title, chunk.content)
+                    for chunk in spec.chunks
+                ],
                 embedding_client,
                 settings=settings,
                 enabled=True,
             )
+
+        valid_count = sum(
+            valid_vector(v, settings.knowledge_embedding_dimensions) for v in embeddings or []
+        )
+        async with session_factory() as session, session.begin():
+            document = await session.get(KnowledgeDocument, document_id)
+            if document is None:
+                raise ValueError("Document removed during import")
+            document.import_stage = "persisting"
+            document.import_details = {
+                **document.import_details,
+                "embedded": valid_count,
+                "chunks": len(spec.chunks),
+            }
+            # A degraded replacement must never discard a working published version.
+            from sqlalchemy import select
+
+            from agent_api.db.models import KnowledgeChunk
+
+            existing_chunks = list(
+                await session.scalars(
+                    select(KnowledgeChunk).where(KnowledgeChunk.document_id == document_id)
+                )
+            )
+            from agent_api.knowledge.vectors import usable_vector
+
+            existing_valid = sum(
+                usable_vector(c.embedding, c.embedding_model, c.embedding_version)
+                for c in existing_chunks
+            )
+            if (
+                existing_valid
+                and valid_count < len(spec.chunks)
+                and settings.knowledge_embedding_enabled
+            ):
+                raise ValueError("向量化不完整，已保留旧版本；可重试向量化")
+            if (
+                existing_chunks
+                and document.review_status in ("curated", "clinically_reviewed")
+                and spec.review_status == "pending_review"
+            ):
+                raise ValueError("新版解析需要人工复核，已保留旧版本；请检查页级报告后重新上传")
+        spec.ingestion = {
+            **spec.ingestion,
+            "vector_state": "complete" if valid_count == len(spec.chunks) else "partial",
+        }
 
         async with session_factory() as session, session.begin():
             await upsert_knowledge_document(

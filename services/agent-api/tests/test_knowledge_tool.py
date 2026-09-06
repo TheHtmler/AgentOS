@@ -7,7 +7,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_api.agent import create_model_http_client
-from model_profile import create_test_agent
 from agent_api.db.knowledge_store import upsert_mma_pa_knowledge
 from agent_api.db.models import KnowledgeBase, KnowledgeChunk, KnowledgeDocument
 from agent_api.tools.knowledge.tool import (
@@ -16,6 +15,7 @@ from agent_api.tools.knowledge.tool import (
     tokenize_query,
 )
 from agent_api.tools.search.tool import AgentDeps
+from tests.model_profile import create_test_agent
 
 
 def testtokenize_query_adds_cjk_bigrams() -> None:

@@ -290,6 +290,7 @@ async def test_ops_import_pdf_uses_vision_model(monkeypatch: pytest.MonkeyPatch)
         http_client: httpx.AsyncClient,
         settings: object,
         on_progress: object,
+        page_reports: object,
     ) -> tuple[str, int, int]:
         assert data == b"%PDF-1.4 fake pdf bytes"
         return "[第 1 页]\n第一页内容。\n\n[第 2 页]\n第二页内容。", 0, 2

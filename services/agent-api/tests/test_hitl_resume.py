@@ -371,7 +371,8 @@ async def test_resume_streams_events_to_broker_subscriber(
         assert isinstance(events[-1], RunFinishedEvent)
         assert not runtime.run_event_broker.has_publisher(run_id)
 
-        final = await _wait_for_status(client, run_id, "completed", "failed")
+        async with AsyncClient(transport=transport, base_url="http://testserver") as final_client:
+            final = await _wait_for_status(final_client, run_id, "completed", "failed")
         assert final["status"] == "completed"
     finally:
         if thread_id is not None:

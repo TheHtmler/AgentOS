@@ -2,7 +2,7 @@
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -115,6 +115,7 @@ async def test_ops_agent_publish_new_version(
             agent_id=agent.id,
             version=1,
             system_prompt_overlay="seed-overlay",
+            model_provider_id=UUID("00000000-0000-0000-0000-000000000099"),
             memory_enabled=False,
             case_enabled=False,
             is_published=True,
@@ -146,6 +147,7 @@ async def test_ops_agent_publish_new_version(
                 f"/v1/ops/agents/{agent.id}/versions",
                 json={
                     "system_prompt_overlay": "ops-test-overlay",
+                    "model_provider_id": "00000000-0000-0000-0000-000000000099",
                     "memory_enabled": True,
                     "case_enabled": False,
                     "tool_policy_overrides": {"web_search": "ask"},

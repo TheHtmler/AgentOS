@@ -3,7 +3,6 @@ from collections.abc import Iterator
 import pytest
 
 from agent_api.agent import create_model_http_client
-from model_profile import create_test_agent
 from agent_api.config import Settings
 from agent_api.tools.policy import (
     PolicyAction,
@@ -12,6 +11,7 @@ from agent_api.tools.policy import (
     set_platform_db_policies,
 )
 from agent_api.tools.registry import should_mount_tool
+from tests.model_profile import create_test_agent
 
 
 @pytest.fixture(autouse=True)

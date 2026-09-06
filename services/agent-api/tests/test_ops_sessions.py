@@ -63,6 +63,8 @@ async def test_ops_sessions_list_and_detail(
         pytest.skip("no default agent seeded in database")
 
     user = User(email=f"ops-session-{uuid4().hex}@example.com", status="active")
+    database_session.add(user)
+    await database_session.flush()
     thread = Thread(user_id=user.id, agent_id=agent.id, title="ops-audit-thread")
     database_session.add_all([user, thread])
     await database_session.flush()

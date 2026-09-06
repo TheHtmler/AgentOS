@@ -4,10 +4,10 @@ from typing import cast
 import pytest
 
 from agent_api.agent import create_model_http_client
-from model_profile import create_test_agent
 from agent_api.tools.growth.sd_table import SdRow, SdValues, value_to_z_sd_table
 from agent_api.tools.growth.tool import run_growth_assess, z_to_percentile
 from agent_api.tools.search.tool import AgentDeps
+from tests.model_profile import create_test_agent
 
 
 def test_z_to_percentile_midpoint() -> None:

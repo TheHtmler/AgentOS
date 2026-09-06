@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { useToast } from "@/components/toast";
+import { KnowledgeQuality } from "@/components/knowledge-quality";
+import { Button } from "@/components/ui/button";
 import { REVIEW_STATUS_HINTS, REVIEW_STATUS_LABELS, SOURCE_KIND_LABELS } from "@/lib/labels";
 import { opsJson } from "@/lib/ops-fetch";
 
@@ -64,6 +66,7 @@ export default function KnowledgeDetailPage() {
 
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [snapshotLimit, setSnapshotLimit] = useState(20);
   const [snapshotDetail, setSnapshotDetail] = useState<SnapshotDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
@@ -230,7 +233,7 @@ export default function KnowledgeDetailPage() {
   }
 
   return (
-    <div className="stack">
+    <div className="stack min-w-0 grid-cols-1 [overflow-wrap:anywhere] [&_.form-grid]:grid-cols-1 md:[&_.form-grid]:grid-cols-2 [&_input]:min-w-0 [&_label]:min-w-0">
       {toast.node}
       <div>
         <Link href="/knowledge" className="crumb">
@@ -253,10 +256,14 @@ export default function KnowledgeDetailPage() {
       </div>
 
       {error ? <p className="error">{error}</p> : null}
+      <KnowledgeQuality documentId={documentId} />
 
       {doc ? (
         <>
-          <form className="panel stack" onSubmit={(event) => void onSave(event)}>
+          <form
+            className="stack min-w-0 grid-cols-1 border-y py-4"
+            onSubmit={(event) => void onSave(event)}
+          >
             <h2 className="section-title">文档信息</h2>
             <div className="form-grid cols-2">
               <label>
@@ -363,7 +370,7 @@ export default function KnowledgeDetailPage() {
             </button>
           </form>
 
-          <section className="panel stack">
+          <section className="stack min-w-0 grid-cols-1 border-b py-4">
             <h2 className="section-title">内容切片</h2>
             <p className="hint">每条先看摘要；检索用的是完整正文，不是标题。</p>
             {doc.chunks.map((chunk) => {
@@ -393,10 +400,10 @@ export default function KnowledgeDetailPage() {
             })}
           </section>
 
-          <section className="panel stack">
+          <section className="stack min-w-0 grid-cols-1 border-b py-4">
             <h2 className="section-title">历史快照</h2>
             {snapshots.length === 0 ? <p className="muted">暂无快照</p> : null}
-            {snapshots.map((snap) => (
+            {snapshots.slice(0, snapshotLimit).map((snap) => (
               <div key={snap.id} className="snap-card">
                 <strong>版本 {snap.version_label ?? "—"}</strong>
                 <span className="muted">{new Date(snap.created_at).toLocaleString()}</span>
@@ -419,6 +426,11 @@ export default function KnowledgeDetailPage() {
                 </div>
               </div>
             ))}
+            {snapshotLimit < snapshots.length ? (
+              <Button variant="outline" onClick={() => setSnapshotLimit((value) => value + 20)}>
+                显示更多快照（{snapshotLimit}/{snapshots.length}）
+              </Button>
+            ) : null}
             {snapshotDetail ? (
               <pre className="chunk-body">{JSON.stringify(snapshotDetail.payload, null, 2)}</pre>
             ) : null}

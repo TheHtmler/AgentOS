@@ -74,6 +74,7 @@ def document_spec_from_payload(payload: dict[str, Any]) -> DocumentSpec:
         version_label=payload.get("version_label"),
         review_status=str(payload.get("review_status", "curated")),
         ontology_terms=ontology_terms_from_payload(payload.get("ontology_terms")),
+        ingestion=dict(payload.get("ingestion") or {}),
     )
 
 
@@ -106,4 +107,5 @@ def normalize_plain_text(
         version_label=source_fields.get("version_label"),
         review_status=str(source_fields.get("review_status", "curated")),
         ontology_terms=ontology_terms_from_payload(source_fields.get("ontology_terms")),
+        ingestion={"parser_version": "structure-v2", "text": body},
     )

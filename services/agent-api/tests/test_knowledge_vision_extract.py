@@ -5,7 +5,11 @@ import pymupdf
 import pytest
 
 from agent_api.config import Settings
-from agent_api.knowledge.vision_extract import extract_image_text_vision, extract_pdf_text_vision
+from agent_api.knowledge.vision_extract import (
+    VisionExtractError,
+    extract_image_text_vision,
+    extract_pdf_text_vision,
+)
 
 
 def _settings(**overrides: object) -> Settings:
@@ -118,7 +122,7 @@ async def test_extract_pdf_text_vision_raises_when_no_page_has_usable_text() -> 
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as client:
-        with pytest.raises(ValueError, match="未能从 PDF 提取到正文"):
+        with pytest.raises(VisionExtractError, match="缺失页"):
             await extract_pdf_text_vision(
                 _pdf_bytes(""),
                 http_client=client,

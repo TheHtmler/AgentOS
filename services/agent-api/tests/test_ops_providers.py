@@ -99,7 +99,7 @@ async def test_create_list_and_key_masking(
             assert body["supports_tools"] is False
             # Trailing slash is normalized away.
             assert body["base_url"] == "https://api.deepseek.com/v1"
-            assert body["kind"] == "remote"
+            assert "kind" not in body
             # Keys are write-only: masked preview, never the stored value.
             assert body["has_api_key"] is True
             assert body["api_key_preview"] == "sk-...cdef"
@@ -306,6 +306,7 @@ async def test_publish_version_with_model_provider(
                         memory_enabled=False,
                         case_enabled=False,
                         is_published=True,
+                        model_provider_id=UUID(provider_id),
                     ),
                 )
 

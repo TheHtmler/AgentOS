@@ -62,7 +62,8 @@ def upgrade() -> None:
     )
     op.add_column(
         "agent_versions",
-        sa.Column("model_provider_id", PG_UUID(as_uuid=True), nullable=False),
+        # Legacy versions exist here; x8y9z0a1b2c3 later removes them before NOT NULL.
+        sa.Column("model_provider_id", PG_UUID(as_uuid=True), nullable=True),
     )
     op.create_index(
         "ix_agent_versions_model_provider_id",

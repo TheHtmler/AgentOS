@@ -3,10 +3,10 @@ import json
 import pytest
 
 from agent_api.agent import create_model_http_client
-from model_profile import create_test_agent
 from agent_api.tools.search.router import SearchRouter
 from agent_api.tools.search.tool import AgentDeps, run_web_search
 from agent_api.tools.search.types import SearchProviderError, SearchResponse, SearchResult
+from tests.model_profile import create_test_agent
 
 
 class FakeProvider:

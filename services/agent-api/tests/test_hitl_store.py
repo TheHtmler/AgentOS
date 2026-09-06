@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -281,6 +281,8 @@ async def test_get_run_for_update_holds_row_lock_until_commit() -> None:
             if agent is None:
                 pytest.skip("no default agent seeded in database")
             user = User(email=f"run-lock-{uuid4().hex}@example.com", status="active")
+            setup.add(user)
+            await setup.flush()
             thread = Thread(user_id=user.id, agent_id=agent.id, title="run-lock-thread")
             setup.add_all([user, thread])
             await setup.flush()
@@ -294,10 +296,11 @@ async def test_get_run_for_update_holds_row_lock_until_commit() -> None:
             assert locked.status == "waiting_approval"
 
             async with factory() as second, second.begin():
-                with pytest.raises(OperationalError):
+                with pytest.raises(DBAPIError) as blocked:
                     await second.scalar(
                         select(Run).where(Run.id == run_id).with_for_update(nowait=True),
                     )
+                assert getattr(blocked.value.orig, "sqlstate", None) == "55P03"
 
             async with factory() as third:
                 # A plain read is unaffected and still sees the pre-commit state.
