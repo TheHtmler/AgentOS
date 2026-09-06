@@ -16,6 +16,7 @@ import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent_api.case.values import case_slot_values_match
 from agent_api.config import get_settings
 from agent_api.db.case_store import user_can_write_case
 from agent_api.db.models import CaseFact
@@ -25,8 +26,6 @@ logger = logging.getLogger(__name__)
 _inflight: set[UUID] = set()
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _THINK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
-_WHITESPACE_RE = re.compile(r"\s+")
-_NUMBER_RE = re.compile(r"(?<!\d)(\d+(?:\.\d+)?)(?!\d)")
 
 # Capture height/weight numbers from colloquial Chinese user text.
 _HEIGHT_RE = re.compile(
@@ -61,7 +60,10 @@ _DOB_CONTEXT_RE = re.compile(r"出生|生日")
 _DOB_CN_RE = re.compile(r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?")
 _DOB_ISO_RE = re.compile(r"(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})")
 _AGE_YEAR_MONTH_RE = re.compile(r"(\d{1,2})\s*岁\s*(?:零)?(\d{1,2})\s*个月?")
-_AGE_MONTHS_RE = re.compile(r"(\d{1,3})\s*个月")
+_AGE_MONTHS_RE = re.compile(
+    r"(?P<approx>大约|大概|约)?\s*(?<![\d.])(?P<months>\d{1,3}(?:\.\d+)?)"
+    r"\s*(?:个月|月龄)\s*(?P<suffix>左右)?"
+)
 # Bare "N个月" is only an age when the turn talks about the child.
 _AGE_CONTEXT_RE = re.compile(r"宝宝|月龄|年龄|孩子|小孩|男宝|女宝")
 _SELF_CONTEXT_RE = re.compile(r"宝宝|我家|我儿|我女|我的孩子|小孩|儿子|女儿")
@@ -85,35 +87,6 @@ class CaseFactUpdate:
 class ExtractedCasePayload:
     attribution: Attribution = "unknown"
     updates: list[CaseFactUpdate] = field(default_factory=list[CaseFactUpdate])
-
-
-def _normalize_content(content: str) -> str:
-    return _WHITESPACE_RE.sub(" ", content).strip().casefold()
-
-
-def _canonical_slot_value(key: str | None, content: str) -> str:
-    """Compare structured slots by their value, not the extractor's wording.
-
-    The model may emit ``15.2 kg`` while the deterministic extractor emits
-    ``体重 15.2 kg``. Those are the same measurement, so accepting either must
-    not create a fake update, reopen HITL, or reset its recorded timestamp.
-    """
-
-    normalized = _normalize_content(content)
-    number = _NUMBER_RE.search(normalized)
-    if key in {"height_cm", "weight_kg", "age_months"} and number is not None:
-        value = float(number.group(1))
-        return f"{key}:{value:g}"
-    if key == "sex":
-        if "女" in normalized or "female" in normalized:
-            return "sex:female"
-        if "男" in normalized or "male" in normalized:
-            return "sex:male"
-    if key == "date_of_birth":
-        digits = "".join(char for char in normalized if char.isdigit())
-        if len(digits) == 8:
-            return f"date_of_birth:{digits}"
-    return normalized
 
 
 def infer_case_fact_key(content: str, tags: list[str]) -> str | None:
@@ -175,21 +148,23 @@ def _dob_hint(text: str) -> CaseFactUpdate | None:
 def _age_months_hint(text: str) -> CaseFactUpdate | None:
     """Age-in-months from "X岁Y个月" or a child-context "N个月"."""
 
+    approximate = False
     match = _AGE_YEAR_MONTH_RE.search(text)
     if match is not None:
-        total = int(match.group(1)) * 12 + int(match.group(2))
+        total = float(match.group(1)) * 12 + float(match.group(2))
     elif _AGE_CONTEXT_RE.search(text):
         bare = _AGE_MONTHS_RE.search(text)
         if bare is None:
             return None
-        total = int(bare.group(1))
+        total = float(bare.group("months"))
+        approximate = bool(bare.group("approx") or bare.group("suffix"))
     else:
         return None
     if not 0 < total <= 240:
         return None
     return CaseFactUpdate(
         key="age_months",
-        content=f"月龄 {total} 个月",
+        content=f"月龄 {'约 ' if approximate else ''}{total:g} 个月",
         tags=["月龄"],
     )
 
@@ -451,9 +426,8 @@ async def upsert_case_fact(
         matching = next(
             (
                 row
-                for row in existing
-                if _canonical_slot_value(row.key, row.content)
-                == _canonical_slot_value(fact_update.key, fact_update.content)
+                for row in sorted(existing, key=lambda item: item.status != "confirmed")
+                if case_slot_values_match(row.key, row.content, fact_update.content)
             ),
             None,
         )

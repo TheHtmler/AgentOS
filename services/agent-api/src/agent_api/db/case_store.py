@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent_api.case.values import case_slot_values_match
 from agent_api.db.models import (
     Case,
     CaseFact,
@@ -111,7 +112,27 @@ async def list_proposed_facts(
         )
         .order_by(CaseFact.updated_at.desc(), CaseFact.created_at.desc()),
     )
-    return list(facts)
+    confirmed = await list_confirmed_facts(session, case_id=case_id)
+    return _without_redundant_proposals(list(facts), confirmed)
+
+
+def _without_redundant_proposals(
+    facts: list[CaseFact], confirmed: list[CaseFact]
+) -> list[CaseFact]:
+    # Old pending rows remain auditable, but an equivalent Current value must
+    # not keep reopening the banner or appear as an update in model context.
+    current: dict[str, CaseFact] = {}
+    for fact in confirmed:
+        if fact.key:
+            current.setdefault(fact.key, fact)
+    return [
+        fact
+        for fact in facts
+        if fact.status != "proposed"
+        or not fact.key
+        or fact.key not in current
+        or not case_slot_values_match(fact.key, current[fact.key].content, fact.content)
+    ]
 
 
 async def list_keyed_fact_history(
@@ -507,7 +528,11 @@ async def list_facts_for_case(
         )
         .order_by(CaseFact.updated_at.desc()),
     )
-    return list(facts)
+    items = list(facts)
+    if not any(fact.status == "proposed" for fact in items):
+        return items
+    confirmed = await list_confirmed_facts(session, case_id=case_id)
+    return _without_redundant_proposals(items, confirmed)
 
 
 async def confirm_case_fact(
