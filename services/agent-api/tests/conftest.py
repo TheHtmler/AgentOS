@@ -28,6 +28,8 @@ def isolated_database_records(request: pytest.FixtureRequest) -> None:
         or hasattr(getattr(request, "module", None), "session_factory")
     ):
         return
+    if hasattr(app.state, "runtime"):
+        del app.state.runtime
 
     async def reset() -> None:
         url = make_url(get_settings().database_url)

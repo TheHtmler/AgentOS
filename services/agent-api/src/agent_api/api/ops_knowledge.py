@@ -415,6 +415,11 @@ async def _import_json_body(
         if not isinstance(document_payload, dict):
             raise ValueError("payload must be an object")
         specs = normalize_json_payload(cast(dict[str, Any], document_payload))
+        digest = archive_bytes(json.dumps(document_payload, ensure_ascii=False).encode())
+        for spec in specs:
+            spec.ingestion.update(
+                source_digest=digest, source_type="json", filename=f"{spec.slug}.json"
+            )
         return await _submit_specs(request, specs, base_slug=base_slug, subject=subject)
     if mode == "text":
         spec = normalize_plain_text(
@@ -572,10 +577,12 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
     is_image = mime in _IMAGE_TYPES or suffix in _IMAGE_SUFFIXES
     is_json = mime == "application/json" or suffix in _JSON_SUFFIXES
     is_text = mime.startswith("text/") or suffix in _TEXT_SUFFIXES
+    if not (is_pdf or is_image or is_json or is_text or suffix == ""):
+        raise ValueError("仅支持 txt、md、json、pdf、jpg、png、webp")
     source_info: dict[str, object] = {
         "source_digest": archive_bytes(data),
         "filename": Path(upload.filename or "document").name,
-        "source_type": "pdf" if is_pdf else "image" if is_image else "text",
+        "source_type": "pdf" if is_pdf else "image" if is_image else "json" if is_json else "text",
     }
 
     if is_image or is_pdf:
@@ -636,6 +643,8 @@ async def _import_multipart(request: Request, subject: str) -> ImportResponse:
     if is_json:
         payload = cast(dict[str, Any], json.loads(data.decode("utf-8")))
         specs = normalize_json_payload(payload)
+        for spec in specs:
+            spec.ingestion.update(source_info)
         return await _submit_specs(request, specs, base_slug=base_slug, subject=subject)
 
     if is_text or suffix == "":
@@ -1148,6 +1157,14 @@ async def rebuild_document(
                 cfg = get_settings()
                 client = _background_vision_http_client(request)
                 kind = metadata.get("source_type", "text")
+                if kind == "json":
+                    originals = normalize_json_payload(json.loads(data))
+                    original = next((item for item in originals if item.slug == spec.slug), None)
+                    if original is None:
+                        raise ValueError("原件中未找到对应文档")
+                    spec.chunks = original.chunks
+                    spec.ingestion = {**metadata, "parser_version": "structure-v2"}
+                    return spec, 0, 0
                 if kind in ("pdf", "image") and (
                     client is None or not cfg.resolved_background_vision_model
                 ):

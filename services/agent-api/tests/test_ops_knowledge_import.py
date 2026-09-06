@@ -237,6 +237,17 @@ async def test_ops_import_json_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
         assert settled["import_status"] == "ready"
         assert settled["chunk_count"] == 1
 
+        assert settled["source_available"] is True
+        document_id = response.json()["documents"][0]["id"]
+        original = await client.get(f"/v1/ops/knowledge/documents/{document_id}/source")
+        assert original.status_code == 200
+        assert original.json()["documents"][0]["slug"] == slug
+        reparsed = await client.post(
+            f"/v1/ops/knowledge/documents/{document_id}/rebuild", json={"mode": "reparse"}
+        )
+        assert reparsed.status_code == 200
+        assert (await _wait_import_done(client, slug))["import_status"] == "ready"
+
 
 @pytest.mark.anyio
 async def test_ops_import_image_uses_vision_model(monkeypatch: pytest.MonkeyPatch) -> None:
