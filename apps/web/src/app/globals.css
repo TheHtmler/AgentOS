@@ -3576,6 +3576,12 @@ body {
   .aui-agentos-mobile-composer .aui-composer-attachments {
     padding: 0.5rem 0.75rem 0;
   }
+
+  /* MobileComposer's empty-state mic is decorative. AgentOS renders the
+     adjacent runtime Dictate control so the visible icon always works. */
+  .aui-agentos-mobile-composer [data-slot="mobile-composer"] input + svg {
+    display: none;
+  }
 }
 
 /* Keep uploaded image previews compact inside the user's text bubble. */
