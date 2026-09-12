@@ -64,6 +64,16 @@ Mac mini 仓库根目录：
 ./scripts/macmini-deploy.sh --no-pull ops
 ```
 
+启用或更新 Langfuse Cloud 观测接入（读取 `services/agent-api/.env`，不会输出密钥）：
+
+```bash
+./scripts/langfuse-deploy.sh --check-only
+./scripts/langfuse-deploy.sh
+./scripts/langfuse-deploy.sh --no-pull
+```
+
+脚本会校验 `LANGFUSE_ENABLED`、Cloud key 和 endpoint，同步 Agent API 依赖、重启 API 并检查 `/health`。当前不在 16GB Mac mini 上启动自建 Langfuse 基础设施。
+
 默认 launchd 名：`com.local.agentos-api` / `com.local.agentos-web` / `com.local.agentos-ops`。  
 若你本机 API 的 Label 不同，可：`AGENTOS_API_LABEL=你的label ./scripts/macmini-deploy.sh api`。
 

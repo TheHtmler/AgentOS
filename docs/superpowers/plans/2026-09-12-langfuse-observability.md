@@ -49,7 +49,8 @@
 
 ### Task 7: 部署与运行手册
 
-- [ ] 将 Langfuse secret 通过部署环境注入，不写入 launchd plist 仓库模板的明文。
+- [x] 将 Langfuse secret 通过部署环境注入，不写入 launchd plist 仓库模板的明文。
+- [x] 新增 `scripts/langfuse-deploy.sh`，支持配置检查、依赖同步、API 重启和健康验证。
 - [ ] 更新部署文档：Cloud endpoint、项目隔离、MFA、保留期、轮换 key、故障排查。
 - [ ] 增加 Langfuse 控制台 dashboard：错误率、P95 latency、token、成本、工具失败率、按 AgentVersion 分组。
 - [ ] 记录 Cloud 合规/数据驻留评估结论；未通过前保持 metadata-only 生产策略。
