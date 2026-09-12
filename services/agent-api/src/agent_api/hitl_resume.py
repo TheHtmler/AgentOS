@@ -66,6 +66,7 @@ from agent_api.db.session import session_factory
 from agent_api.hitl_pause import persist_deferred_approvals
 from agent_api.memory.extract import schedule_memory_extract
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
+from agent_api.observability import observe_run
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import AgentRuntime
 from agent_api.thread_title import schedule_auto_thread_title
@@ -255,30 +256,41 @@ async def continue_run_after_approval(
         ) -> AsyncIterator[NativeEvent]:
             # Omit pydantic-ai run_id: the checkpoint already contains the interrupted
             # attempt's id; reusing it raises UserError. Our DB run_id stays the same.
-            async for event in adapter.run_stream_native(
-                message_history=history,
-                deferred_tool_results=deferred,
-                conversation_id=str(run.thread_id),
-                usage_limits=UsageLimits(
-                    request_limit=resolve_version_tuning(
-                        version.agent_max_requests_per_run,
-                        settings.agent_max_requests_per_run,
-                    ),
-                ),
-                deps=AgentDeps(
-                    search_router=runtime.search_router,
-                    fetch_router=runtime.fetch_router,
-                    run_id=run_id,
-                    case_id=case_id,
-                    user_id=user_id,
-                    user_account=user.email if user is not None else None,
-                    thread_id=run.thread_id,
-                    http_client=runtime.background_http_client,
-                    sandbox_client=runtime.sandbox_http_client,
-                    knowledge_base_slugs=version.knowledge_base_slugs,
-                ),
+            with observe_run(
+                run_id=run_id,
+                thread_id=run.thread_id,
+                user_id=user_id,
+                agent_version_id=version.id,
+                provider_id=profile.provider_id,
+                model=profile.model_name,
+                environment=settings.langfuse_environment,
+                entrypoint="hitl_resume",
+                hitl_resume=True,
             ):
-                yield event
+                async for event in adapter.run_stream_native(
+                    message_history=history,
+                    deferred_tool_results=deferred,
+                    conversation_id=str(run.thread_id),
+                    usage_limits=UsageLimits(
+                        request_limit=resolve_version_tuning(
+                            version.agent_max_requests_per_run,
+                            settings.agent_max_requests_per_run,
+                        ),
+                    ),
+                    deps=AgentDeps(
+                        search_router=runtime.search_router,
+                        fetch_router=runtime.fetch_router,
+                        run_id=run_id,
+                        case_id=case_id,
+                        user_id=user_id,
+                        user_account=user.email if user is not None else None,
+                        thread_id=run.thread_id,
+                        http_client=runtime.background_http_client,
+                        sandbox_client=runtime.sandbox_http_client,
+                        knowledge_base_slugs=version.knowledge_base_slugs,
+                    ),
+                ):
+                    yield event
 
         try:
             async with runtime.semaphore_for_profile(profile):

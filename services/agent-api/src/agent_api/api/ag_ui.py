@@ -78,6 +78,7 @@ from agent_api.emergency import EMERGENCY_NOTICE, detect_emergency_signal
 from agent_api.hitl_pause import persist_deferred_approvals
 from agent_api.memory.extract import schedule_memory_extract
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
+from agent_api.observability import observe_run
 from agent_api.output_limits import with_truncation_notice_if_needed
 from agent_api.runtime import get_runtime
 from agent_api.runtime_context import ScheduledTaskExecutionContext
@@ -441,30 +442,40 @@ async def stream_ag_ui_run(
         async def start_stream(
             message_history: list[ModelMessage] | None,
         ) -> AsyncIterator[NativeEvent]:
-            async for event in adapter.run_stream_native(
-                message_history=message_history,
-                conversation_id=str(started.thread_id),
-                run_id=str(started.run_id),
-                usage_limits=UsageLimits(
-                    request_limit=resolve_version_tuning(
-                        version.agent_max_requests_per_run,
-                        settings.agent_max_requests_per_run,
-                    ),
-                ),
-                deps=AgentDeps(
-                    search_router=runtime.search_router,
-                    fetch_router=runtime.fetch_router,
-                    run_id=started.run_id,
-                    case_id=case_id,
-                    user_id=user.id,
-                    user_account=user.email,
-                    thread_id=started.thread_id,
-                    http_client=runtime.background_http_client,
-                    sandbox_client=runtime.sandbox_http_client,
-                    knowledge_base_slugs=version.knowledge_base_slugs,
-                ),
+            with observe_run(
+                run_id=started.run_id,
+                thread_id=started.thread_id,
+                user_id=user.id,
+                agent_version_id=version.id,
+                provider_id=profile.provider_id,
+                model=profile.model_name,
+                environment=settings.langfuse_environment,
+                entrypoint="ag_ui",
             ):
-                yield event
+                async for event in adapter.run_stream_native(
+                    message_history=message_history,
+                    conversation_id=str(started.thread_id),
+                    run_id=str(started.run_id),
+                    usage_limits=UsageLimits(
+                        request_limit=resolve_version_tuning(
+                            version.agent_max_requests_per_run,
+                            settings.agent_max_requests_per_run,
+                        ),
+                    ),
+                    deps=AgentDeps(
+                        search_router=runtime.search_router,
+                        fetch_router=runtime.fetch_router,
+                        run_id=started.run_id,
+                        case_id=case_id,
+                        user_id=user.id,
+                        user_account=user.email,
+                        thread_id=started.thread_id,
+                        http_client=runtime.background_http_client,
+                        sandbox_client=runtime.sandbox_http_client,
+                        knowledge_base_slugs=version.knowledge_base_slugs,
+                    ),
+                ):
+                    yield event
 
         try:
             # The model task is independent from the HTTP response. A mobile browser may

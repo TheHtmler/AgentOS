@@ -1,6 +1,6 @@
 # AgentOS Langfuse Observability Design
 
-状态：提案（实现前）  
+状态：部分实现（Cloud 接入代码已落地；部署与真实 Cloud smoke test 待配置 key）
 日期：2026-09-12  
 范围：`services/agent-api` 的 Agent run、模型调用、工具调用和会话关联
 

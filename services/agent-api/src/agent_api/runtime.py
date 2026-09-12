@@ -21,6 +21,7 @@ from agent_api.config import get_settings
 from agent_api.context_budget import BudgetReport
 from agent_api.db.provider_store import ResolvedModelProfile
 from agent_api.db.session import close_database
+from agent_api.observability import initialize_langfuse, shutdown_langfuse
 from agent_api.run_events_broker import RunEventBroker
 from agent_api.tools.fetch.router import FetchRouter, build_fetch_router
 from agent_api.tools.mcp.client import build_mcp_toolsets
@@ -165,6 +166,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Create shared model resources once and release the connection pool on shutdown."""
 
     settings = get_settings()
+    initialize_langfuse(settings)
     http_client = create_model_http_client()
     background_http_client = create_background_http_client(settings)
     background_vision_http_client = create_background_vision_http_client(settings)
@@ -324,6 +326,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             if background_vision_http_client is not None:
                 await background_vision_http_client.aclose()
             await http_client.aclose()
+            shutdown_langfuse(timeout_ms=settings.langfuse_flush_timeout_ms)
 
 
 def get_runtime(request: Request) -> AgentRuntime:

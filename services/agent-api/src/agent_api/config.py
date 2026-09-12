@@ -179,6 +179,30 @@ class Settings(BaseSettings):
     # Injected into every Run as the authoritative "now" / language preference.
     runtime_timezone: str = "Asia/Shanghai"
     runtime_locale: str = "zh-CN"
+    # Langfuse is an optional, out-of-band OTel exporter. Content capture stays
+    # disabled by default because runs may contain private case or upload data.
+    langfuse_enabled: bool = False
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = "https://cloud.langfuse.com"
+    langfuse_environment: str = "development"
+    langfuse_sample_rate: float = 1.0
+    langfuse_capture_content: bool = False
+    langfuse_flush_timeout_ms: int = 200
+
+    @field_validator("langfuse_sample_rate")
+    @classmethod
+    def langfuse_sample_rate_must_be_valid(cls, value: float) -> float:
+        if not 0 <= value <= 1:
+            raise ValueError("langfuse_sample_rate must be between 0 and 1")
+        return value
+
+    @field_validator("langfuse_flush_timeout_ms")
+    @classmethod
+    def langfuse_flush_timeout_must_be_positive(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("langfuse_flush_timeout_ms must be non-negative")
+        return value
 
     @field_validator("database_url")
     @classmethod

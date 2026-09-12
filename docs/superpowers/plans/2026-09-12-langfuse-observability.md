@@ -8,21 +8,21 @@
 
 ### Task 1: 配置与依赖边界
 
-- [ ] 确认当前 `pydantic-ai==2.22.0` instrumentation API，选择与其兼容的 Langfuse/OTel 包版本。
-- [ ] 在 `config.py` 增加 Langfuse 开关、endpoint、采样、内容采集和 flush timeout 配置。
-- [ ] 同步 `services/agent-api/.env.example`，加入配置默认值测试；secret 不落 DB/API/git。
-- [ ] 增加初始化失败时的限频 warning 和 disabled/no-op 行为。
+- [x] 确认当前 `pydantic-ai==2.22.0` instrumentation API，选择与其兼容的 Langfuse/OTel 包版本。
+- [x] 在 `config.py` 增加 Langfuse 开关、endpoint、采样、内容采集和 flush timeout 配置。
+- [x] 同步 `services/agent-api/.env.example`，加入配置默认值测试；secret 不落 DB/API/git。
+- [x] 增加初始化失败时的限频 warning 和 disabled/no-op 行为。
 
 ### Task 2: Agent run 与会话关联
 
-- [ ] 在 FastAPI/AG-UI run 入口建立 OTel context。
-- [ ] 将 `thread_id` 作为 `session_id`，将 `run_id` 作为 trace 关联键。
-- [ ] 注入 AgentVersion、Provider、model、environment、入口类型和 HITL resume metadata。
-- [ ] 确认普通 run、HITL resume、后台任务不会互相污染 session。
+- [x] 在 FastAPI/AG-UI run 入口建立 OTel context。
+- [x] 将 `thread_id` 作为 `session_id`，将 `run_id` 作为 trace 关联键。
+- [x] 注入 AgentVersion、Provider、model、environment、入口类型和 HITL resume metadata。
+- [x] 确认普通 run、HITL resume、后台任务不会互相污染 session。
 
 ### Task 3: PydanticAI model/tool instrumentation
 
-- [ ] 启用 PydanticAI agent/model/tool spans，覆盖现有 General Runtime。
+- [x] 启用 PydanticAI agent/model/tool spans，覆盖现有 General Runtime。
 - [ ] 对 provider/model/token/latency/error 做稳定字段映射；不依赖模型名称作为 span name。
 - [ ] 为 search、fetch、knowledge retrieval、sandbox 等边界补充有限 metadata 的手工 span。
 - [ ] 验证 span 创建和 exporter 不阻塞 AG-UI 流式事件。

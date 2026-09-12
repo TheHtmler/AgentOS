@@ -23,6 +23,7 @@ dependencies = [
     "pymupdf>=1.26.3",
     "sqlalchemy>=2.0.51",
     "trafilatura>=2.2.0",
+    "langfuse>=3.0.0",
 ]
 
 [project.scripts]
