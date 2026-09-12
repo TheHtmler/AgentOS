@@ -126,6 +126,7 @@ def observe_run(
             trace_name="agent.run",
             environment=environment,
             version=str(agent_version_id) if agent_version_id is not None else None,
+            tags=["agentos", entrypoint, "hitl-resume" if hitl_resume else "chat"],
             metadata={
                 "run_id": str(run_id),
                 "provider_id": str(provider_id) if provider_id is not None else None,
