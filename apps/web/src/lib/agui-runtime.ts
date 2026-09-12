@@ -776,6 +776,18 @@ export function useAguiRuntime({
       try {
         const response = await fetch(`/api/runs/${runId}/stream`, { cache: "no-store" });
         if (response.status !== 200 || response.body === null) {
+          // The in-process broker may already be closed (or the run may have
+          // finished before the browser subscribed). Fall back to durable Run
+          // polling so the composer cannot remain permanently disabled.
+          const recover = recoverRunRef.current;
+          if (recover !== null) {
+            await recover(runId);
+          } else {
+            activeRunIdRef.current = null;
+            setIsRunning(false);
+            refreshHistory();
+            callbacksRef.current.onRunFinalized?.();
+          }
           return false;
         }
 
@@ -926,6 +938,7 @@ export function useAguiRuntime({
         return sawTerminal;
       } catch {
         setIsRunning(false);
+        refreshHistory();
         callbacksRef.current.onRunFinalized?.();
         return false;
       }
