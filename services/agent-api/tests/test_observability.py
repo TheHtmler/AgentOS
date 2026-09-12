@@ -7,6 +7,7 @@ from agent_api.observability import observe_run
 def _settings(**overrides: object) -> Settings:
     values: dict[str, object] = {
         "database_url": "postgresql+asyncpg://user:pass@localhost:5432/agentos_test",
+        "langfuse_environment": "development",
     }
     values.update(overrides)
     return Settings.model_validate(values)

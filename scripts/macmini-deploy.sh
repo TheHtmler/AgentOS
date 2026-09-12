@@ -4,6 +4,7 @@
 # Usage (on Mac mini, from anywhere; resolves repo root):
 #   ./scripts/macmini-deploy.sh              # api + web + ops
 #   ./scripts/macmini-deploy.sh api          # Agent API only
+#   ./scripts/macmini-deploy.sh langfuse     # Langfuse integration + Agent API
 #   ./scripts/macmini-deploy.sh web ops      # frontends only
 #   ./scripts/macmini-deploy.sh --no-pull all
 #   ./scripts/macmini-deploy.sh --migrate    # force alembic even if api skipped? (with api)
@@ -57,6 +58,10 @@ parse_targets() {
         DO_OPS=1
         ;;
       api) DO_API=1 ;;
+      langfuse)
+        DO_API=1
+        log "Langfuse target: Agent API dependencies/config will be refreshed and restarted"
+        ;;
       web) DO_WEB=1 ;;
       ops) DO_OPS=1 ;;
       frontends | fe)

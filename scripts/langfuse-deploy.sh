@@ -67,10 +67,10 @@ fi
 
 if (( DO_PULL )); then
   log "update checkout and Agent API dependencies"
-  "$ROOT/scripts/macmini-deploy.sh" api
+  "$ROOT/scripts/macmini-deploy.sh" langfuse
 else
   log "update Agent API without pulling"
-  "$ROOT/scripts/macmini-deploy.sh" --no-pull api
+  "$ROOT/scripts/macmini-deploy.sh" --no-pull langfuse
 fi
 
 log "verify Agent API health"

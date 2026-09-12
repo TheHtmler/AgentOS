@@ -70,6 +70,8 @@ Mac mini 仓库根目录：
 ./scripts/langfuse-deploy.sh --check-only
 ./scripts/langfuse-deploy.sh
 ./scripts/langfuse-deploy.sh --no-pull
+# 或直接走主部署脚本的 Langfuse/API 目标
+./scripts/macmini-deploy.sh langfuse
 ```
 
 脚本会校验 `LANGFUSE_ENABLED`、Cloud key 和 endpoint，同步 Agent API 依赖、重启 API 并检查 `/health`。当前不在 16GB Mac mini 上启动自建 Langfuse 基础设施。
