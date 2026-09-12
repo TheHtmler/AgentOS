@@ -3576,12 +3576,6 @@ body {
   .aui-agentos-mobile-composer .aui-composer-attachments {
     padding: 0.5rem 0.75rem 0;
   }
-
-  /* The empty-state mic glyph is decorative. AgentOS renders the adjacent
-     assistant-ui Dictate control so the visible icon always works. */
-  .aui-agentos-mobile-composer [data-slot="mobile-composer"] input + svg {
-    display: none;
-  }
 }
 
 /* Keep uploaded image previews compact inside the user's text bubble. */

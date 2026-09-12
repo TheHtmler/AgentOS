@@ -79,7 +79,6 @@ export function AgentOsMobileComposer() {
               onFocus={() => setKeyboardOpen(true)}
               className="min-h-6 min-w-0 flex-1 resize-none bg-transparent text-base leading-6 text-foreground/85 outline-none placeholder:text-foreground/30"
             />
-            {!isRunning ? <MicIcon className="size-4 shrink-0 text-foreground/35" /> : null}
           </div>
 
           {!isRunning ? (
