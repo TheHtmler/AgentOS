@@ -9,7 +9,7 @@ import {
   groupPartByType,
 } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon, DownloadIcon, SearchIcon, TerminalIcon } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { File } from "@/components/assistant-ui/elements/file";
 import { Image as MessageImage } from "@/components/assistant-ui/elements/image";
@@ -34,9 +34,8 @@ const TOOL_VERBS: Record<string, { verb: string; icon: typeof SearchIcon }> = {
 };
 
 function AssistantToolTimeline() {
-  const toolCalls = useAuiState((state) =>
-    state.message.parts.filter((part) => part.type === "tool-call"),
-  );
+  const parts = useAuiState((state) => state.message.parts);
+  const toolCalls = useMemo(() => parts.filter((part) => part.type === "tool-call"), [parts]);
   const streaming = useAuiState((state) => state.message.status?.type === "running");
   const [open, setOpen] = useState(false);
 
