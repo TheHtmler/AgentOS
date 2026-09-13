@@ -81,3 +81,20 @@ adapter 在 `apps/web/src/lib/agui-runtime.ts`，事件解析在 `apps/web/src/l
 - 历史接口的工具摘要按各轮执行顺序放在最终正文前，不能追加到最终正文后。当前接口不保存逐段思考或中间文本与工具的完整交错时间线；这一边界不等同于完整事件回放。
 
 回归验证覆盖：新会话连续两轮、刷新历史、刷新后继续追问、工具摘要排序、假分支计数、操作栏数量及移动端宽度。消息转换单测位于 `apps/web/src/lib/agui-runtime.test.mjs`。
+
+## Agent Plan / Plan Mode（2026-09-13）
+
+Agent Plan 已接入现有 ExternalStoreRuntime：后端内置 `update_plan(steps, active_index)`
+工具，计划更新沿用 AG-UI `TOOL_CALL_*` 流并写入现有 `run_events`，前端在
+`AgentOsAssistantMessage` 中将该 tool-call 渲染为 assistant-ui registry 的 `AgentPlan`。
+参数无效时降级到普通 `AgentOsToolFallback`，不会阻断整轮消息。
+
+运行请求支持 `X-AgentOS-Run-Mode: normal | plan | execute`，并把模式快照写入 `runs.execution_mode`
+（迁移 `a7b8c9d0e1f2`）。`plan` 模式通过服务端 policy override 禁止 `sandbox_exec`、
+`case_slot_collect` 与 `case_attribution_confirm`，只允许只读规划；`execute` 模式由服务端
+重新构造 Agent，不信任浏览器提交的计划步骤。工作区默认不显示模式切换；模型根据任务复杂度
+隐式决定是否调用 `update_plan`，调用后继续执行。`plan` / `execute` 仅保留为未来显式确认
+流程的服务端能力；计划本身仍从服务端线程历史恢复。
+
+计划不是普通 Markdown，也不进入 context snapshot；刷新、断线恢复和 HITL resume 都复用现有
+run/event/history 机制。复杂任务才应调用 `update_plan`，简单问答不显示计划卡。

@@ -157,6 +157,13 @@ def requested_case_id(request: Request) -> UUID | None:
         ) from error
 
 
+def requested_execution_mode(request: Request) -> str:
+    """Parse the user-selected mode; unknown values fail closed to normal."""
+
+    mode = request.headers.get("X-AgentOS-Run-Mode", "normal").strip().lower()
+    return mode if mode in {"normal", "plan", "execute"} else "normal"
+
+
 def text_from_native_event(event: NativeEvent) -> str | None:
     if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
         return event.part.content or None
@@ -180,6 +187,7 @@ async def stream_ag_ui_run(
         raise HTTPException(status_code=422, detail="Invalid AG-UI request") from error
 
     user_message, prompt = current_user_message(client_input)
+    execution_mode = requested_execution_mode(request)
     thread_id = requested_thread_id(client_input.thread_id)
     # Code-level, model-independent: a keyword hit forces the escalation notice
     # into both the live stream and the persisted transcript regardless of
@@ -207,6 +215,7 @@ async def stream_ag_ui_run(
                     user_id=user.id,
                     agent_id=agent_id,
                     case_id=case_id_header,
+                    execution_mode=execution_mode,
                 )
         except ThreadNotFoundError as error:
             raise HTTPException(status_code=404, detail="Thread not found") from error
@@ -374,9 +383,14 @@ async def stream_ag_ui_run(
             snapshot,
             position="start" if scheduled_task_context is not None else "end",
         )
+        policy_overrides = dict(version.tool_policy_overrides or {})
+        if execution_mode == "plan":
+            # Plan runs may inspect but cannot mutate a Case or execute commands.
+            for tool_name in ("sandbox_exec", "case_slot_collect", "case_attribution_confirm"):
+                policy_overrides[tool_name] = "deny"
         agent = runtime.build_run_agent(
             system_prompt_overlay=version.system_prompt_overlay,
-            tool_policy_overrides=version.tool_policy_overrides,
+            tool_policy_overrides=policy_overrides,
             case_bound=case_id is not None,
             model_profile=profile,
             on_step_trim=lambda report: schedule_context_budget_event(

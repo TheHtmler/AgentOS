@@ -1190,8 +1190,8 @@ class Run(Base):
     __table_args__ = (
         CheckConstraint(
             (
-                "status IN ('queued', 'running', 'waiting_approval', "
-                "'completed', 'failed', 'cancelled')"
+                "status IN ('queued', 'running', 'waiting_approval', 'completed', "
+                "'failed', 'cancelled')"
             ),
             name="ck_runs_status",
         ),
@@ -1220,6 +1220,7 @@ class Run(Base):
     )
     scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(16), nullable=False)
+    execution_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
     model_name: Mapped[str] = mapped_column(String(255), nullable=False)
     input_tokens: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)

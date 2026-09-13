@@ -114,6 +114,15 @@ one short caveat after the deliverable (or omit if already covered).
   completion.
 """
 
+PLAN_INSTRUCTIONS = """\
+## Capability: update_plan
+For tasks with two or more substantive stages, call update_plan before doing the work.
+Use short user-visible steps (at most 8 normally), and call it again when a major stage
+completes. Do not put hidden reasoning or speculative branches in the plan. For simple
+questions or a single lookup, do not create a plan. Set active_index to the zero-based
+step currently in progress; set it to the number of steps when all work is complete.
+"""
+
 SCHEDULED_TASK_INSTRUCTIONS = """\
 ## Capability: scheduled task execution
 When the per-run context contains `Scheduled task execution`, the scheduler has already
@@ -315,6 +324,8 @@ def build_instructions(
     """
 
     sections = [SYSTEM_INSTRUCTIONS, SCHEDULED_TASK_INSTRUCTIONS]
+    if "update_plan" in mounted_names:
+        sections.append(PLAN_INSTRUCTIONS.strip())
     if overlay and overlay.strip():
         sections.append(overlay.strip())
     # Upload/report formatting applies to every artifact-capable Agent; keying on the

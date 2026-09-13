@@ -432,18 +432,23 @@ function createAgent(
   threadId: string,
   initialMessages: Message[],
   agentId: string | null,
+  executionMode: "normal" | "plan" | "execute",
 ): HttpAgent {
   return new HttpAgent({
     url: "/api/ag-ui/runs",
     threadId,
     initialMessages,
-    headers: agentId === null ? {} : { "X-AgentOS-Agent-Id": agentId },
+    headers: {
+      ...(agentId === null ? {} : { "X-AgentOS-Agent-Id": agentId }),
+      "X-AgentOS-Run-Mode": executionMode,
+    },
   });
 }
 
 export type AguiRuntimeOptions = {
   selectedThreadId: string | null | undefined;
   agentId: string | null;
+  executionMode?: "normal" | "plan" | "execute";
   onStreamingChanged?: (isStreaming: boolean) => void;
   onThreadChanged?: (threadId: string | null, agentId?: string) => void;
   onRunFinalized?: () => void;
@@ -462,6 +467,7 @@ export function useAguiRuntime({
   onThreadChanged,
   onRunFinalized,
   onRunStarted,
+  executionMode = "normal",
 }: AguiRuntimeOptions) {
   const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -521,10 +527,10 @@ export function useAguiRuntime({
       typeof payload.agent_id === "string" && isUuid(payload.agent_id) ? payload.agent_id : agentId;
     latestThreadIdRef.current = threadId;
     locallyCreatedThreadIdRef.current = threadId;
-    agentRef.current = createAgent(threadId, [], threadAgentId);
+    agentRef.current = createAgent(threadId, [], threadAgentId, executionMode);
     callbacksRef.current.onThreadChanged?.(threadId, threadAgentId ?? undefined);
     return threadId;
-  }, [agentId]);
+  }, [agentId, executionMode]);
 
   const attachmentAdapter = useMemo<AttachmentAdapter>(
     () => ({
@@ -594,7 +600,7 @@ export function useAguiRuntime({
 
     if (selectedThreadId === null || selectedThreadId === undefined) {
       latestThreadIdRef.current = null;
-      agentRef.current = createAgent("new", [], agentId);
+      agentRef.current = createAgent("new", [], agentId, executionMode);
       queueMicrotask(() => {
         if (current) {
           setMessages([]);
@@ -636,7 +642,7 @@ export function useAguiRuntime({
         if (!current) {
           return;
         }
-        agentRef.current = createAgent(history.thread_id, agentMessages, agentId);
+        agentRef.current = createAgent(history.thread_id, agentMessages, agentId, executionMode);
         latestThreadIdRef.current = history.thread_id;
         const uploadedArtifacts = new Map(
           [...artifactIdsRef.current.values()].map((artifact) => [artifact.id, artifact]),
@@ -650,7 +656,7 @@ export function useAguiRuntime({
         }
       } catch {
         if (current && !controller.signal.aborted) {
-          agentRef.current = createAgent(selectedThreadId, [], agentId);
+          agentRef.current = createAgent(selectedThreadId, [], agentId, executionMode);
         }
       } finally {
         if (current) {
@@ -663,7 +669,7 @@ export function useAguiRuntime({
       current = false;
       controller.abort();
     };
-  }, [agentId, historyVersion, selectedThreadId]);
+  }, [agentId, executionMode, historyVersion, selectedThreadId]);
 
   const send = useCallback(
     async (text: string, artifacts: readonly UploadedArtifact[] = []) => {

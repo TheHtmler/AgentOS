@@ -17,6 +17,7 @@ from agent_api.tools.case.tool import case_context_read
 from agent_api.tools.fetch.tool import fetch_url
 from agent_api.tools.growth.tool import growth_assess
 from agent_api.tools.knowledge.tool import knowledge_search
+from agent_api.tools.plan.tool import update_plan
 from agent_api.tools.policy import PolicyAction, evaluate
 from agent_api.tools.sandbox.tool import sandbox_exec
 from agent_api.tools.search.tool import AgentDeps, web_search
@@ -35,6 +36,7 @@ class ToolDomain(StrEnum):
     ARTIFACT = "artifact"
     MCP = "mcp"
     SANDBOX = "sandbox"
+    PLAN = "plan"
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +79,14 @@ def register_mcp_tool_specs(names: tuple[str, ...]) -> None:
 
 # Built-in tools live under tools/<domain>/; risk labels describe nature, not approval.
 _BUILTIN_SPECS: tuple[ToolSpec, ...] = (
+    ToolSpec(
+        name="update_plan",
+        domain=ToolDomain.PLAN,
+        risk="read",
+        default_action=PolicyAction.ALLOW,
+        description="Update the user-visible execution plan for the current run",
+        handler=update_plan,
+    ),
     ToolSpec(
         name="web_search",
         domain=ToolDomain.SEARCH,
@@ -190,6 +200,8 @@ def is_tool_enabled(spec: ToolSpec, settings: Settings | None = None) -> bool:
     """Map domain enable flags onto registry rows."""
 
     cfg = settings or get_settings()
+    if spec.domain == ToolDomain.PLAN:
+        return True
     if spec.domain == ToolDomain.SEARCH:
         return cfg.search_enabled
     if spec.domain == ToolDomain.FETCH:

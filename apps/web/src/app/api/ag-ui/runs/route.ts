@@ -45,6 +45,7 @@ export async function POST(request: Request) {
   try {
     const agentId = request.headers.get("x-agentos-agent-id");
     const caseId = request.headers.get("x-agentos-case-id");
+    const runMode = request.headers.get("x-agentos-run-mode");
     const upstream = await fetch(`${agentApiBaseUrl()}/v1/ag-ui/runs`, {
       method: "POST",
       headers: {
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
         ...(await agentApiSessionHeaders()),
         ...(agentId === null ? {} : { "X-AgentOS-Agent-Id": agentId }),
         ...(caseId === null ? {} : { "X-AgentOS-Case-Id": caseId }),
+        ...(runMode === null ? {} : { "X-AgentOS-Run-Mode": runMode }),
       },
       body,
       cache: "no-store",

@@ -694,6 +694,7 @@ async def start_run(
     case_id: UUID | None = None,
     scheduled_task_id: UUID | None = None,
     scheduled_for: datetime | None = None,
+    execution_mode: str = "normal",
 ) -> StartedRun:
     """Record a user message and a running execution in the caller's transaction.
 
@@ -743,6 +744,9 @@ async def start_run(
         scheduled_task_id=scheduled_task_id,
         scheduled_for=scheduled_for,
         status="running",
+        execution_mode=(
+            execution_mode if execution_mode in {"normal", "plan", "execute"} else "normal"
+        ),
         model_name=model_name,
         started_at=datetime.now(UTC),
     )
@@ -755,7 +759,7 @@ async def start_run(
         event_type="run_started",
         payload={
             "status": "running",
-            "execution_mode": "scheduled" if scheduled_task_id is not None else "interactive",
+            "execution_mode": "scheduled" if scheduled_task_id is not None else execution_mode,
             **(
                 {"scheduled_task_id": str(scheduled_task_id)}
                 if scheduled_task_id is not None
