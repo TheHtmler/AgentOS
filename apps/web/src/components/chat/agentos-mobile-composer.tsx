@@ -79,6 +79,35 @@ export function AgentOsMobileComposer() {
               onFocus={() => setKeyboardOpen(true)}
               className="min-h-6 min-w-0 flex-1 resize-none bg-transparent text-base leading-6 text-foreground/85 outline-none placeholder:text-foreground/30"
             />
+            {canDictate ? (
+              dictation === undefined ? (
+                <ComposerPrimitive.Dictate asChild>
+                  <TooltipIconButton
+                    tooltip="语音输入"
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-9 shrink-0 text-muted-foreground"
+                    aria-label="开始语音输入"
+                  >
+                    <MicIcon className="size-4" />
+                  </TooltipIconButton>
+                </ComposerPrimitive.Dictate>
+              ) : (
+                <ComposerPrimitive.StopDictation asChild>
+                  <TooltipIconButton
+                    tooltip="停止语音输入"
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-9 shrink-0 text-destructive"
+                    aria-label="停止语音输入"
+                  >
+                    <SquareIcon className="size-3.5 fill-current" />
+                  </TooltipIconButton>
+                </ComposerPrimitive.StopDictation>
+              )
+            ) : null}
           </div>
 
           {!isRunning ? (
@@ -115,38 +144,6 @@ export function AgentOsMobileComposer() {
         ) : null}
         {keyboardOpen ? (
           <span className="text-center font-mono text-[11px] text-foreground/25">回车发送</span>
-        ) : null}
-
-        {canDictate ? (
-          <div className="absolute right-14 bottom-6 flex size-9 items-center justify-center">
-            {dictation === undefined ? (
-              <ComposerPrimitive.Dictate asChild>
-                <TooltipIconButton
-                  tooltip="语音输入"
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-9 text-muted-foreground"
-                  aria-label="开始语音输入"
-                >
-                  <MicIcon className="size-4" />
-                </TooltipIconButton>
-              </ComposerPrimitive.Dictate>
-            ) : (
-              <ComposerPrimitive.StopDictation asChild>
-                <TooltipIconButton
-                  tooltip="停止语音输入"
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-9 text-destructive"
-                  aria-label="停止语音输入"
-                >
-                  <SquareIcon className="size-3.5 fill-current" />
-                </TooltipIconButton>
-              </ComposerPrimitive.StopDictation>
-            )}
-          </div>
         ) : null}
       </div>
     </ComposerPrimitive.Root>
