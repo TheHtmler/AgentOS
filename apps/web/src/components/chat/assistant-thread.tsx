@@ -23,6 +23,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval-panel";
 import { AgentOsToolFallback } from "@/components/chat/agentos-tool-fallback";
+import { AgentPlan } from "@/components/assistant-ui/elements/agent-plan";
 import { AgentOsAssistantMessage } from "@/components/chat/agentos-assistant-message";
 import { AgentOsUserMessage } from "@/components/chat/agentos-user-message";
 import { AgentOsMobileComposer } from "@/components/chat/agentos-mobile-composer";
@@ -72,6 +73,28 @@ function parsePendingInterrupts(value: unknown): PendingInterrupt[] {
   }
 
   return items;
+}
+
+function latestPlan(messages: readonly { content: unknown }[]) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const content = messages[i]?.content;
+    if (!Array.isArray(content)) continue;
+    for (let j = content.length - 1; j >= 0; j -= 1) {
+      const part = content[j] as { type?: unknown; toolName?: unknown; args?: unknown };
+      if (part.type !== "tool-call" || part.toolName !== "update_plan") continue;
+      const args = part.args;
+      if (!args || typeof args !== "object" || Array.isArray(args)) continue;
+      const record = args as Record<string, unknown>;
+      if (
+        Array.isArray(record.steps) &&
+        record.steps.every((step) => typeof step === "string") &&
+        typeof record.activeIndex === "number"
+      ) {
+        return { steps: record.steps, activeIndex: record.activeIndex };
+      }
+    }
+  }
+  return null;
 }
 
 async function loadRunApprovalState(runId: string): Promise<ApprovalState | null> {
@@ -181,6 +204,7 @@ function AssistantSurface({
     [agui, approval.runId],
   );
   const dictationAdapter = useMemo(() => new AudioTranscriptionDictationAdapter(), []);
+  const currentPlan = useMemo(() => latestPlan(agui.messages), [agui.messages]);
 
   const messages = useExternalMessageConverter({
     messages: agui.messages,
@@ -236,14 +260,21 @@ function AssistantSurface({
               UserMessage: AgentOsUserMessage,
             }}
             composerFooter={
-              <div className="flex min-w-0 items-center gap-1.5">
-                <ComposerDictationVoice />
-                {composerFooter}
-                <ComposerContextUsage
-                  threadId={selectedThreadId ?? null}
-                  isStreaming={agui.isRunning}
-                  refreshKey={agui.historyVersion}
-                />
+              <div className="flex min-w-0 flex-col items-start gap-1.5">
+                {currentPlan !== null ? (
+                  <div className="w-full border-b border-border/40 pb-2">
+                    <AgentPlan {...currentPlan} className="max-w-full" />
+                  </div>
+                ) : null}
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <ComposerDictationVoice />
+                  {composerFooter}
+                  <ComposerContextUsage
+                    threadId={selectedThreadId ?? null}
+                    isStreaming={agui.isRunning}
+                    refreshKey={agui.historyVersion}
+                  />
+                </div>
               </div>
             }
           />
