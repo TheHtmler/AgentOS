@@ -13,6 +13,7 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from uuid import UUID
 
 from ag_ui.core import (
@@ -119,6 +120,17 @@ async def continue_run_after_approval(
         if version is not None:
             try:
                 profile = await resolve_model_profile(session, version)
+                profile = replace(
+                    profile,
+                    context_window=min(
+                        profile.context_window,
+                        settings.interactive_context_window_cap,
+                    ),
+                    max_output_tokens=min(
+                        profile.max_output_tokens,
+                        settings.interactive_max_output_tokens_cap,
+                    ),
+                )
             except ModelProviderUnavailableError:
                 logger.exception("model provider unavailable for resume run_id=%s", run_id)
         if thread is not None and version is not None:

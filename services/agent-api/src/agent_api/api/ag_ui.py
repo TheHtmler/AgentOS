@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -240,6 +241,16 @@ async def stream_ag_ui_run(
             runtime = get_runtime(request)
             settings = get_settings()
             profile = await resolve_model_profile(session, version)
+            # Keep Ops capability metadata intact while bounding each interactive
+            # request against stale or overly generous provider settings.
+            profile = replace(
+                profile,
+                context_window=min(profile.context_window, settings.interactive_context_window_cap),
+                max_output_tokens=min(
+                    profile.max_output_tokens,
+                    settings.interactive_max_output_tokens_cap,
+                ),
+            )
             if version.case_enabled and case_id is not None:
                 try:
                     case_block, case_keys = await load_case_injection(

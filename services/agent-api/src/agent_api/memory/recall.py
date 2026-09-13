@@ -212,6 +212,7 @@ async def load_relevant_memories(
     if (
         http_client is not None
         and settings.memory_embedding_enabled
+        and len(message.strip()) >= settings.memory_embedding_min_chars
         and any(memory.kind != "profile" and memory.embedding for memory in memories)
     ):
         query_embedding = await embed_text(message, http_client, settings=settings)

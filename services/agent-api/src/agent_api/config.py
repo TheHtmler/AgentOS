@@ -125,12 +125,29 @@ class Settings(BaseSettings):
     memory_recall_max_chars: int = 2_000
     # Note-memory hybrid recall via an OpenAI-compatible /embeddings endpoint.
     memory_embedding_enabled: bool = True
+    # Avoid a remote embedding round-trip for short conversational prompts.
+    memory_embedding_min_chars: int = 80
     memory_embedding_model: str = "nomic-embed-text"
+    # Provider values describe endpoint capability; these caps bound interactive
+    # requests so stale Ops values cannot create huge, slow prompt envelopes.
+    interactive_context_window_cap: int = 32_768
+    interactive_max_output_tokens_cap: int = 8_192
     # Knowledge chunk hybrid search reuses the background embedding endpoint.
     knowledge_embedding_enabled: bool = True
     knowledge_embedding_dimensions: int = 1024
     knowledge_source_root: Path = SERVICE_ROOT / "data" / "knowledge"
     knowledge_vector_min_score: float = 0.4
+
+    @field_validator(
+        "memory_embedding_min_chars",
+        "interactive_context_window_cap",
+        "interactive_max_output_tokens_cap",
+    )
+    @classmethod
+    def validate_positive_limits(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("embedding and interactive limits must be positive")
+        return value
 
     @field_validator("knowledge_embedding_dimensions")
     @classmethod
