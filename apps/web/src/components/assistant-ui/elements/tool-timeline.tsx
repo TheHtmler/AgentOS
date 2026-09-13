@@ -3,7 +3,7 @@
 import { ChevronRightIcon, type LucideIcon } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { collapsePanel, ShimmerLabel, SwapLabel } from "./surfaces";
+import { collapsePanel, ShimmerLabel } from "./surfaces";
 import { take } from "../utils/range";
 
 export interface TimelineStep {
@@ -50,12 +50,12 @@ export function ToolTimeline({
     >
       <CollapsibleTrigger className="group/trigger flex items-center gap-1.5 rounded-md py-1 text-[13.5px] text-foreground/55 transition-colors outline-none hover:text-foreground/90">
         <ChevronRightIcon className="size-3.5 shrink-0 opacity-60 transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-panel-open/trigger:rotate-90 group-data-open/trigger:rotate-90 motion-reduce:transition-none" />
-        <SwapLabel active={streaming ? 0 : 1} className="text-start tabular-nums">
-          <ShimmerLabel active={streaming} className="relative inline-block leading-none">
-            {activeLabel}
-          </ShimmerLabel>
-          <>{restingLabel}</>
-        </SwapLabel>
+        <ShimmerLabel
+          active={streaming}
+          className="relative inline-block leading-none tabular-nums"
+        >
+          {streaming ? activeLabel : restingLabel}
+        </ShimmerLabel>
       </CollapsibleTrigger>
       <CollapsibleContent className={cn(collapsePanel, "outline-none")}>
         <div className="flex flex-col gap-2.5 ps-4 pt-2.5">
