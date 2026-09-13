@@ -79,6 +79,7 @@ export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
  */
 export type ThreadComponents = {
   AssistantMessage?: ComponentType | undefined;
+  UserMessage?: ComponentType | undefined;
   Welcome?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
   ToolGroup?: ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>> | undefined;
@@ -201,13 +202,15 @@ const ThreadRoot: FC<{
 };
 
 const ThreadMessage: FC = () => {
-  const { AssistantMessage: AssistantMessageComponent = AssistantMessage } =
-    useContext(ThreadComponentsContext);
+  const {
+    AssistantMessage: AssistantMessageComponent = AssistantMessage,
+    UserMessage: UserMessageComponent = UserMessage,
+  } = useContext(ThreadComponentsContext);
   const role = useAuiState((s) => s.message.role);
   const isEditing = useAuiState((s) => s.message.composer.isEditing);
 
   if (isEditing) return <EditComposer />;
-  if (role === "user") return <UserMessage />;
+  if (role === "user") return <UserMessageComponent />;
   return <AssistantMessageComponent />;
 };
 

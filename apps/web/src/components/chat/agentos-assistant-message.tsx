@@ -20,6 +20,7 @@ import {
 } from "@/components/assistant-ui/elements/tool-group.aui";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { AgentOsToolFallback } from "@/components/chat/agentos-tool-fallback";
+import { MessageTimestamp } from "@/components/chat/message-timestamp";
 
 /** Product message slot: ordered parts and one action bar for the answer. */
 export function AgentOsAssistantMessage() {
@@ -72,6 +73,7 @@ export function AgentOsAssistantMessage() {
           </ErrorPrimitive.Root>
         </MessagePrimitive.Error>
       </div>
+      <MessageTimestamp className="px-2" />
       <AuiIf
         condition={(s) =>
           s.message.content.some((part) => part.type === "text" && part.text.trim() !== "")

@@ -183,10 +183,14 @@ export function convertAguiMessage(
     }
   }
 
+  const rawCreatedAt = (message as Message & { created_at?: unknown }).created_at;
+  const createdAt = typeof rawCreatedAt === "string" ? new Date(rawCreatedAt) : undefined;
+
   return {
     id: String(id),
     role: role === "user" ? "user" : "assistant",
     content: content as ThreadMessageLike["content"],
+    ...(createdAt !== undefined && !Number.isNaN(createdAt.getTime()) ? { createdAt } : {}),
   };
 }
 

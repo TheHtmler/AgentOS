@@ -24,6 +24,7 @@ import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval-panel";
 import { AgentOsToolFallback } from "@/components/chat/agentos-tool-fallback";
 import { AgentOsAssistantMessage } from "@/components/chat/agentos-assistant-message";
+import { AgentOsUserMessage } from "@/components/chat/agentos-user-message";
 import { AgentOsMobileComposer } from "@/components/chat/agentos-mobile-composer";
 import { AudioTranscriptionDictationAdapter } from "@/components/chat/audio-dictation-adapter";
 import { ComposerDictationVoice } from "@/components/chat/composer-dictation-voice";
@@ -232,6 +233,7 @@ function AssistantSurface({
             components={{
               ToolFallback: AgentOsToolFallback,
               AssistantMessage: AgentOsAssistantMessage,
+              UserMessage: AgentOsUserMessage,
             }}
             composerFooter={
               <div className="flex min-w-0 items-center gap-1.5">
