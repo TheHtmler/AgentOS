@@ -134,6 +134,9 @@ class Settings(BaseSettings):
     interactive_context_window_cap: int = 32_768
     interactive_max_output_tokens_cap: int = 8_192
     interactive_run_timeout_seconds: float = 600.0
+    # Responses models otherwise choose their own reasoning default, which can make
+    # ordinary interactive turns spend tens of seconds before the first event.
+    interactive_reasoning_effort: Literal["minimal", "low", "medium", "high", "xhigh"] = "low"
     # Knowledge chunk hybrid search reuses the background embedding endpoint.
     knowledge_embedding_enabled: bool = True
     knowledge_embedding_dimensions: int = 1024

@@ -568,6 +568,10 @@ def create_agent(
         cast(OpenAIResponsesModelSettings, model_settings)["openai_reasoning_summary"] = (
             profile.reasoning_summary
         )
+    if profile.api_mode == "responses":
+        cast(OpenAIResponsesModelSettings, model_settings)["openai_reasoning_effort"] = (
+            settings.interactive_reasoning_effort
+        )
 
     return Agent[AgentDeps, AgentOutput](
         model,
