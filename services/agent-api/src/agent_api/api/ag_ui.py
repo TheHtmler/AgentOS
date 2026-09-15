@@ -36,6 +36,7 @@ from pydantic_ai.usage import UsageLimits
 from agent_api.agent import AgentOutput, build_context_snapshot, inject_context_snapshot
 from agent_api.api.auth import get_current_user
 from agent_api.api.chat import (
+    TextDeltaBatcher,
     extract_cached_input_tokens,
     format_run_failure_message,
     load_thread_model_history,
@@ -45,7 +46,6 @@ from agent_api.api.chat import (
     persist_context_budget_event,
     persist_failed_run,
     persist_model_step_event,
-    persist_text_delta,
     resolve_version_tuning,
     schedule_context_budget_event,
     strip_thinking_parts,
@@ -234,6 +234,8 @@ async def stream_ag_ui_run(
     # First text/reasoning content latency, captured in the produce loop below;
     # stays None for runs that end on a pure tool loop without visible output.
     ttft_ms: int | None = None
+    preflight_ms: int | None = None
+    queue_wait_ms: int | None = None
 
     try:
         async with session_factory() as session:
@@ -271,21 +273,24 @@ async def stream_ag_ui_run(
                     logger.exception("case recall failed; continuing without case block")
             if version.memory_enabled:
                 try:
-                    memories = await load_relevant_memories(
-                        session,
-                        user_id=user.id,
-                        agent_id=thread.agent_id,
-                        case_id=case_id,
-                        message=prompt,
-                        top_k=resolve_version_tuning(
-                            version.memory_recall_top_k,
-                            settings.memory_recall_top_k,
+                    memories = await asyncio.wait_for(
+                        load_relevant_memories(
+                            session,
+                            user_id=user.id,
+                            agent_id=thread.agent_id,
+                            case_id=case_id,
+                            message=prompt,
+                            top_k=resolve_version_tuning(
+                                version.memory_recall_top_k,
+                                settings.memory_recall_top_k,
+                            ),
+                            max_chars=resolve_version_tuning(
+                                version.memory_recall_max_chars,
+                                settings.memory_recall_max_chars,
+                            ),
+                            http_client=runtime.background_http_client,
                         ),
-                        max_chars=resolve_version_tuning(
-                            version.memory_recall_max_chars,
-                            settings.memory_recall_max_chars,
-                        ),
-                        http_client=runtime.background_http_client,
+                        timeout=settings.memory_recall_timeout_seconds,
                     )
                     memory_block = format_memory_block(memories, exclude_keys=case_keys)
                 except Exception:
@@ -399,6 +404,7 @@ async def stream_ag_ui_run(
                 phase="step",
             ),
         )
+        preflight_ms = round((time.monotonic() - run_started_at) * 1000)
     except ModelProviderUnavailableError as error:
         logger.exception("Model provider unavailable for run %s", started.run_id)
         await persist_failed_run(started.run_id)
@@ -462,8 +468,11 @@ async def stream_ag_ui_run(
     )
     event_queue: asyncio.Queue[BaseEvent | BaseException | None] = asyncio.Queue()
     client_disconnected = asyncio.Event()
+    text_delta_batcher = TextDeltaBatcher(started.run_id)
 
     async def native_events() -> AsyncIterator[NativeEvent]:
+        nonlocal queue_wait_ms
+
         async def start_stream(
             message_history: list[ModelMessage] | None,
         ) -> AsyncIterator[NativeEvent]:
@@ -505,16 +514,19 @@ async def stream_ag_ui_run(
         try:
             # The model task is independent from the HTTP response. A mobile browser may
             # suspend its page and close SSE while the server should still finish the Run.
+            queue_started_at = time.monotonic()
             async with runtime.semaphore_for_profile(profile):
-                async for event in aiter_with_overflow_retry(
-                    start_stream,
-                    history,
-                    run_id=started.run_id,
-                ):
-                    if text := text_from_native_event(event):
-                        await persist_text_delta(started.run_id, text)
+                queue_wait_ms = round((time.monotonic() - queue_started_at) * 1000)
+                async with asyncio.timeout(settings.interactive_run_timeout_seconds):
+                    async for event in aiter_with_overflow_retry(
+                        start_stream,
+                        history,
+                        run_id=started.run_id,
+                    ):
+                        if text := text_from_native_event(event):
+                            await text_delta_batcher.add(text)
 
-                    yield event
+                        yield event
         except asyncio.CancelledError:
             await asyncio.shield(persist_cancelled_run(started.run_id))
             raise
@@ -574,6 +586,8 @@ async def stream_ag_ui_run(
                 output_tokens=usage.output_tokens or None,
                 ttft_ms=ttft_ms,
                 cached_input_tokens=extract_cached_input_tokens(usage),
+                preflight_ms=preflight_ms,
+                queue_wait_ms=queue_wait_ms,
             )
             # Same fire-and-forget path as classic SSE chat.
             if runtime.background_http_client is not None:
@@ -656,6 +670,7 @@ async def stream_ag_ui_run(
             if not client_disconnected.is_set():
                 await event_queue.put(error)
         finally:
+            await text_delta_batcher.close()
             if not client_disconnected.is_set():
                 await event_queue.put(None)
 

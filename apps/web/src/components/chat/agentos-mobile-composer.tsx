@@ -2,7 +2,7 @@
 
 import { ComposerPrimitive, useAui, useAuiState } from "@assistant-ui/react";
 import { ArrowUpIcon, MicIcon, PlusIcon, SquareIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { ComposerAttachments } from "@/components/assistant-ui/elements/attachment.aui";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
@@ -11,7 +11,15 @@ import { cn } from "@/lib/utils";
 const QUICK_ACTIONS = ["总结当前对话", "梳理待办", "继续分析"] as const;
 
 /** Mobile layout for the existing assistant-ui runtime and AgentOS upload adapter. */
-export function AgentOsMobileComposer() {
+export function AgentOsMobileComposer({
+  activePlan,
+  composerFooter,
+  contextUsage,
+}: {
+  activePlan?: ReactNode;
+  composerFooter?: ReactNode;
+  contextUsage?: ReactNode;
+}) {
   const aui = useAui();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const isRunning = useAuiState((state) => state.thread.isRunning);
@@ -41,6 +49,9 @@ export function AgentOsMobileComposer() {
           keyboardOpen ? "pb-3" : "pb-6",
         )}
       >
+        {activePlan ? (
+          <div className="-mx-1 border-b border-border/40 pb-2">{activePlan}</div>
+        ) : null}
         {!keyboardOpen && (
           <div className="-mx-3 flex animate-in gap-1.5 overflow-x-auto px-3 pb-0.5 duration-200 fade-in">
             {QUICK_ACTIONS.map((action) => (
@@ -55,6 +66,13 @@ export function AgentOsMobileComposer() {
             ))}
           </div>
         )}
+
+        {composerFooter || contextUsage ? (
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            {composerFooter}
+            {contextUsage}
+          </div>
+        ) : null}
 
         <div className="flex items-end gap-2">
           <ComposerPrimitive.AddAttachment asChild>

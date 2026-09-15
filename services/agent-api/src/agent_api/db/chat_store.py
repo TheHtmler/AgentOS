@@ -93,6 +93,8 @@ class ThreadRunStats:
     output_tokens: int | None
     ttft_ms: int | None
     cached_input_tokens: int | None
+    preflight_ms: int | None
+    queue_wait_ms: int | None
 
 
 @dataclass(frozen=True)
@@ -343,6 +345,8 @@ def aggregate_thread_stats(runs: list[Run], events: list[RunEvent]) -> ThreadSta
             output_tokens=latest.output_tokens,
             ttft_ms=_payload_int(payload, "ttft_ms"),
             cached_input_tokens=_payload_int(payload, "cached_input_tokens"),
+            preflight_ms=_payload_int(payload, "preflight_ms"),
+            queue_wait_ms=_payload_int(payload, "queue_wait_ms"),
         )
 
     return ThreadStats(
@@ -851,6 +855,18 @@ async def append_text_delta(
     )
 
 
+async def append_text_deltas(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    deltas: list[str],
+) -> None:
+    """Append a batch of text fragments while preserving their stream order."""
+
+    for delta in deltas:
+        await append_text_delta(session, run_id=run_id, delta=delta)
+
+
 async def append_tool_call_event(
     session: AsyncSession,
     *,
@@ -913,6 +929,8 @@ async def append_model_step_event(
     output_tokens: int | None = None,
     ttft_ms: int | None = None,
     cached_input_tokens: int | None = None,
+    preflight_ms: int | None = None,
+    queue_wait_ms: int | None = None,
 ) -> RunEvent:
     """Record one run's total wall-clock + token usage in the event timeline.
 
@@ -933,6 +951,8 @@ async def append_model_step_event(
             "output_tokens": output_tokens,
             "ttft_ms": ttft_ms,
             "cached_input_tokens": cached_input_tokens,
+            "preflight_ms": preflight_ms,
+            "queue_wait_ms": queue_wait_ms,
         },
     )
 

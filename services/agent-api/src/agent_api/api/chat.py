@@ -23,7 +23,7 @@ from agent_api.context_budget import (
 from agent_api.db.chat_store import (
     append_context_budget_event,
     append_model_step_event,
-    append_text_delta,
+    append_text_deltas,
     cancel_run,
     complete_run,
     fail_run,
@@ -195,7 +195,50 @@ async def persist_text_delta(run_id: UUID, delta: str) -> None:
     """Commit one emitted fragment before it becomes visible to the browser."""
 
     async with session_factory() as session, session.begin():
-        await append_text_delta(session, run_id=run_id, delta=delta)
+        await append_text_deltas(session, run_id=run_id, deltas=[delta])
+
+
+async def persist_text_deltas(run_id: UUID, deltas: list[str]) -> None:
+    """Persist several text fragments in one short transaction."""
+
+    if not deltas:
+        return
+    async with session_factory() as session, session.begin():
+        await append_text_deltas(session, run_id=run_id, deltas=deltas)
+
+
+class TextDeltaBatcher:
+    """Buffer stream fragments so database writes never gate SSE delivery."""
+
+    def __init__(self, run_id: UUID, *, flush_interval: float = 0.08) -> None:
+        self.run_id = run_id
+        self.flush_interval = flush_interval
+        self._deltas: list[str] = []
+        self._lock = asyncio.Lock()
+        self._flush_task: asyncio.Task[None] | None = None
+
+    async def add(self, delta: str) -> None:
+        async with self._lock:
+            self._deltas.append(delta)
+            if self._flush_task is None:
+                self._flush_task = asyncio.create_task(self._flush_after_delay())
+
+    async def _flush_after_delay(self) -> None:
+        await asyncio.sleep(self.flush_interval)
+        await self.flush()
+
+    async def flush(self) -> None:
+        async with self._lock:
+            deltas, self._deltas = self._deltas, []
+            task = self._flush_task
+            self._flush_task = None
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+        if deltas:
+            await persist_text_deltas(self.run_id, deltas)
+
+    async def close(self) -> None:
+        await self.flush()
 
 
 async def persist_completed_run(
@@ -228,6 +271,8 @@ async def persist_model_step_event(
     output_tokens: int | None,
     ttft_ms: int | None = None,
     cached_input_tokens: int | None = None,
+    preflight_ms: int | None = None,
+    queue_wait_ms: int | None = None,
 ) -> None:
     """Record total run wall-clock + token usage for the Ops timeline; best-effort only.
 
@@ -249,6 +294,8 @@ async def persist_model_step_event(
                 output_tokens=output_tokens,
                 ttft_ms=ttft_ms,
                 cached_input_tokens=cached_input_tokens,
+                preflight_ms=preflight_ms,
+                queue_wait_ms=queue_wait_ms,
             )
     except Exception:
         logger.exception("Unable to persist model_step event for run %s", run_id)

@@ -16,6 +16,8 @@ export type ThreadStats = {
     input_tokens: number | null;
     cached_input_tokens: number | null;
     context_window: number | null;
+    preflight_ms: number | null;
+    queue_wait_ms: number | null;
   } | null;
 };
 
@@ -95,6 +97,9 @@ export function ComposerContextUsage({
           <p>{`LLM ${formatDurationMs(stats.model_time_ms_total)} · 工具 ${formatDurationMs(stats.tool_time_ms_total)}`}</p>
           {stats.ttft_ms_avg !== null ? (
             <p>{`首 token 平均 ${formatDurationMs(stats.ttft_ms_avg)}`}</p>
+          ) : null}
+          {lastRun.preflight_ms !== null ? (
+            <p>{`准备 ${formatDurationMs(lastRun.preflight_ms)} · 排队 ${formatDurationMs(lastRun.queue_wait_ms ?? 0)}`}</p>
           ) : null}
           <p>{`累计输入 ${formatCompact(stats.input_tokens_total)} · 输出 ${formatCompact(stats.output_tokens_total)} tok`}</p>
           {cachePct !== null ? <p>{`缓存命中 ${cachePct}%`}</p> : null}

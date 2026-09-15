@@ -611,6 +611,12 @@ export function ChatWorkspace({
               {hasHydratedFromUrl
                 ? slots.map((slot) => {
                     const isActive = slot.key === visibleSlotKey;
+                    const keepMounted =
+                      isActive ||
+                      Boolean(streamingBySlotKey[slot.key]) ||
+                      Boolean(awaitingApprovalBySlotKey[slot.key]);
+
+                    if (!keepMounted) return null;
 
                     return (
                       <div

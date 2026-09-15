@@ -119,6 +119,8 @@ class ThreadLastRunStatsResponse(BaseModel):
     output_tokens: int | None
     ttft_ms: int | None
     cached_input_tokens: int | None
+    preflight_ms: int | None
+    queue_wait_ms: int | None
     context_window: int | None
 
 
@@ -433,6 +435,8 @@ async def get_thread_run_stats(
                 output_tokens=stats.last_run.output_tokens,
                 ttft_ms=stats.last_run.ttft_ms,
                 cached_input_tokens=stats.last_run.cached_input_tokens,
+                preflight_ms=stats.last_run.preflight_ms,
+                queue_wait_ms=stats.last_run.queue_wait_ms,
                 context_window=context_window,
             )
             if stats.last_run is not None

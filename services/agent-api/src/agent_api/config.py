@@ -119,6 +119,7 @@ class Settings(BaseSettings):
     auto_thread_title_timeout_seconds: float = 30.0
     memory_extract_enabled: bool = True
     memory_extract_timeout_seconds: float = 30.0
+    memory_recall_timeout_seconds: float = 2.0
     case_extract_enabled: bool = True
     case_extract_timeout_seconds: float = 30.0
     memory_recall_top_k: int = 8
@@ -132,6 +133,7 @@ class Settings(BaseSettings):
     # requests so stale Ops values cannot create huge, slow prompt envelopes.
     interactive_context_window_cap: int = 32_768
     interactive_max_output_tokens_cap: int = 8_192
+    interactive_run_timeout_seconds: float = 600.0
     # Knowledge chunk hybrid search reuses the background embedding endpoint.
     knowledge_embedding_enabled: bool = True
     knowledge_embedding_dimensions: int = 1024
@@ -340,11 +342,15 @@ class Settings(BaseSettings):
             raise ValueError("runtime_locale must not be empty")
         return name
 
-    @field_validator("auto_thread_title_timeout_seconds")
+    @field_validator(
+        "auto_thread_title_timeout_seconds",
+        "memory_recall_timeout_seconds",
+        "interactive_run_timeout_seconds",
+    )
     @classmethod
-    def auto_thread_title_timeout_seconds_must_be_positive(cls, value: float) -> float:
+    def interactive_timeouts_must_be_positive(cls, value: float) -> float:
         if value <= 0:
-            raise ValueError("auto_thread_title_timeout_seconds must be greater than 0")
+            raise ValueError("interactive timeouts must be greater than 0")
 
         return value
 

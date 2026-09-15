@@ -279,7 +279,19 @@ function AssistantSurface({
             }
           />
         </div>
-        <AgentOsMobileComposer />
+        <AgentOsMobileComposer
+          activePlan={
+            currentPlan !== null ? <AgentPlan {...currentPlan} className="max-w-full" /> : null
+          }
+          composerFooter={composerFooter}
+          contextUsage={
+            <ComposerContextUsage
+              threadId={selectedThreadId ?? null}
+              isStreaming={agui.isRunning}
+              refreshKey={agui.historyVersion}
+            />
+          }
+        />
       </div>
     </AssistantRuntimeProvider>
   );

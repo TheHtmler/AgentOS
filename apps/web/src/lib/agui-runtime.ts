@@ -480,6 +480,8 @@ export function useAguiRuntime({
   const artifactIdsRef = useRef(new Map<string, UploadedArtifact>());
   const recoveryInFlightRef = useRef(false);
   const recoverRunRef = useRef<((runId: string) => Promise<void>) | null>(null);
+  const pendingSnapshotRef = useRef<ThreadMessageLike[] | null>(null);
+  const snapshotFrameRef = useRef<number | null>(null);
   const callbacksRef = useRef({
     onStreamingChanged,
     onThreadChanged,
@@ -749,15 +751,40 @@ export function useAguiRuntime({
             );
             const turnStart = nextMessages.findIndex((item) => item.id === userMessageId);
             if (turnStart < 0) return;
-            setMessages([
+            pendingSnapshotRef.current = [
               ...previousMessages,
               ...convertAguiMessages(nextMessages.slice(turnStart), uploadedArtifacts),
-            ]);
+            ];
+            if (snapshotFrameRef.current === null) {
+              snapshotFrameRef.current = window.requestAnimationFrame(() => {
+                snapshotFrameRef.current = null;
+                const snapshot = pendingSnapshotRef.current;
+                pendingSnapshotRef.current = null;
+                if (snapshot !== null) setMessages(snapshot);
+              });
+            }
           },
-          onRunErrorEvent: () => {
-            // Errors surface through the message snapshot; no extra handling needed.
+          onRunErrorEvent: ({ event }) => {
+            if (event.message) {
+              pendingSnapshotRef.current = [
+                ...previousMessages,
+                userMessage,
+                {
+                  id: `run-error-${event.runId ?? crypto.randomUUID()}`,
+                  role: "assistant",
+                  content: [{ type: "text", text: `运行失败：${event.message}` }],
+                },
+              ];
+            }
           },
           onRunFinishedEvent: () => {
+            if (snapshotFrameRef.current !== null) {
+              window.cancelAnimationFrame(snapshotFrameRef.current);
+              snapshotFrameRef.current = null;
+            }
+            const snapshot = pendingSnapshotRef.current;
+            pendingSnapshotRef.current = null;
+            if (snapshot !== null) setMessages(snapshot);
             activeRunIdRef.current = null;
             setIsRunning(false);
             callbacksRef.current.onRunFinalized?.();
@@ -766,6 +793,14 @@ export function useAguiRuntime({
       } catch {
         const runId = activeRunIdRef.current;
         if (runId === null) {
+          setMessages((current) => [
+            ...current,
+            {
+              id: `run-start-error-${crypto.randomUUID()}`,
+              role: "assistant",
+              content: [{ type: "text", text: "运行未能启动，请检查助手或模型配置后重试。" }],
+            },
+          ]);
           setIsRunning(false);
           callbacksRef.current.onRunFinalized?.();
           return;

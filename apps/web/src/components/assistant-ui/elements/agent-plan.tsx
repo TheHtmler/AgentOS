@@ -28,9 +28,9 @@ export function AgentPlan({
       {...props}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[13.5px] font-medium">Plan</span>
+        <span className="text-[13.5px] font-medium">执行计划</span>
         <span className={cn(mono, "text-foreground/35 tabular-nums")}>
-          {completed} of {total}
+          {completed} / {total}
         </span>
       </div>
       <div className="h-[3px] w-full overflow-hidden rounded-full bg-foreground/[0.06]">

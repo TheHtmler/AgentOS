@@ -18,6 +18,7 @@ import {
   UploadPreviewPane,
   type SandboxFile,
 } from "@/components/chat/tool-call-card";
+import { toolDisplayName } from "@/components/chat/tool-labels";
 
 function resultText(value: unknown): string {
   return typeof value === "string" ? value : value === undefined ? "" : JSON.stringify(value);
@@ -42,7 +43,7 @@ export const AgentOsToolFallback: ToolCallMessagePartComponent = ({
 
   return (
     <ToolFallbackRoot data-tool-call-id={toolCallId} open={expanded} onOpenChange={setExpanded}>
-      <ToolFallbackTrigger toolName={toolName} status={status} />
+      <ToolFallbackTrigger toolName={toolDisplayName(toolName)} status={status} />
       <ToolFallbackContent>
         <ToolFallbackError status={status} />
         <ToolFallbackArgs argsText={argsText} />

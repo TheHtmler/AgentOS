@@ -390,7 +390,7 @@ class _ScheduledRequest:
         app: FastAPI,
         started: StartedRun,
         body: bytes,
-        scheduled_task_context: ScheduledTaskExecutionContext,
+        scheduled_task_context: ScheduledTaskExecutionContext | None,
     ) -> None:
         self.app = app
         self.state = SimpleNamespace(
@@ -405,6 +405,10 @@ class _ScheduledRequest:
 
     async def is_disconnected(self) -> bool:
         return False
+
+
+ScheduledRequest = _ScheduledRequest
+execution_context = _execution_context
 
 
 async def execute_claimed_task_with_user(

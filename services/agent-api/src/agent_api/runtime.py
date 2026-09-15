@@ -161,6 +161,105 @@ class AgentRuntime:
             await asyncio.gather(*tasks, return_exceptions=True)
 
 
+async def recover_orphaned_runs(app: FastAPI, runtime: AgentRuntime) -> int:
+    """Requeue in-flight Runs after a process restart.
+
+    The execution itself still lives in the current process, but the durable Run and
+    user message let a clean launch continue instead of permanently failing the turn.
+    """
+
+    from ag_ui.core import RunAgentInput
+    from sqlalchemy import select
+
+    from agent_api.db.chat_store import StartedRun, list_thread_messages
+    from agent_api.db.models import Run, ScheduledTask, Thread, User
+    from agent_api.db.session import session_factory
+    from agent_api.runtime_context import ScheduledTaskExecutionContext
+    from agent_api.scheduled_tasks import ScheduledRequest, execution_context
+
+    recovered: list[tuple[Run, User, str, ScheduledTaskExecutionContext | None]] = []
+    async with session_factory() as session, session.begin():
+        runs = list(
+            (
+                await session.scalars(
+                    select(Run).where(Run.status.in_(("running", "queued"))).with_for_update()
+                )
+            ).all()
+        )
+        for run in runs:
+            thread = await session.get(Thread, run.thread_id)
+            user = await session.get(User, thread.user_id) if thread and thread.user_id else None
+            if thread is None or user is None or user.status != "active":
+                continue
+            messages = await list_thread_messages(
+                session,
+                thread_id=thread.id,
+                user_id=user.id,
+            )
+            prompt = next(
+                (message.content for message in reversed(messages) if message.role == "user"),
+                "",
+            )
+            if not prompt:
+                continue
+            scheduled_context = None
+            if run.scheduled_task_id is not None:
+                task = await session.get(ScheduledTask, run.scheduled_task_id)
+                if task is None or run.scheduled_for is None:
+                    continue
+                scheduled_context = execution_context(task, scheduled_for=run.scheduled_for)
+            run.status = "queued"
+            recovered.append((run, user, prompt, scheduled_context))
+
+    for run, user, prompt, scheduled_context in recovered:
+        payload = RunAgentInput.model_validate(
+            {
+                "threadId": str(run.thread_id),
+                "runId": str(run.id),
+                "state": {},
+                "messages": [
+                    {
+                        "id": f"recovered-user-{run.id}",
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+                "tools": [],
+                "context": [],
+                "forwardedProps": {},
+            }
+        )
+        request = ScheduledRequest(
+            app,
+            StartedRun(thread_id=run.thread_id, run_id=run.id),
+            payload.model_dump_json(by_alias=True).encode(),
+            scheduled_context,
+        )
+
+        async def execute(
+            request: object = request,
+            user: User = user,
+            run_id: UUID = run.id,
+        ) -> None:
+            from agent_api.api.ag_ui import stream_ag_ui_run
+
+            try:
+                response = await stream_ag_ui_run(request, user)  # type: ignore[arg-type]
+                body_iterator = getattr(response, "body_iterator", None)
+                if body_iterator is None:
+                    raise RuntimeError("recovered AG-UI execution did not return a stream")
+                async for _ in body_iterator:
+                    pass
+            except Exception:
+                logger.exception("recovered Run failed: %s", run_id)
+
+        runtime.start_background_run(run.id, execute())
+
+    if recovered:
+        logger.info("requeued %s orphaned Run(s) after process restart", len(recovered))
+    return len(recovered)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Create shared model resources once and release the connection pool on shutdown."""
@@ -225,20 +324,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.runtime = runtime
 
     from agent_api.data_cleanup import data_cleanup_loop
-    from agent_api.db.chat_store import fail_orphaned_in_process_runs
-    from agent_api.db.session import session_factory
     from agent_api.hitl_timeout import hitl_timeout_loop
     from agent_api.knowledge.import_jobs import fail_interrupted_imports, stop_import_jobs
     from agent_api.scheduled_notifications import ScheduledNotificationWorker
     from agent_api.scheduled_tasks import ScheduledTaskScheduler
 
     try:
-        async with session_factory() as session, session.begin():
-            orphaned = await fail_orphaned_in_process_runs(session)
-        if orphaned:
-            logger.info("failed %s orphaned in-process run(s) on startup", orphaned)
+        await recover_orphaned_runs(app, runtime)
     except Exception:
-        logger.exception("failed to sweep orphaned runs on startup")
+        logger.exception("failed to recover orphaned runs on startup")
 
     try:
         interrupted = await fail_interrupted_imports()

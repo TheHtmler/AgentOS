@@ -7,6 +7,7 @@ import pytest
 from pydantic_ai import ModelMessagesTypeAdapter
 
 from agent_api.api.chat import (
+    TextDeltaBatcher,
     persist_context_budget_event,
     resolve_version_tuning,
     schedule_context_budget_event,
@@ -110,6 +111,24 @@ async def test_persist_context_budget_event_noop_without_actions(
     monkeypatch.setattr("agent_api.api.chat.session_factory", forbidden_session_factory)
     report = BudgetReport(history_before_tokens=10, history_after_tokens=10, budget_tokens=100)
     await persist_context_budget_event(uuid4(), report, phase="pre_run")
+
+
+@pytest.mark.anyio
+async def test_text_delta_batcher_flushes_one_transaction_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    persisted: list[list[str]] = []
+
+    async def capture(_run_id: object, deltas: list[str]) -> None:
+        persisted.append(deltas)
+
+    monkeypatch.setattr("agent_api.api.chat.persist_text_deltas", capture)
+    batcher = TextDeltaBatcher(uuid4(), flush_interval=60)
+    await batcher.add("a")
+    await batcher.add("b")
+    await batcher.close()
+
+    assert persisted == [["a", "b"]]
 
 
 def test_schedule_context_budget_event_noop_without_actions() -> None:

@@ -39,6 +39,7 @@ from pydantic_ai.usage import UsageLimits
 from agent_api.agent import AgentOutput, build_context_snapshot, inject_context_snapshot
 from agent_api.api.ag_ui import AGUIExecutionError, text_from_native_event
 from agent_api.api.chat import (
+    TextDeltaBatcher,
     extract_cached_input_tokens,
     format_run_failure_message,
     parse_model_messages_json,
@@ -46,7 +47,6 @@ from agent_api.api.chat import (
     persist_context_budget_event,
     persist_failed_run,
     persist_model_step_event,
-    persist_text_delta,
     resolve_version_tuning,
     schedule_context_budget_event,
     strip_thinking_parts,
@@ -101,6 +101,7 @@ async def continue_run_after_approval(
 ) -> None:
     """Execute the deferred-tool resume path and persist the next terminal (or pause) state."""
 
+    resume_started_at = time.monotonic()
     async with session_factory() as session:
         run = await get_run(session, run_id=run_id, user_id=user_id)
         history_raw = await get_run_message_history(session, run_id=run_id)
@@ -154,21 +155,24 @@ async def continue_run_after_approval(
                     logger.exception("case recall failed; continuing without case block")
             if version.memory_enabled:
                 try:
-                    memories = await load_relevant_memories(
-                        session,
-                        user_id=user_id,
-                        agent_id=thread.agent_id,
-                        case_id=case_id,
-                        message=prompt,
-                        top_k=resolve_version_tuning(
-                            version.memory_recall_top_k,
-                            settings.memory_recall_top_k,
+                    memories = await asyncio.wait_for(
+                        load_relevant_memories(
+                            session,
+                            user_id=user_id,
+                            agent_id=thread.agent_id,
+                            case_id=case_id,
+                            message=prompt,
+                            top_k=resolve_version_tuning(
+                                version.memory_recall_top_k,
+                                settings.memory_recall_top_k,
+                            ),
+                            max_chars=resolve_version_tuning(
+                                version.memory_recall_max_chars,
+                                settings.memory_recall_max_chars,
+                            ),
+                            http_client=runtime.background_http_client,
                         ),
-                        max_chars=resolve_version_tuning(
-                            version.memory_recall_max_chars,
-                            settings.memory_recall_max_chars,
-                        ),
-                        http_client=runtime.background_http_client,
+                        timeout=settings.memory_recall_timeout_seconds,
                     )
                     memory_block = format_memory_block(memories, exclude_keys=case_keys)
                 except Exception:
@@ -258,11 +262,15 @@ async def continue_run_after_approval(
         forwarded_props={},
     )
     adapter = AGUIAdapter(agent=agent, run_input=run_input)
-    resume_started_at = time.monotonic()
     # First content latency of the resumed stream; None when it ends tool-only.
     ttft_ms: int | None = None
+    preflight_ms = round((time.monotonic() - resume_started_at) * 1000)
+    queue_wait_ms: int | None = None
 
     async def native_events() -> AsyncIterator[NativeEvent]:
+        nonlocal queue_wait_ms
+        text_delta_batcher = TextDeltaBatcher(run_id)
+
         async def start_stream(
             history: list[ModelMessage] | None,
         ) -> AsyncIterator[NativeEvent]:
@@ -305,15 +313,18 @@ async def continue_run_after_approval(
                     yield event
 
         try:
+            queue_started_at = time.monotonic()
             async with runtime.semaphore_for_profile(profile):
-                async for event in aiter_with_overflow_retry(
-                    start_stream,
-                    message_history,
-                    run_id=run_id,
-                ):
-                    if text := text_from_native_event(event):
-                        await persist_text_delta(run_id, text)
-                    yield event
+                queue_wait_ms = round((time.monotonic() - queue_started_at) * 1000)
+                async with asyncio.timeout(settings.interactive_run_timeout_seconds):
+                    async for event in aiter_with_overflow_retry(
+                        start_stream,
+                        message_history,
+                        run_id=run_id,
+                    ):
+                        if text := text_from_native_event(event):
+                            await text_delta_batcher.add(text)
+                        yield event
         except asyncio.CancelledError:
             raise
         except Exception as error:
@@ -325,6 +336,8 @@ async def continue_run_after_approval(
             raise AGUIExecutionError(
                 user_facing_run_error_message(error, context_window=profile.context_window)
             ) from error
+        finally:
+            await text_delta_batcher.close()
 
     async def persist_completed(result: AgentRunResult[AgentOutput]) -> None:
         try:
@@ -363,6 +376,8 @@ async def continue_run_after_approval(
                 output_tokens=usage.output_tokens or None,
                 ttft_ms=ttft_ms,
                 cached_input_tokens=extract_cached_input_tokens(usage),
+                preflight_ms=preflight_ms,
+                queue_wait_ms=queue_wait_ms,
             )
         except AGUIExecutionError:
             raise

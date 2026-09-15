@@ -28,15 +28,15 @@
 
 adapter 在 `apps/web/src/lib/agui-runtime.ts`，事件解析在 `apps/web/src/lib/agui-events.ts`。
 
-| AG-UI 事件                                    | assistant-ui part                                   | 说明                                       |
-| --------------------------------------------- | --------------------------------------------------- | ------------------------------------------ |
-| `TEXT_MESSAGE_START` / `TEXT_MESSAGE_CONTENT` | `TextMessagePart`                                   | 流式文本，`onMessagesChanged` 快照整体写入 |
-| `REASONING_START`                             | `ReasoningMessagePart`（空文本起步）                | 思考 step 折叠                             |
-| `REASONING_MESSAGE_CONTENT`                   | `ReasoningMessagePart.text`                         | 增量追加                                   |
-| `TOOL_CALL_START` / `TOOL_CALL_ARGS`          | `ToolCallMessagePart`（`args` streaming）           | 工具调用                                   |
-| `TOOL_CALL_RESULT`                            | `ToolCallMessagePart.result` / `isError`            | 工具结果                                   |
-| `RUN_ERROR` / `RUN_FINISHED`                  | `isRunning=false` + `onRunFinalized`                | 终态                                       |
-| HITL resume `/api/runs/{id}/stream`           | 同上，`resumeRun(runId, anchorId)` 合并进同一 store | 续跑流；终态后重读持久化历史               |
+| AG-UI 事件                                    | assistant-ui part                                   | 说明                                                                              |
+| --------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `TEXT_MESSAGE_START` / `TEXT_MESSAGE_CONTENT` | `TextMessagePart`                                   | 流式文本，`onMessagesChanged` 快照整体写入（浏览器端按 animation frame 合并刷新） |
+| `REASONING_START`                             | `ReasoningMessagePart`（空文本起步）                | 思考 step 折叠                                                                    |
+| `REASONING_MESSAGE_CONTENT`                   | `ReasoningMessagePart.text`                         | 增量追加                                                                          |
+| `TOOL_CALL_START` / `TOOL_CALL_ARGS`          | `ToolCallMessagePart`（`args` streaming）           | 工具调用                                                                          |
+| `TOOL_CALL_RESULT`                            | `ToolCallMessagePart.result` / `isError`            | 工具结果                                                                          |
+| `RUN_ERROR` / `RUN_FINISHED`                  | `isRunning=false` + `onRunFinalized`                | 终态                                                                              |
+| HITL resume `/api/runs/{id}/stream`           | 同上，`resumeRun(runId, anchorId)` 合并进同一 store | 续跑流；终态后重读持久化历史                                                      |
 
 ## 关键决策
 

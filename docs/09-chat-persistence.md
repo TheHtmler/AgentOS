@@ -19,7 +19,7 @@
   提交
 
 流式执行
-  每个 text_delta：短事务写入一个 RunEvent，然后发送 SSE
+  text_delta：短时间窗口内批量写入 RunEvent，同时立即发送 SSE
 
 短事务 B
   写入 assistant Message
@@ -39,7 +39,8 @@
 ## 已完成
 
 - SSE 路由在打开响应前创建或锁定 Thread，写入用户消息、running Run 与 `run_started` 事件。
-- 每个文本增量在发送给浏览器前，以独立短事务写入 `text_delta` 事件。
+- 文本增量先进入每 Run 的内存批处理器，约 80ms 或 Run 终态时批量写入 `text_delta` 事件；SSE 发送不再等待单个数据库事务。
+- Run 终态持久化前会 flush 尚未落库的增量，事件顺序仍由单个 Run 执行器保持。
 - 正常完成会原子写入助手消息、`completed` 状态与 `run_completed` 事件。
 - 模型错误和浏览器取消会分别写入 `failed` 或 `cancelled` 终态，避免 Run 永远停留在 `running`。
 - 响应通过 `X-AgentOS-Thread-ID` 返回当前 Thread ID；路由测试使用真实 PostgreSQL，并在结束时删除测试数据。
