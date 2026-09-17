@@ -1,7 +1,7 @@
 # assistant-ui 官方能力深化集成设计
 
 > 日期：2026-09-18  
-> 状态：待评审  
+> 状态：已实施（ThreadList 领域视图保留，见 `docs/19`）
 > 范围：`apps/web` 聊天运行时、工具 UI、HITL、会话列表与 Composer 组合方式
 
 ## 背景

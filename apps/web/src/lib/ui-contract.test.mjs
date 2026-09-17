@@ -27,8 +27,10 @@ test("conversation actions use the shared DropdownMenu primitive", () => {
 
 test("append-only chat does not advertise unsupported editing or regeneration", () => {
   const thread = source("components/chat/assistant-thread.tsx");
+  const runtime = source("lib/agentos-assistant-runtime.ts");
   const userMessage = source("components/chat/agentos-user-message.tsx");
-  assert.match(thread, /onNew:\s*agui\.onNew/);
-  assert.doesNotMatch(thread, /onEdit:|onReload:/);
+  assert.match(thread, /useAgentOsAssistantRuntime/);
+  assert.match(runtime, /useAgUiRuntime/);
   assert.doesNotMatch(userMessage, /ActionBarPrimitive\.Edit/);
+  assert.doesNotMatch(userMessage, /ActionBarPrimitive\.Reload/);
 });

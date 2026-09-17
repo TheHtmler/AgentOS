@@ -11,6 +11,7 @@ from ag_ui.core import (
     CustomEvent,
     ReasoningMessageContentEvent,
     RunAgentInput,
+    RunFinishedEvent,
     RunStartedEvent,
     TextMessageContentEvent,
     TextMessageEndEvent,
@@ -76,7 +77,7 @@ from agent_api.db.models import Thread, User
 from agent_api.db.provider_store import ModelProviderUnavailableError, resolve_model_profile
 from agent_api.db.session import session_factory
 from agent_api.emergency import EMERGENCY_NOTICE, detect_emergency_signal
-from agent_api.hitl_pause import persist_deferred_approvals
+from agent_api.hitl_pause import build_interrupt_outcome, persist_deferred_approvals
 from agent_api.memory.extract import schedule_memory_extract
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.observability import observe_run
@@ -469,6 +470,7 @@ async def stream_ag_ui_run(
     event_queue: asyncio.Queue[BaseEvent | BaseException | None] = asyncio.Queue()
     client_disconnected = asyncio.Event()
     text_delta_batcher = TextDeltaBatcher(started.run_id)
+    deferred_interrupt_outcome = None
 
     async def native_events() -> AsyncIterator[NativeEvent]:
         nonlocal queue_wait_ms
@@ -541,6 +543,7 @@ async def stream_ag_ui_run(
             ) from error
 
     async def persist_completed(result: AgentRunResult[AgentOutput]) -> None:
+        nonlocal deferred_interrupt_outcome
         try:
             usage = result.usage
             new_messages = result.new_messages()
@@ -552,11 +555,12 @@ async def stream_ag_ui_run(
                 ),
             )
             if isinstance(result.output, DeferredToolRequests) and result.output.approvals:
-                await persist_deferred_approvals(
+                interrupts = await persist_deferred_approvals(
                     run_id=started.run_id,
                     output=result.output,
                     model_messages=model_messages,
                 )
+                deferred_interrupt_outcome = build_interrupt_outcome(interrupts)
                 return
 
             if not isinstance(result.output, str):
@@ -638,6 +642,8 @@ async def stream_ag_ui_run(
                 native_events(),
                 on_complete=persist_completed,
             ):
+                if isinstance(event, RunFinishedEvent) and deferred_interrupt_outcome is not None:
+                    event = event.model_copy(update={"outcome": deferred_interrupt_outcome})
                 if ttft_ms is None and isinstance(
                     event,
                     (TextMessageContentEvent, ReasoningMessageContentEvent),

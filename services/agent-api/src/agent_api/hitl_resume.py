@@ -20,6 +20,7 @@ from ag_ui.core import (
     ReasoningMessageContentEvent,
     RunAgentInput,
     RunErrorEvent,
+    RunFinishedEvent,
     TextMessageContentEvent,
 )
 from pydantic_ai import ModelMessagesTypeAdapter
@@ -64,7 +65,7 @@ from agent_api.db.chat_store import get_run, get_run_message_history, list_threa
 from agent_api.db.models import Interrupt, Thread, User
 from agent_api.db.provider_store import ModelProviderUnavailableError, resolve_model_profile
 from agent_api.db.session import session_factory
-from agent_api.hitl_pause import persist_deferred_approvals
+from agent_api.hitl_pause import build_interrupt_outcome, persist_deferred_approvals
 from agent_api.memory.extract import schedule_memory_extract
 from agent_api.memory.recall import format_memory_block, load_relevant_memories
 from agent_api.observability import observe_run
@@ -266,6 +267,7 @@ async def continue_run_after_approval(
     ttft_ms: int | None = None
     preflight_ms = round((time.monotonic() - resume_started_at) * 1000)
     queue_wait_ms: int | None = None
+    deferred_interrupt_outcome = None
 
     async def native_events() -> AsyncIterator[NativeEvent]:
         nonlocal queue_wait_ms
@@ -340,6 +342,7 @@ async def continue_run_after_approval(
             await text_delta_batcher.close()
 
     async def persist_completed(result: AgentRunResult[AgentOutput]) -> None:
+        nonlocal deferred_interrupt_outcome
         try:
             new_messages = result.new_messages()
             model_messages = strip_thinking_parts(
@@ -348,11 +351,12 @@ async def continue_run_after_approval(
                 ),
             )
             if isinstance(result.output, DeferredToolRequests) and result.output.approvals:
-                await persist_deferred_approvals(
+                pending = await persist_deferred_approvals(
                     run_id=run_id,
                     output=result.output,
                     model_messages=model_messages,
                 )
+                deferred_interrupt_outcome = build_interrupt_outcome(pending)
                 return
 
             if not isinstance(result.output, str):
@@ -427,6 +431,8 @@ async def continue_run_after_approval(
             native_events(),
             on_complete=persist_completed,
         ):
+            if isinstance(event, RunFinishedEvent) and deferred_interrupt_outcome is not None:
+                event = event.model_copy(update={"outcome": deferred_interrupt_outcome})
             if ttft_ms is None and isinstance(
                 event,
                 (TextMessageContentEvent, ReasoningMessageContentEvent),

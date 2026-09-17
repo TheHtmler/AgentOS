@@ -1,108 +1,94 @@
-# AgentOS 前端迁移 assistant-ui 记录
+# AgentOS assistant-ui 集成建成态
 
-> 日期：2026-09-04 · 范围：apps/web 聊天界面从自建 AI Chat 组件集迁移到 assistant-ui 组件库
+> 更新：2026-09-18
+> 范围：`apps/web` 聊天界面、AG-UI runtime、Tool UI、HITL 与 Composer
 
-> 2026-09-18 复核：本文记录的是当前 ExternalStore 建成态。关于
-> `@assistant-ui/react-ag-ui`、官方 interrupt / Tool UI、`ThreadListAdapter` 与单
-> Composer 的后续替换决策，以
-> [assistant-ui 官方能力深化集成设计](superpowers/specs/2026-09-18-assistant-ui-official-integration-design.md)
-> 为准。
+## 当前架构
 
-## 背景
+聊天主链路使用 `@assistant-ui/react-ag-ui` 的 `useAgUiRuntime`。浏览器不再实现
+AG-UI 事件 reducer、消息仓库或 HITL resume 流解析；assistant-ui 负责消息、
+reasoning、工具状态、interrupt、取消和 composer 状态。
 
-上次（`docs/18`）因沙箱无网络，基于 shadcn 基座自建了一套 AI Chat 组件集（Thinking / ToolCall / ProcessGroup / Composer）。本次网络恢复，按「能用组件库现成能力就不自研」原则，把聊天主体渲染迁移到 assistant-ui（shadcn 生态的 AI Chat 组件库）。
+AgentOS 只保留轻量领域适配：
 
-## 组件对照表
+- `agentos-ag-ui-transport.ts` 翻译普通 Run 与同 Run resume BFF 契约；
+- `agentos-assistant-runtime.ts` 组合官方 runtime、服务端历史、附件和语音 adapter；
+- `agui-runtime.ts` 只保留持久化历史到展示消息的纯投影，不含 React 状态机；
+- `agentos-toolkit.tsx` 通过官方 toolkit 集中注册 `update_plan`；
+- `AgentOsToolFallback` 在官方工具生命周期上增加 Artifact / Sandbox 领域预览；
+- `ApprovalPanel` 只负责病例资料表单，通过官方 interrupt hooks 提交决议。
 
-| 自研组件（已替换）               | assistant-ui 组件                                             | 说明                   |
-| -------------------------------- | ------------------------------------------------------------- | ---------------------- |
-| `ThinkingStepCard`               | `Reasoning`（`elements/reasoning.aui.tsx`）                   | 思考折叠，门槛低于自研 |
-| `ToolCallCard`                   | `ToolGroup` / `ToolFallback`（`elements/tool-group.aui.tsx`） | 工具调用卡片           |
-| `AssistantMarkdown`              | `MarkdownText`（`elements/markdown-text.aui.tsx`）            | Markdown 渲染          |
-| 自研 composer（textarea + 发送） | `Thread` 内置 `ComposerPrimitive`                             | 流式输入 / 附件 / 发送 |
-| 自研消息列表（滚动 + 气泡）      | `Thread` 内置 `MessagePrimitive`                              | 自动滚动、分组         |
+服务端数据库仍是 Thread、Message、Run 与 interrupt 的事实源。AG-UI BFF 继续忽略
+浏览器提交的历史、state、tools 和伪造标识，并从数据库恢复模型上下文。
 
-| 领域组件（保留自研）                           | 原因                                                                                         |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `ApprovalPanel`                                | 当前尚未接入官方 interrupt / tool approval；病例资料表单仍属于 AgentOS 领域 UI               |
-| `ConversationList`                             | 当前尚未接入 `ThreadListAdapter`；后续通过 custom metadata 保留 pinned / 定时任务 / 状态角标 |
-| `SandboxFilePreviewPane` / `UploadPreviewPane` | sandbox 文件预览、附件 artifact 协议，作为 ToolFallback 插槽使用                             |
-| `PendingCaseFactsBanner` / `SessionStatsBar`   | case 事实横幅、运行统计，保留在 workspace/thread 外壳                                        |
-| 语音输入 / 附件上传逻辑                        | 领域能力（`/api/audio`、`artifact_id` 协议），由 runtime adapter 承接                        |
+## HITL
 
-## AG-UI 事件 → assistant-ui MessagePart 映射
+模型请求审批后，服务端在持久化 `pending_interrupts` 的同时输出标准
+`RunFinishedInterruptOutcome`。每个 interrupt 带 `toolCallId`、响应 schema、过期时间
+和工具元数据，官方 runtime 因此可把工具调用标记为 `requires-action`。
 
-adapter 在 `apps/web/src/lib/agui-runtime.ts`，事件解析在 `apps/web/src/lib/agui-events.ts`。
+普通工具使用官方 ToolFallback approval；`case_slot_collect` 在对应工具卡内显示领域
+表单。提交时 transport 重新读取服务端 pending interrupts，校验响应完整覆盖本批
+中断，再映射为 `/api/runs/{run_id}/resume` body，并订阅同一 Run 的 stream。服务端
+owner/case 过滤、幂等键、全量 decisions 和 Case 写入必须过 HITL 的规则不变。
 
-| AG-UI 事件                                    | assistant-ui part                                   | 说明                                                                              |
-| --------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `TEXT_MESSAGE_START` / `TEXT_MESSAGE_CONTENT` | `TextMessagePart`                                   | 流式文本，`onMessagesChanged` 快照整体写入（浏览器端按 animation frame 合并刷新） |
-| `REASONING_START`                             | `ReasoningMessagePart`（空文本起步）                | 思考 step 折叠                                                                    |
-| `REASONING_MESSAGE_CONTENT`                   | `ReasoningMessagePart.text`                         | 增量追加                                                                          |
-| `TOOL_CALL_START` / `TOOL_CALL_ARGS`          | `ToolCallMessagePart`（`args` streaming）           | 工具调用                                                                          |
-| `TOOL_CALL_RESULT`                            | `ToolCallMessagePart.result` / `isError`            | 工具结果                                                                          |
-| `RUN_ERROR` / `RUN_FINISHED`                  | `isRunning=false` + `onRunFinalized`                | 终态                                                                              |
-| HITL resume `/api/runs/{id}/stream`           | 同上，`resumeRun(runId, anchorId)` 合并进同一 store | 续跑流；终态后重读持久化历史                                                      |
+刷新等待审批的 Thread 时，history adapter 根据 `latest_run` 读取 pending interrupts，
+重建 assistant-ui 所需的 `metadata.custom.agui.interrupts`，审批仍显示在原工具位置。
+刷新到 `queued` / `running` Run 时，history adapter 通过官方 `unstable_resume` / `resume`
+入口保持运行态，并带 AbortSignal、退避和次数上限轮询持久化状态。普通 SSE 意外结束、
+resume broker 返回 204 或暂不可用时，transport 同样回退到 Run 状态轮询；Run 落入终态后
+重新导入完整历史，不在浏览器维护第二套消息 reducer。
 
-## 关键决策
+## 历史与附件
 
-### 保留 `ConversationList`（历史决策，已被后续设计替代）
+持久化消息经 `fromAgUiMessages` 进入官方 runtime。历史工具摘要仍按存储的
+`after_message_id` 放在对应最终正文之前；数据库未保存的 reasoning/工具交错顺序不
+伪造。浏览器历史只用于展示，不作为服务端模型输入。
 
-实测 `ThreadList`（assistant-ui registry `thread-list.json`）内置搜索/新建/重命名/归档/删除，但**无法对等表达**：
+附件继续限制为 PDF、PNG、JPEG 和 WebP。Attachment Adapter 必要时先创建 Thread，
+上传得到 owner-scoped `artifact_id`，并把 `artifact_id=<uuid>` 作为附件文本内容交给
+官方消息转换。语音继续由 Dictation Adapter 调用 `/api/audio/transcriptions`，只回填
+同一个 composer draft。
 
-1. **固定（pinned）分区**：`ConversationList` 按 `is_pinned` 分 pinned 区 + 全部区，`ThreadList` 无 pinned 概念；
-2. **定时任务角标**：`scheduled_task_id` → CalendarClock 图标，`ThreadList` 无数据通道；
-3. **处理中 / 等待确认角标**：`streamingThreadIds` / `awaitingApprovalThreadIds` 由 `ChatWorkspace` 依据 run 状态维护，`ThreadList` 只读 runtime 自有状态；
-4. **按「今天 / 最近 7 天 / 更早」分组**：`ThreadList` 只按时间倒序；
-5. **后端对接**：`ConversationList` 直接消费 `/api/threads?limit=50`（含 PATCH 重命名/固定、DELETE），`ThreadList` 需要 `ThreadListAdapter` 重写整个数据层。
+## Tool UI
 
-当时结论：`ConversationList` 保留为迁移后的唯一自研列表组件。2026-09-18 复核后，
-该结论由后续设计替代：列表视觉可保留领域表达，但数据与线程状态改由
-`ThreadListAdapter` 和 custom metadata 承接。
+- 未注册工具统一降级到官方 ToolFallback primitives；
+- `update_plan` 由 toolkit 注册，不再在消息组件中按工具名分派；
+- 通用 approval 使用官方 `approval` / `respondToApproval` / `resume` 能力；
+- Artifact 与 Sandbox 预览是领域插槽，不重建通用工具生命周期；
+- registry 生成文件仍通过 assistant-ui registry 更新，业务代码不手改。
 
-### `tooltip.tsx` 换成标准 shadcn radix 实现
+## Composer 与会话
 
-仓库原 `tooltip.tsx` 是手写 CSS（无 `asChild` / `side`），assistant-ui 生成的 `.aui.tsx` 依赖标准 radix 接口。已替换为 shadcn 标准实现（`@radix-ui/react-tooltip`），导出名不变，仅 assistant-ui 使用方受影响。
+桌面和移动端共用 `Thread` 内唯一的 `ComposerPrimitive.Root`。原独立移动 composer
+已删除，移动安全区仅通过响应式 CSS 调整，因此 draft、附件、语音、发送和取消状态
+天然一致。
 
-### assistant-ui 生成代码的 lint 处理
+`ConversationList` 仍是 AgentOS 领域视图，用于固定分区、定时任务、时间分组、并行
+运行槽与等待审批角标；它不参与消息或 Run 状态归约。若未来把工作区多运行槽收敛为
+单一 assistant-ui ThreadList runtime，再将该视图改为 ThreadListPrimitive + custom
+metadata，不能牺牲现有并行运行隔离。
 
-`components/assistant-ui/*` 与 `hooks/use-attachment-src.ts` 是 shadcn registry 生成的第三方代码，与仓库严格 eslint 规则（`react-hooks/set-state-in-effect` 等）冲突，已加文件级 `/* eslint-disable */`。
+## 明确未开放的能力
 
-## 领域桥接
+- 不使用 AssistantCloud；
+- 不开放消息编辑、重新生成或分支 UI；
+- 不引入插件框架、通用事件总线、摘要压缩或模型静默 fallback；
+- provider、上下文预算、工具配对、上下文快照不落库等服务端约束不变。
 
-- `useAguiRuntime` 的 Attachment Adapter 限制输入为 PDF/PNG/JPEG/WebP，发送时先为新会话创建 Thread，再上传到 `/api/uploads`，最终仍把 `artifact_id=<uuid>` 注入 AG-UI 用户消息。组件库只保存附件的交互状态，不替换 AgentOS 的 owner-scoped Artifact 协议。
-- 浏览器录音继续调用 `/api/audio/transcriptions`，并作为 assistant-ui 的 `DictationAdapter` 回填 Composer 草稿；用户确认后才由 Composer 发起同一个 AG-UI run。
-- 初始 SSE 意外断开时，adapter 查询 Run 状态并在后台轮询；HITL resume 优先消费 per-run stream，无法订阅或结束后都刷新持久化 Thread 历史。定时任务 Thread 没有浏览器 SSE，保持可见时每 5 秒刷新历史。
-- `AgentOsToolFallback` 是 assistant-ui ToolFallback 插槽。通用的工具状态、耗时、折叠和参数/结果由 `ToolFallback` primitives 渲染；sandbox 文件和上传 artifact 预览作为领域扩展挂在展开区，不重建消息列表或工具分组。
-- `ComposerContext` 继续作为 Context rail：最近一轮真实 `input_tokens/context_window` 驱动其 token ring 和标准分段；其面板内部用 Radix portal 挂到 Composer 外，避免被 Thread viewport 裁剪。AgentOS 的完整会话观测（轮数、步骤、LLM/工具耗时、首 token、累计输入/输出、缓存命中）作为该元素的领域详情插入面板，后端没有可靠的 system/tool/history 分项时不伪造分项占用。
+## 依赖版本
 
-`ChatPanel` 已在迁移中删除；它不再是回滚目标。以后调整生成的 `components/assistant-ui/*` 文件必须通过 assistant-ui registry 重新生成，领域协议继续放在 `components/chat/*` 与 `lib/agui-runtime.ts`。
+- `@assistant-ui/react`：`^0.15.20`
+- `@assistant-ui/core`：`^0.3.19`
+- `@assistant-ui/react-ag-ui`：`0.0.59`
+- `@assistant-ui/react-markdown`：`^0.14.15`
+- `@ag-ui/client`：`0.0.59`
 
-## 多轮消息与历史一致性（2026-09-06）
+## 验证重点
 
-- 新会话的 `RUN_STARTED` 把临时会话提升为服务端 Thread ID 时，保留当前 `HttpAgent`，不能触发历史加载并用尚未落库的回复覆盖实时状态。上传提前创建的 Thread 同样处理。
-- 每轮流式快照只更新该轮用户消息及之后的内容；之前已展示的历史保留，避免传输消息不包含的工具摘要、附件被下一轮快照抹掉。
-- 使用 assistant-ui 的 `useExternalMessageConverter`，通过 `joinStrategy: "concat-content"` 将连续的 assistant 步骤合并为一轮回复，保留 part 顺序；`reasoning` role 映射为思考 part，空文本不能隔断工具组。
-- 移动端 composer 同样直接使用 `ComposerPrimitive.Root/Input/Send/Cancel/AddAttachment`，与桌面端共享同一个 ExternalStoreRuntime；仅保留移动端布局、快捷动作和语音视觉状态，不再自维护文本、附件或发送状态。
-- 向 ExternalStoreRuntime 提供完整、线性的 `messageRepository`，历史替换时清除过期 ID，不能把实时 ID 与持久化 ID 的差异积累成虚假的消息分支。后端没有编辑、重新生成及分支持久化协议，因此不声明 `onEdit` / `onReload`。
-- `AgentOsAssistantMessage` 通过 `Thread.components.AssistantMessage` 插槽复用 `MessagePrimitive.GroupedParts`、`ToolGroup`、`Reasoning`、`MarkdownText` 和 `ActionBarPrimitive`；复制、导出只显示在含正文的整轮回复末尾，纯工具过程不显示回复操作栏。生成的 registry 文件保持独立。
-- 历史接口的工具摘要按各轮执行顺序放在最终正文前，不能追加到最终正文后。当前接口不保存逐段思考或中间文本与工具的完整交错时间线；这一边界不等同于完整事件回放。
+前端必须覆盖 transport 标识保存、同 Run resume 映射、历史工具顺序、单 composer
+契约、TypeScript、ESLint 与生产构建。服务端必须覆盖标准 interrupt outcome，并在有
+PostgreSQL 的部署环境运行真实暂停、批准、拒绝、再次暂停与刷新恢复场景。
 
-回归验证覆盖：新会话连续两轮、刷新历史、刷新后继续追问、工具摘要排序、假分支计数、操作栏数量及移动端宽度。消息转换单测位于 `apps/web/src/lib/agui-runtime.test.mjs`。
-
-## Agent Plan / Plan Mode（2026-09-13）
-
-Agent Plan 已接入现有 ExternalStoreRuntime：后端内置 `update_plan(steps, active_index)`
-工具，计划更新沿用 AG-UI `TOOL_CALL_*` 流并写入现有 `run_events`，前端在
-`AgentOsAssistantMessage` 中将该 tool-call 渲染为 assistant-ui registry 的 `AgentPlan`。
-参数无效时降级到普通 `AgentOsToolFallback`，不会阻断整轮消息。
-
-运行请求支持 `X-AgentOS-Run-Mode: normal | plan | execute`，并把模式快照写入 `runs.execution_mode`
-（迁移 `a7b8c9d0e1f2`）。`plan` 模式通过服务端 policy override 禁止 `sandbox_exec`、
-`case_slot_collect` 与 `case_attribution_confirm`，只允许只读规划；`execute` 模式由服务端
-重新构造 Agent，不信任浏览器提交的计划步骤。工作区默认不显示模式切换；模型根据任务复杂度
-隐式决定是否调用 `update_plan`，调用后继续执行。`plan` / `execute` 仅保留为未来显式确认
-流程的服务端能力；计划本身仍从服务端线程历史恢复。
-
-计划不是普通 Markdown，也不进入 context snapshot；刷新、断线恢复和 HITL resume 都复用现有
-run/event/history 机制。复杂任务才应调用 `update_plan`，简单问答不显示计划卡。
+设计与完整验收边界见
+[assistant-ui 官方能力深化集成设计](superpowers/specs/2026-09-18-assistant-ui-official-integration-design.md)。

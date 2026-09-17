@@ -1,6 +1,7 @@
 """AG-UI pauses into waiting_approval when tools require approval."""
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from uuid import UUID
 
@@ -70,6 +71,27 @@ async def test_ag_ui_pauses_when_tool_requires_approval(
 
         assert response.status_code == 200
         assert '"type":"RUN_FINISHED"' in response.text
+
+        events = [
+            json.loads(line.removeprefix("data:").strip())
+            for line in response.text.splitlines()
+            if line.startswith("data:")
+        ]
+        finished = next(event for event in events if event["type"] == "RUN_FINISHED")
+        assert finished["outcome"]["type"] == "interrupt"
+        assert len(finished["outcome"]["interrupts"]) == 1
+        ag_ui_interrupt = finished["outcome"]["interrupts"][0]
+        assert ag_ui_interrupt["reason"] == "tool_call"
+        assert ag_ui_interrupt["toolCallId"]
+        assert ag_ui_interrupt["metadata"]["toolName"] == "_need_approval"
+        assert ag_ui_interrupt["responseSchema"] == {
+            "type": "object",
+            "properties": {
+                "approved": {"type": "boolean"},
+                "reason": {"type": "string"},
+            },
+            "required": ["approved"],
+        }
 
         thread_id = UUID(response.headers["x-agentos-thread-id"])
         run_id = UUID(response.headers["x-agentos-run-id"])

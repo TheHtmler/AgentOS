@@ -12,7 +12,6 @@ import { CheckIcon, CopyIcon, DownloadIcon, SearchIcon, TerminalIcon } from "luc
 import { useMemo, useState } from "react";
 
 import { File } from "@/components/assistant-ui/elements/file";
-import { AgentPlan } from "@/components/assistant-ui/elements/agent-plan";
 import { Image as MessageImage } from "@/components/assistant-ui/elements/image";
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import { Reasoning } from "@/components/assistant-ui/elements/reasoning.aui";
@@ -64,24 +63,6 @@ function AssistantToolTimeline() {
   );
 }
 
-function parsePlanArgs(args: unknown, argsText?: string) {
-  let value: unknown = args;
-  if ((!value || typeof value !== "object") && argsText) {
-    try {
-      value = JSON.parse(argsText);
-    } catch {
-      return null;
-    }
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const steps = record.steps;
-  const active = record.activeIndex ?? record.active_index;
-  if (!Array.isArray(steps) || !steps.every((step) => typeof step === "string")) return null;
-  if (typeof active !== "number" || !Number.isFinite(active)) return null;
-  return { steps, activeIndex: active };
-}
-
 /** Product message slot: ordered parts and one action bar for the answer. */
 export function AgentOsAssistantMessage() {
   return (
@@ -110,14 +91,6 @@ export function AgentOsAssistantMessage() {
               case "reasoning":
                 return <Reasoning {...part} />;
               case "tool-call":
-                if (part.toolName === "update_plan") {
-                  const plan = parsePlanArgs(part.args, part.argsText);
-                  return plan === null ? (
-                    <AgentOsToolFallback {...part} />
-                  ) : (
-                    <AgentPlan {...plan} />
-                  );
-                }
                 return part.toolUI ?? <AgentOsToolFallback {...part} />;
               case "image":
                 return <MessageImage {...part} />;

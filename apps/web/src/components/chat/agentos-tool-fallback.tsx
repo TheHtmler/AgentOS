@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 
 import {
+  ToolFallback,
   ToolFallbackArgs,
   ToolFallbackContent,
   ToolFallbackError,
@@ -11,6 +12,7 @@ import {
   ToolFallbackRoot,
   ToolFallbackTrigger,
 } from "@/components/assistant-ui/elements/tool-fallback.aui";
+import { ApprovalPanel } from "@/components/chat/approval-panel";
 import {
   SandboxFilePreviewPane,
   sandboxFilesFromValue,
@@ -28,13 +30,8 @@ function resultText(value: unknown): string {
  * AgentOS owns artifact and sandbox protocols. The generic tool lifecycle is
  * still rendered by assistant-ui; only those domain-specific previews extend it.
  */
-export const AgentOsToolFallback: ToolCallMessagePartComponent = ({
-  toolCallId,
-  toolName,
-  argsText,
-  result,
-  status,
-}) => {
+export const AgentOsToolFallback: ToolCallMessagePartComponent = (props) => {
+  const { toolCallId, toolName, args, argsText, result, status } = props;
   const [expanded, setExpanded] = useState(status?.type === "running");
   const [sandboxFile, setSandboxFile] = useState<SandboxFile | null>(null);
   const [uploadArtifactId, setUploadArtifactId] = useState<string | null>(null);
@@ -47,6 +44,22 @@ export const AgentOsToolFallback: ToolCallMessagePartComponent = ({
       <ToolFallbackContent>
         <ToolFallbackError status={status} />
         <ToolFallbackArgs argsText={argsText} />
+        {toolName === "case_slot_collect" && status?.type === "requires-action" ? (
+          <ApprovalPanel
+            toolCallId={toolCallId}
+            toolArgs={args && typeof args === "object" ? args : {}}
+            respondToApproval={props.respondToApproval}
+          />
+        ) : (
+          <ToolFallback.Approval
+            status={status}
+            approval={props.approval}
+            interrupt={props.interrupt}
+            addResult={props.addResult}
+            resume={props.resume}
+            respondToApproval={props.respondToApproval}
+          />
+        )}
         <ToolFallbackResult result={result} />
         {toolName === "read_artifact" && typeof resultData?.artifact_id === "string" ? (
           <button

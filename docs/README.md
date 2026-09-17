@@ -40,5 +40,6 @@
 | [superpowers/specs/2026-09-12-langfuse-observability-design.md](superpowers/specs/2026-09-12-langfuse-observability-design.md)                       | Langfuse/OTel Agent 会话观测、脱敏与部署边界                              | 引入或调整 Agent trace、LLM 观测与质量分析时    |
 | [superpowers/plans/2026-09-12-langfuse-observability.md](superpowers/plans/2026-09-12-langfuse-observability.md)                                     | Langfuse Cloud 首期接入与后续自建评估实施计划                             | 执行或调整 Langfuse 观测接入时                  |
 | [superpowers/specs/2026-09-18-assistant-ui-official-integration-design.md](superpowers/specs/2026-09-18-assistant-ui-official-integration-design.md) | assistant-ui 官方 runtime、Tool UI、HITL、ThreadList 与 Composer 深化集成 | 调整聊天运行时、工具 UI、会话列表或 Composer 时 |
+| [superpowers/plans/2026-09-18-assistant-ui-official-integration.md](superpowers/plans/2026-09-18-assistant-ui-official-integration.md)               | assistant-ui 官方能力深化集成实施计划                                     | 执行或调整 assistant-ui 深化集成时              |
 
 后续建议增加：`api-contracts.md`、`data-model.md`、`security-model.md`、`runbook.md` 和 `incident-log.md`。

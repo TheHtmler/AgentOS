@@ -1,124 +1,19 @@
 "use client";
 
-/**
- * AssistantThread — assistant-ui chat surface for the AgentOS chat workspace.
- *
- * Composes the assistant-ui `AssistantRuntimeProvider` + `Thread` over the
- * AG-UI `ExternalStoreRuntime` adapter (`useAguiRuntime`), and mounts the
- * domain components assistant-ui has no equivalent for as slots:
- *   - `ApprovalPanel` — HITL approve/deny (case_slot_collect / tool approval)
- *
- * Exports a props signature compatible with the legacy `ChatPanel` so
- * `ChatWorkspace` can switch mount points with a one-line change.
- */
-
-import {
-  AssistantRuntimeProvider,
-  useExternalMessageConverter,
-  useExternalStoreRuntime,
-  type ThreadMessage,
-} from "@assistant-ui/react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AssistantRuntimeProvider, AuiConfig, Tools, useAuiState } from "@assistant-ui/react";
+import { useAgUiInterrupts } from "@assistant-ui/react-ag-ui";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
-import { ApprovalPanel, type PendingInterrupt } from "@/components/chat/approval-panel";
-import { AgentOsToolFallback } from "@/components/chat/agentos-tool-fallback";
-import { AgentPlan } from "@/components/assistant-ui/elements/agent-plan";
 import { AgentOsAssistantMessage } from "@/components/chat/agentos-assistant-message";
+import { AgentOsToolFallback } from "@/components/chat/agentos-tool-fallback";
+import { agentOsToolkit } from "@/components/chat/agentos-toolkit";
 import { AgentOsUserMessage } from "@/components/chat/agentos-user-message";
-import { AgentOsMobileComposer } from "@/components/chat/agentos-mobile-composer";
 import { AudioTranscriptionDictationAdapter } from "@/components/chat/audio-dictation-adapter";
 import { ComposerDictationVoice } from "@/components/chat/composer-dictation-voice";
 import { ComposerContextUsage } from "@/components/chat/session-stats-bar";
-import { useAguiRuntime } from "@/lib/agui-runtime";
-
-// ---------------------------------------------------------------------------
-// Approval state (ported from ChatPanel: load / clear / resume)
-// ---------------------------------------------------------------------------
-
-type ApprovalState = {
-  runId: string | null;
-  interrupts: PendingInterrupt[];
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function parsePendingInterrupts(value: unknown): PendingInterrupt[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const items: PendingInterrupt[] = [];
-
-  for (const entry of value) {
-    if (
-      !isRecord(entry) ||
-      typeof entry.id !== "string" ||
-      typeof entry.tool_call_id !== "string" ||
-      typeof entry.tool_name !== "string" ||
-      typeof entry.expires_at !== "string" ||
-      !isRecord(entry.tool_args)
-    ) {
-      continue;
-    }
-    items.push({
-      id: entry.id,
-      tool_call_id: entry.tool_call_id,
-      tool_name: entry.tool_name,
-      tool_args: entry.tool_args,
-      expires_at: entry.expires_at,
-    });
-  }
-
-  return items;
-}
-
-function latestPlan(messages: readonly { content: unknown }[]) {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const content = messages[i]?.content;
-    if (!Array.isArray(content)) continue;
-    for (let j = content.length - 1; j >= 0; j -= 1) {
-      const part = content[j] as { type?: unknown; toolName?: unknown; args?: unknown };
-      if (part.type !== "tool-call" || part.toolName !== "update_plan") continue;
-      const args = part.args;
-      if (!args || typeof args !== "object" || Array.isArray(args)) continue;
-      const record = args as Record<string, unknown>;
-      if (
-        Array.isArray(record.steps) &&
-        record.steps.every((step) => typeof step === "string") &&
-        typeof record.activeIndex === "number"
-      ) {
-        return { steps: record.steps, activeIndex: record.activeIndex };
-      }
-    }
-  }
-  return null;
-}
-
-async function loadRunApprovalState(runId: string): Promise<ApprovalState | null> {
-  try {
-    const response = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
-    if (!response.ok) {
-      return null;
-    }
-    const payload: unknown = await response.json();
-    if (!isRecord(payload) || typeof payload.status !== "string") {
-      return null;
-    }
-    return {
-      runId,
-      interrupts: parsePendingInterrupts(payload.pending_interrupts),
-    };
-  } catch {
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Props (mirrors ChatPanel's surface)
-// ---------------------------------------------------------------------------
+import { useAgentOsAssistantRuntime } from "@/lib/agentos-assistant-runtime";
+import { AgentOsInterruptPayloadProvider } from "@/lib/agentos-interrupt-payloads";
 
 type AssistantThreadProps = {
   selectedThreadId: string | null | undefined;
@@ -132,127 +27,97 @@ type AssistantThreadProps = {
   composerFooter?: ReactNode;
 };
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+function RuntimeEffects({
+  isActive,
+  onStreamingChanged,
+  onAwaitingApprovalChanged,
+  onRunFinalized,
+  onSettled,
+}: {
+  isActive: boolean;
+  onStreamingChanged: (isStreaming: boolean) => void;
+  onAwaitingApprovalChanged?: (isAwaiting: boolean) => void;
+  onRunFinalized: () => void;
+  onSettled: () => void;
+}) {
+  const isRunning = useAuiState((state) => state.thread.isRunning);
+  const interrupts = useAgUiInterrupts();
+  const wasRunning = useRef(false);
 
-export function AssistantThread(props: AssistantThreadProps) {
-  return <AssistantSurface {...props} />;
+  useEffect(() => {
+    onStreamingChanged(isRunning);
+    if (wasRunning.current && !isRunning) {
+      onSettled();
+      onRunFinalized();
+    }
+    wasRunning.current = isRunning;
+  }, [isRunning, onRunFinalized, onSettled, onStreamingChanged]);
+
+  useEffect(() => {
+    onAwaitingApprovalChanged?.(isActive && interrupts.length > 0);
+  }, [interrupts.length, isActive, onAwaitingApprovalChanged]);
+
+  return null;
 }
 
-function AssistantSurface({
+function RuntimeComposerFooter({
   selectedThreadId,
+  refreshKey,
+  children,
+}: {
+  selectedThreadId: string | null | undefined;
+  refreshKey: number;
+  children?: ReactNode;
+}) {
+  const isRunning = useAuiState((state) => state.thread.isRunning);
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <ComposerDictationVoice />
+      {children}
+      <ComposerContextUsage
+        threadId={selectedThreadId ?? null}
+        isStreaming={isRunning}
+        refreshKey={refreshKey}
+      />
+    </div>
+  );
+}
+
+export function AssistantThread({
+  selectedThreadId,
+  agentId,
   isActive = true,
   onStreamingChanged,
   onAwaitingApprovalChanged,
   onThreadChanged,
   onRunFinalized,
   onRunStarted,
-  agentId,
   composerFooter,
 }: AssistantThreadProps) {
-  const [approval, setApproval] = useState<ApprovalState>({ runId: null, interrupts: [] });
-  const lastRunIdRef = useRef<string | null>(null);
-
-  // AG-UI bridge: owns messages + isRunning, drives HttpAgent sends.
-  const agui = useAguiRuntime({
-    selectedThreadId,
-    agentId,
-    onStreamingChanged,
-    onThreadChanged,
-    onRunFinalized,
-    onRunStarted: (runId) => {
-      lastRunIdRef.current = runId;
-      onRunStarted?.(runId);
-    },
-  });
-
-  // Load approval state when a run goes waiting_approval.
-  useEffect(() => {
-    const runId = lastRunIdRef.current;
-    if (runId === null || !isActive) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void (async () => {
-      const state = await loadRunApprovalState(runId);
-      if (!cancelled && state !== null && state.interrupts.length > 0) {
-        setApproval(state);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [agui.isRunning, isActive]);
-
-  useEffect(() => {
-    onAwaitingApprovalChanged?.(approval.interrupts.length > 0);
-  }, [approval.interrupts.length, onAwaitingApprovalChanged]);
-
-  const handleApprovalResolved = useMemo(
-    () => async () => {
-      const runId = approval.runId;
-      setApproval({ runId: null, interrupts: [] });
-      if (runId === null) {
-        return;
-      }
-      await agui.resumeRun(runId, "");
-    },
-    [agui, approval.runId],
-  );
   const dictationAdapter = useMemo(() => new AudioTranscriptionDictationAdapter(), []);
-  const currentPlan = useMemo(() => latestPlan(agui.messages), [agui.messages]);
-
-  const messages = useExternalMessageConverter({
-    messages: agui.messages,
-    callback: (message) => message,
-    isRunning: agui.isRunning,
-    joinStrategy: "concat-content",
-  });
-  // This product has a linear audit trail. Replace the complete repository so
-  // optimistic/history ID changes cannot accumulate phantom branches.
-  const messageRepository = useMemo(
-    () => ({
-      headId: messages.at(-1)?.id ?? null,
-      messages: messages.map((message, index) => ({
-        message,
-        parentId: messages[index - 1]?.id ?? null,
-      })),
-    }),
-    [messages],
-  );
-
-  const runtime = useExternalStoreRuntime<ThreadMessage>({
-    messageRepository,
-    isRunning: agui.isRunning,
-    isLoading: agui.isLoading,
-    onNew: agui.onNew,
-    isSendDisabled: agui.isLoading,
-    onCancel: agui.cancelRun,
-    onRefetchThread: async () => agui.refreshHistory(),
-    adapters: {
-      attachments: agui.attachmentAdapter,
-      dictation: dictationAdapter,
+  const { runtime, historyVersion, refreshHistory, interruptPayloads } = useAgentOsAssistantRuntime(
+    {
+      selectedThreadId,
+      agentId,
+      onThreadChanged,
+      onRunStarted,
+      dictationAdapter,
+      onError: (message) => console.error(message),
     },
-  });
+  );
+  const config = useMemo(() => AuiConfig({ tools: Tools({ toolkit: agentOsToolkit }) }), []);
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <div className="flex h-full min-h-0 flex-col">
-        {approval.interrupts.length > 0 && approval.runId !== null ? (
-          <div className="shrink-0 p-3">
-            <ApprovalPanel
-              runId={approval.runId}
-              interrupts={approval.interrupts}
-              onResolved={() => void handleApprovalResolved()}
-              onError={(message) => console.error(message)}
-            />
-          </div>
-        ) : null}
-        <div className="min-h-0 flex-1">
+    <AssistantRuntimeProvider runtime={runtime} config={config}>
+      <AgentOsInterruptPayloadProvider value={interruptPayloads}>
+        <RuntimeEffects
+          isActive={isActive}
+          onStreamingChanged={onStreamingChanged}
+          onAwaitingApprovalChanged={onAwaitingApprovalChanged}
+          onRunFinalized={onRunFinalized}
+          onSettled={refreshHistory}
+        />
+        <div className="h-full min-h-0">
           <Thread
             components={{
               ToolFallback: AgentOsToolFallback,
@@ -260,39 +125,16 @@ function AssistantSurface({
               UserMessage: AgentOsUserMessage,
             }}
             composerFooter={
-              <div className="flex min-w-0 flex-col items-start gap-1.5">
-                {currentPlan !== null ? (
-                  <div className="w-full border-b border-border/40 pb-2">
-                    <AgentPlan {...currentPlan} className="max-w-full" />
-                  </div>
-                ) : null}
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <ComposerDictationVoice />
-                  {composerFooter}
-                  <ComposerContextUsage
-                    threadId={selectedThreadId ?? null}
-                    isStreaming={agui.isRunning}
-                    refreshKey={agui.historyVersion}
-                  />
-                </div>
-              </div>
+              <RuntimeComposerFooter
+                selectedThreadId={selectedThreadId}
+                refreshKey={historyVersion}
+              >
+                {composerFooter}
+              </RuntimeComposerFooter>
             }
           />
         </div>
-        <AgentOsMobileComposer
-          activePlan={
-            currentPlan !== null ? <AgentPlan {...currentPlan} className="max-w-full" /> : null
-          }
-          composerFooter={composerFooter}
-          contextUsage={
-            <ComposerContextUsage
-              threadId={selectedThreadId ?? null}
-              isStreaming={agui.isRunning}
-              refreshKey={agui.historyVersion}
-            />
-          }
-        />
-      </div>
+      </AgentOsInterruptPayloadProvider>
     </AssistantRuntimeProvider>
   );
 }

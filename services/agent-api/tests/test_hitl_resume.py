@@ -415,6 +415,11 @@ async def test_resume_that_defers_again_streams_and_pauses(
             new_calls = [event for event in events if isinstance(event, ToolCallStartEvent)]
             assert any(event.tool_call_id == "call-approval-2" for event in new_calls)
             assert isinstance(events[-1], RunFinishedEvent)
+            assert events[-1].outcome is not None
+            assert events[-1].outcome.type == "interrupt"
+            assert [item.tool_call_id for item in events[-1].outcome.interrupts] == [
+                "call-approval-2"
+            ]
 
             final = await _wait_for_status(client, run_id, "waiting_approval")
             pending = cast(list[dict[str, object]], final["pending_interrupts"])

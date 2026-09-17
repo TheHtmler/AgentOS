@@ -11,6 +11,7 @@ const hooks = registerHooks({
   },
 });
 const { convertAguiMessages, historyToDisplayMessages } = await import("./agui-runtime.ts");
+const { fromAgUiMessages } = await import("@assistant-ui/react-ag-ui");
 hooks.deregister();
 
 test("history places ordered tool summaries before their own final answer", () => {
@@ -60,4 +61,41 @@ test("stream parts preserve reasoning, text and tool order without empty text se
     ["text", "reasoning", "text", "tool-call", "text"],
   );
   assert.equal(messages[3].content[0].result, "found");
+});
+
+test("official history conversion preserves persisted tool results and errors", () => {
+  const wireMessages = historyToDisplayMessages({
+    messages: [
+      { id: "u1", role: "user", content: "question", attachments: [] },
+      { id: "a1", role: "assistant", content: "answer", attachments: [] },
+    ],
+    tool_calls: [
+      {
+        id: "t1",
+        tool_name: "search",
+        args: { query: "AgentOS" },
+        status: "done",
+        after_message_id: "u1",
+        result: "found",
+      },
+      {
+        id: "t2",
+        tool_name: "fetch",
+        args: {},
+        status: "error",
+        after_message_id: "u1",
+        result: "failed",
+      },
+    ],
+  });
+
+  const officialMessages = fromAgUiMessages(wireMessages);
+  const toolParts = officialMessages
+    .flatMap((message) => (Array.isArray(message.content) ? message.content : []))
+    .filter((part) => part.type === "tool-call");
+
+  assert.equal(toolParts[0].result, "found");
+  assert.equal(toolParts[0].isError, false);
+  assert.equal(toolParts[1].result, "failed");
+  assert.equal(toolParts[1].isError, true);
 });
