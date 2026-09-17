@@ -2,6 +2,12 @@
 
 > 日期：2026-09-04 · 范围：apps/web 聊天界面从自建 AI Chat 组件集迁移到 assistant-ui 组件库
 
+> 2026-09-18 复核：本文记录的是当前 ExternalStore 建成态。关于
+> `@assistant-ui/react-ag-ui`、官方 interrupt / Tool UI、`ThreadListAdapter` 与单
+> Composer 的后续替换决策，以
+> [assistant-ui 官方能力深化集成设计](superpowers/specs/2026-09-18-assistant-ui-official-integration-design.md)
+> 为准。
+
 ## 背景
 
 上次（`docs/18`）因沙箱无网络，基于 shadcn 基座自建了一套 AI Chat 组件集（Thinking / ToolCall / ProcessGroup / Composer）。本次网络恢复，按「能用组件库现成能力就不自研」原则，把聊天主体渲染迁移到 assistant-ui（shadcn 生态的 AI Chat 组件库）。
@@ -16,13 +22,13 @@
 | 自研 composer（textarea + 发送） | `Thread` 内置 `ComposerPrimitive`                             | 流式输入 / 附件 / 发送 |
 | 自研消息列表（滚动 + 气泡）      | `Thread` 内置 `MessagePrimitive`                              | 自动滚动、分组         |
 
-| 领域组件（保留自研）                           | 原因                                                                                                    |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `ApprovalPanel`                                | HITL 审批（`case_slot_collect` 资料补充、approve/deny）assistant-ui 无对应                              |
-| `ConversationList`                             | 后端 `/api/threads` 领域元数据（pinned / 定时任务 / 处理中 / 等待确认角标）无法被 `ThreadList` 对等表达 |
-| `SandboxFilePreviewPane` / `UploadPreviewPane` | sandbox 文件预览、附件 artifact 协议，作为 ToolFallback 插槽使用                                        |
-| `PendingCaseFactsBanner` / `SessionStatsBar`   | case 事实横幅、运行统计，保留在 workspace/thread 外壳                                                   |
-| 语音输入 / 附件上传逻辑                        | 领域能力（`/api/audio`、`artifact_id` 协议），由 runtime adapter 承接                                   |
+| 领域组件（保留自研）                           | 原因                                                                                         |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `ApprovalPanel`                                | 当前尚未接入官方 interrupt / tool approval；病例资料表单仍属于 AgentOS 领域 UI               |
+| `ConversationList`                             | 当前尚未接入 `ThreadListAdapter`；后续通过 custom metadata 保留 pinned / 定时任务 / 状态角标 |
+| `SandboxFilePreviewPane` / `UploadPreviewPane` | sandbox 文件预览、附件 artifact 协议，作为 ToolFallback 插槽使用                             |
+| `PendingCaseFactsBanner` / `SessionStatsBar`   | case 事实横幅、运行统计，保留在 workspace/thread 外壳                                        |
+| 语音输入 / 附件上传逻辑                        | 领域能力（`/api/audio`、`artifact_id` 协议），由 runtime adapter 承接                        |
 
 ## AG-UI 事件 → assistant-ui MessagePart 映射
 
@@ -40,7 +46,7 @@ adapter 在 `apps/web/src/lib/agui-runtime.ts`，事件解析在 `apps/web/src/l
 
 ## 关键决策
 
-### 保留 `ConversationList`（不换 `ThreadList`）
+### 保留 `ConversationList`（历史决策，已被后续设计替代）
 
 实测 `ThreadList`（assistant-ui registry `thread-list.json`）内置搜索/新建/重命名/归档/删除，但**无法对等表达**：
 
@@ -50,7 +56,9 @@ adapter 在 `apps/web/src/lib/agui-runtime.ts`，事件解析在 `apps/web/src/l
 4. **按「今天 / 最近 7 天 / 更早」分组**：`ThreadList` 只按时间倒序；
 5. **后端对接**：`ConversationList` 直接消费 `/api/threads?limit=50`（含 PATCH 重命名/固定、DELETE），`ThreadList` 需要 `ThreadListAdapter` 重写整个数据层。
 
-结论：`ConversationList` 保留为迁移后的唯一自研列表组件（领域元数据密集，非通用组件库范畴）。
+当时结论：`ConversationList` 保留为迁移后的唯一自研列表组件。2026-09-18 复核后，
+该结论由后续设计替代：列表视觉可保留领域表达，但数据与线程状态改由
+`ThreadListAdapter` 和 custom metadata 承接。
 
 ### `tooltip.tsx` 换成标准 shadcn radix 实现
 
