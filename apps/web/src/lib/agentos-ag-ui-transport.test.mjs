@@ -3,6 +3,40 @@ import test from "node:test";
 
 const { AgentOsAgUiTransport } = await import("./agentos-ag-ui-transport.ts");
 
+test("默认 fetch 保留 Window 接收者", async () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const previousFetch = Object.getOwnPropertyDescriptor(globalThis, "fetch");
+  const fakeWindow = {
+    fetch() {
+      if (this !== fakeWindow) throw new TypeError("Illegal invocation");
+      return Promise.resolve(new Response("ok"));
+    },
+  };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: fakeWindow,
+  });
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: fakeWindow.fetch,
+  });
+
+  try {
+    const transport = new AgentOsAgUiTransport();
+    const response = await transport.fetch("/api/ag-ui/runs", {
+      method: "POST",
+      body: JSON.stringify({ messages: [] }),
+    });
+
+    assert.equal(await response.text(), "ok");
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else Object.defineProperty(globalThis, "window", previousWindow);
+    if (previousFetch === undefined) delete globalThis.fetch;
+    else Object.defineProperty(globalThis, "fetch", previousFetch);
+  }
+});
+
 test("普通请求保存服务端分配的 Thread 与 Run 标识", async () => {
   const calls = [];
   const transport = new AgentOsAgUiTransport({

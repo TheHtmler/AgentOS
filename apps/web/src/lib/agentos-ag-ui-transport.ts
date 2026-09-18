@@ -65,7 +65,10 @@ export class AgentOsAgUiTransport {
   }
 
   constructor(options: TransportOptions = {}) {
-    this.#fetch = options.fetch ?? fetch;
+    this.#fetch =
+      options.fetch ??
+      ((input, init) =>
+        typeof window === "undefined" ? globalThis.fetch(input, init) : window.fetch(input, init));
     this.#callbacks = { onServerIds: options.onServerIds };
   }
 
