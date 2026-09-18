@@ -10,7 +10,8 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   },
 });
-const { convertAguiMessages, historyToDisplayMessages } = await import("./agui-runtime.ts");
+const aguiRuntime = await import("./agui-runtime.ts");
+const { convertAguiMessages, historyToDisplayMessages } = aguiRuntime;
 const { fromAgUiMessages } = await import("@assistant-ui/react-ag-ui");
 hooks.deregister();
 
@@ -98,4 +99,15 @@ test("official history conversion preserves persisted tool results and errors", 
   assert.equal(toolParts[0].isError, false);
   assert.equal(toolParts[1].result, "failed");
   assert.equal(toolParts[1].isError, true);
+});
+
+test("missing persisted thread is classified as an empty history reset", async () => {
+  const result = await aguiRuntime.readThreadHistoryResponse?.(
+    new Response('{"detail":"Thread not found"}', {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+
+  assert.equal(result, null);
 });

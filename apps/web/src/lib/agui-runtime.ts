@@ -37,6 +37,13 @@ function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
+/** 把 owner-scoped 404 解释为会话已不可访问，其余响应继续按错误处理。 */
+export async function readThreadHistoryResponse(response: Response): Promise<unknown | null> {
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`无法读取会话历史（${response.status}）`);
+  return (await response.json()) as unknown;
+}
+
 export function parseThreadHistory(value: unknown): ThreadHistory | null {
   if (
     !isRecord(value) ||

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   historyToDisplayMessages,
   parseThreadHistory,
+  readThreadHistoryResponse,
   type HistoryAttachment,
 } from "@/lib/agui-runtime";
 import { AgentOsAgUiTransport } from "@/lib/agentos-ag-ui-transport";
@@ -287,8 +288,13 @@ export function useAgentOsAssistantRuntime({
         cache: "no-store",
         signal,
       });
-      if (!response.ok) throw new Error(`无法读取会话历史（${response.status}）`);
-      const history = parseThreadHistory((await response.json()) as unknown);
+      const historyPayload = await readThreadHistoryResponse(response);
+      if (historyPayload === null) {
+        const reset = transport.restoreServerRun(null, null, expectedTransportRevision);
+        if (reset) onThreadChanged(null);
+        return ExportedMessageRepository.fromArray([]);
+      }
+      const history = parseThreadHistory(historyPayload);
       if (history === null || history.thread_id !== selectedThreadId) {
         throw new Error("会话历史格式无效");
       }
